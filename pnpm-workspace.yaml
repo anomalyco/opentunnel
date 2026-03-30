@@ -13,6 +13,7 @@ catalog:
   "@typescript/native-preview": 7.0.0-dev.20260328.1
   asn1js: ^3.0.7
   bumpp: 11.0.1
+  "@effect/language-service": 0.84.2
   effect: 4.0.0-beta.42
   "@effect/platform-node": 4.0.0-beta.42
   pkijs: ^3.4.0

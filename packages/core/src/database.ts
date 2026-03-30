@@ -17,7 +17,7 @@ export namespace Database {
         get: (id: Certificate.ID) => Effect.Effect<Option.Option<Certificate.Info>>;
       };
     }
-  >()("Tunnel") {}
+  >()("Database") {}
 
   export const Memory = Layer.effect(
     Service,

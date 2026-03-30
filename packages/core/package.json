@@ -25,6 +25,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
+    "@effect/language-service": "catalog:",
     "@peculiar/acme-client": "catalog:",
     "@peculiar/acme-core": "catalog:",
     "@peculiar/acme-protocol": "catalog:",
