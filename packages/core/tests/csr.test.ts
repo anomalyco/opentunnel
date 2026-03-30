@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { Effect, Schema } from "effect";
-import { expect, test, describe } from "vite-plus/test";
+import { describe, expect } from "vite-plus/test";
+import { it } from "./effect-test.ts";
 import { CSR } from "../src/csr.ts";
 
 // Valid CSR PEM generated with OpenSSL:
@@ -22,49 +23,49 @@ HhWdylAY7gTilWU0aVTAkwXalzyO1k9V/pZreuP93rT6ugBp
 -----END CERTIFICATE REQUEST-----` as CSR.Raw;
 
 describe("CSR", () => {
-  test("parse should successfully extract hostname from valid CSR", async () => {
-    const effect = CSR.parse(validCSR);
-    const result = await Effect.runPromise(effect);
+  it.effect("parse should successfully extract hostname from valid CSR", () =>
+    Effect.gen(function* () {
+      const result = yield* CSR.parse(validCSR);
+      expect(result.hostname).toBe("test.example.com");
+      expect(result.raw).toBe(validCSR);
+    }),
+  );
 
-    expect(result.hostname).toBe("test.example.com");
-    expect(result.raw).toBe(validCSR);
-  });
+  it.effect("parse should return ParseError for invalid PEM format", () =>
+    CSR.parse("not a valid CSR" as CSR.Raw).pipe(
+      Effect.flip,
+      Effect.map((error) => expect(error._tag).toBe("ParseError")),
+    ),
+  );
 
-  test("parse should return ParseError for invalid PEM format", async () => {
-    const invalidCSR = "not a valid CSR" as CSR.Raw;
-    const effect = CSR.parse(invalidCSR);
-
-    await expect(Effect.runPromise(effect)).rejects.toMatchObject({
-      _tag: "ParseError",
-    });
-  });
-
-  test("parse should return ParseError for malformed CSR content", async () => {
-    const malformedCSR = `-----BEGIN CERTIFICATE REQUEST-----
+  it.effect("parse should return ParseError for malformed CSR content", () =>
+    CSR.parse(
+      `-----BEGIN CERTIFICATE REQUEST-----
 invalid-base64-content!!!
------END CERTIFICATE REQUEST-----` as CSR.Raw;
-    const effect = CSR.parse(malformedCSR);
+-----END CERTIFICATE REQUEST-----` as CSR.Raw,
+    ).pipe(
+      Effect.flip,
+      Effect.map((error) => expect(error._tag).toBe("ParseError")),
+    ),
+  );
 
-    await expect(Effect.runPromise(effect)).rejects.toMatchObject({
-      _tag: "ParseError",
-    });
-  });
+  it.effect("Raw schema should validate PEM string", () =>
+    Effect.gen(function* () {
+      const validPEM =
+        "-----BEGIN CERTIFICATE REQUEST-----\ntest\n-----END CERTIFICATE REQUEST-----";
+      const decoded = yield* Schema.decodeUnknownEffect(CSR.Raw)(validPEM);
+      expect(decoded).toBe(validPEM);
+    }),
+  );
 
-  test("Raw schema should validate PEM string", async () => {
-    const validPEM = "-----BEGIN CERTIFICATE REQUEST-----\ntest\n-----END CERTIFICATE REQUEST-----";
-    const decoded = await Effect.runPromise(Schema.decodeUnknownEffect(CSR.Raw)(validPEM));
-
-    expect(decoded).toBe(validPEM);
-  });
-
-  test("Info schema should validate CSR info structure", async () => {
-    const info = {
-      hostname: "example.com",
-      raw: validCSR,
-    };
-
-    const decoded = await Effect.runPromise(Schema.decodeUnknownEffect(CSR.Info)(info));
-
-    expect(decoded).toEqual(info);
-  });
+  it.effect("Info schema should validate CSR info structure", () =>
+    Effect.gen(function* () {
+      const info = {
+        hostname: "example.com",
+        raw: validCSR,
+      };
+      const decoded = yield* Schema.decodeUnknownEffect(CSR.Info)(info);
+      expect(decoded).toEqual(info);
+    }),
+  );
 });

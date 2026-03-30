@@ -14,8 +14,8 @@ catalog:
   asn1js: ^3.0.7
   bumpp: 11.0.1
   "@effect/language-service": 0.84.2
-  effect: 4.0.0-beta.42
-  "@effect/platform-node": 4.0.0-beta.42
+  effect: 4.0.0-beta.43
+  "@effect/platform-node": 4.0.0-beta.43
   pkijs: ^3.4.0
   reflect-metadata: ^0.2.2
   typescript: 6.0.2
