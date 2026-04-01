@@ -148,7 +148,7 @@ export namespace Certificate {
         catch: (cause) => new Acme.Error({ message: "Compute thumbprint", cause }),
       });
 
-      const acme = Effect.fn(
+      const acme = Effect.fn("Certificate.acme")(
         function* (id: ID, csr: CSR.Info) {
           yield* Effect.log("Starting ACME flow...");
 
