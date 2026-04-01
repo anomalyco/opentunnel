@@ -7,7 +7,12 @@
     "moduleResolution": "nodenext",
     "resolveJsonModule": true,
     "types": ["node"],
-    "plugins": [{ "name": "@effect/language-service" }],
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "unnecessaryeffectgen": "off" }
+      }
+    ],
     "strict": true,
     "noUnusedLocals": true,
     "declaration": true,
