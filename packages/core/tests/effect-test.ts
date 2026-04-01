@@ -39,4 +39,20 @@ effect.only = (name: string, fn: EffectFn, timeout?: number) => {
   base.only(name, () => run(fn), timeout);
 };
 
-export const it = Object.assign(base, { effect });
+type LiveFn = () => Effect.Effect<unknown, unknown, Scope.Scope>;
+
+const runLive = (fn: LiveFn) => runPromise(fn().pipe(Effect.scoped));
+
+function live(name: string, fn: LiveFn, timeout?: number) {
+  base(name, () => runLive(fn), timeout);
+}
+
+live.skip = (name: string, fn: LiveFn, timeout?: number) => {
+  base.skip(name, () => runLive(fn), timeout);
+};
+
+live.only = (name: string, fn: LiveFn, timeout?: number) => {
+  base.only(name, () => runLive(fn), timeout);
+};
+
+export const it = Object.assign(base, { effect, live });

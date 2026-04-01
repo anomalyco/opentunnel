@@ -60,12 +60,14 @@ invalid-base64-content!!!
 
   it.effect("Info schema should validate CSR info structure", () =>
     Effect.gen(function* () {
-      const info = {
-        hostname: "example.com",
-        raw: validCSR,
-      };
-      const decoded = yield* Schema.decodeUnknownEffect(CSR.Info)(info);
-      expect(decoded).toEqual(info);
+      const parsed = yield* CSR.parse(validCSR);
+      const decoded = yield* Schema.decodeUnknownEffect(CSR.Info)({
+        hostname: parsed.hostname,
+        raw: parsed.raw,
+        certificate: parsed.certificate,
+      });
+      expect(decoded.hostname).toBe("test.example.com");
+      expect(decoded.raw).toBe(validCSR);
     }),
   );
 });

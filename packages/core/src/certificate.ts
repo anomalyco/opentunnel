@@ -1,7 +1,17 @@
-import { Effect, HashMap, Layer, Option, Schedule, Schema, ServiceMap } from "effect";
+import {
+  Scope,
+  Schedule,
+  Duration,
+  Effect,
+  HashMap,
+  Layer,
+  Option,
+  Schema,
+  ServiceMap,
+} from "effect";
 import { Database } from "./database.ts";
 import { CSR } from "./csr.ts";
-import { ApiClient } from "@peculiar/acme-client";
+import { Acme } from "./acme.ts";
 import { JsonWebKey } from "@peculiar/jose";
 import { AppConfig } from "./config.ts";
 
@@ -67,124 +77,97 @@ export namespace Certificate {
     }
   >()("Certificate") {}
 
-  // Convert PEM to Base64URL encoded string
-  const pemToBase64Url = (pem: string): string => {
-    const base64 = pem
-      .replace(/-----BEGIN [^-]+-----/, "")
-      .replace(/-----END [^-]+-----/, "")
-      .replace(/\s/g, "");
-    return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const toBase64Url = (base64: string): string =>
+    base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  const pemToBase64Url = (pem: string): string =>
+    toBase64Url(
+      pem
+        .replace(/-----BEGIN [^-]+-----/, "")
+        .replace(/-----END [^-]+-----/, "")
+        .replace(/\s/g, ""),
+    );
+
+  const parseUpLink = (links: string[] | null): string | undefined => {
+    const upLink = links?.find((o) => o.includes('up"'));
+    if (!upLink) return undefined;
+    return /<([^<>]+)>/.exec(upLink)?.[1];
   };
 
-  // Compute JWK thumbprint using @peculiar/jose (returns hex, convert to base64url for ACME)
-  const computeJwkThumbprint = (jwk: any): Effect.Effect<string, Error, never> =>
-    Effect.tryPromise({
-      try: async () => {
-        const joseJwk = new JsonWebKey(crypto, jwk);
-        const thumbprintHex = await joseJwk.getThumbprint();
-        // Convert hex to base64url for ACME key authorization
-        const bytes = thumbprintHex.match(/.{2}/g)!.map((b) => parseInt(b, 16));
-        const base64 = btoa(String.fromCharCode(...bytes));
-        return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-      },
-      catch: (e) => new Error(`Thumbprint failed: ${e}`),
-    });
+  /** Repeatedly run `self` while `predicate` holds, waiting `interval` between attempts. */
+  const pollWhile = <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+    options: { interval: Duration.Input; while: (a: A) => boolean; maxAttempts?: number },
+  ) =>
+    Effect.repeat(
+      self,
+      Schedule.identity<A>().pipe(
+        Schedule.addDelay(() => Effect.succeed(options.interval)),
+        Schedule.while(
+          ({ input, attempt }) => options.while(input) && attempt < (options.maxAttempts ?? 30),
+        ),
+      ),
+    );
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const scope = yield* Scope.Scope;
       const db = yield* Database.Service;
       const config = yield* AppConfig;
+      const acmeFactory = yield* Acme.Factory;
       const email = `acme@${config.OPENTUNNEL_DOMAIN}`;
 
-      // Map to track challenge token -> certificate ID
       let tokenMap = HashMap.empty<Token, ID>();
 
-      const clientAndKey = yield* Effect.gen(function* () {
-        const key = yield* Effect.tryPromise({
-          try: () =>
-            crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
-              "sign",
-              "verify",
-            ]),
-          catch: (error) =>
-            new Error(
-              `Failed to generate account key: ${error instanceof Error ? error.message : String(error)}`,
-            ),
-        });
-        const client = yield* Effect.tryPromise({
-          try: () =>
-            ApiClient.create(key, config.ACME_URL, {
-              fetch,
-              crypto,
-            }),
-          catch: (error) =>
-            new Error(
-              `Failed to create ACME client: ${error instanceof Error ? error.message : String(error)}`,
-            ),
-        });
-        return { client, key };
+      const accountKey = yield* Effect.tryPromise({
+        try: async () => {
+          const key = await crypto.subtle.generateKey(
+            { name: "ECDSA", namedCurve: "P-256" },
+            true,
+            ["sign", "verify"],
+          );
+          if (!("publicKey" in key)) throw new Error("Expected key pair");
+          return key;
+        },
+        catch: (cause) => new Acme.Error({ message: "Generate account key", cause }),
+      });
+      const client = yield* acmeFactory.createClient(accountKey, config.ACME_URL);
+
+      yield* client.newAccount({ contact: [`mailto:` + email], termsOfServiceAgreed: true });
+
+      // Compute once; deterministic for a given key
+      const keyThumbprint = yield* Effect.tryPromise({
+        try: async () => {
+          const jwk = await crypto.subtle.exportKey("jwk", accountKey.publicKey);
+          const joseJwk = new JsonWebKey(crypto, jwk);
+          const hex = await joseJwk.getThumbprint();
+          const bytes = hex.match(/.{2}/g)!.map((b: string) => parseInt(b, 16));
+          return toBase64Url(btoa(String.fromCharCode(...bytes)));
+        },
+        catch: (cause) => new Acme.Error({ message: "Compute thumbprint", cause }),
       });
 
-      const { client, key: accountKey } = clientAndKey;
-
-      yield* Effect.tryPromise({
-        try: () =>
-          client.newAccount({
-            contact: [`mailto:` + email],
-            termsOfServiceAgreed: true,
-          }),
-        catch: (error) =>
-          new Error(
-            `Failed to create ACME account: ${error instanceof Error ? error.message : String(error)}`,
-          ),
-      });
-
-      // Complete ACME flow with HTTP-01 validation
-      const acme = (id: ID, csr: CSR.Info) =>
-        Effect.gen(function* () {
+      const acme = Effect.fn(
+        function* (id: ID, csr: CSR.Info) {
           yield* Effect.log("Starting ACME flow...");
 
           // 1. Create order
-          const order = yield* Effect.tryPromise({
-            try: () =>
-              client.newOrder({
-                identifiers: [{ type: "dns", value: csr.hostname }],
-              }),
-            catch: (error) =>
-              new Error(
-                `Failed to create order: ${error instanceof Error ? error.message : String(error)}`,
-              ),
+          const order = yield* client.newOrder({
+            identifiers: [{ type: "dns", value: csr.hostname }],
           });
           yield* Effect.log("Created order", order.content);
 
-          // 2. Get authorization and challenge (single domain = single auth = single challenge)
-          const auth = yield* Effect.tryPromise({
-            try: () => client.getAuthorization(order.content.authorizations[0]),
-            catch: (error) =>
-              new Error(
-                `Failed to get authorization: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-          });
+          // 2. Get authorization and find HTTP-01 challenge
+          const auth = yield* client.getAuthorization(order.content.authorizations[0]);
 
-          // Find HTTP-01 challenge
-          const httpChallenge = auth.content.challenges?.find(
-            (c: { type: string }) => c.type === "http-01",
-          );
-          if (!httpChallenge) return yield* Effect.fail(new Error("No HTTP-01 challenge found"));
+          const httpChallenge = auth.content.challenges?.find((c) => c.type === "http-01");
+          if (!httpChallenge)
+            return yield* new Acme.Error({ message: "No HTTP-01 challenge found" });
 
-          // Compute key authorization: token + "." + JWK thumbprint
-          const jwk = yield* Effect.tryPromise({
-            try: () => crypto.subtle.exportKey("jwk", accountKey.publicKey),
-            catch: (error) =>
-              new Error(
-                `Failed to export account key: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-          });
-          const thumbprint = yield* computeJwkThumbprint(jwk);
-          const keyAuth = `${httpChallenge.token}.${thumbprint}`;
+          const keyAuth = `${httpChallenge.token}.${keyThumbprint}`;
 
-          // Store challenge in state and add token to map
+          // 3. Store challenge and trigger validation
           yield* db.certificate.update({
             id,
             state: {
@@ -194,123 +177,74 @@ export namespace Certificate {
             },
           });
 
-          // Add token -> cert ID mapping
           tokenMap = HashMap.set(tokenMap, Token.makeUnsafe(httpChallenge.token), id);
-          yield* Effect.log({
-            token: httpChallenge.token,
-          });
+          yield* Effect.log({ token: httpChallenge.token });
 
-          // Trigger challenge validation
-          const challengeResp = yield* Effect.tryPromise({
-            try: () => client.getChallenge(httpChallenge.url, "POST"),
-            catch: (error) =>
-              new Error(
-                `Failed to trigger challenge validation: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-          });
+          const challengeResp = yield* client.getChallenge(httpChallenge.url, "POST");
 
-          yield* Effect.log("Challenge triggered, waiting for authorization to be valid...");
+          yield* Effect.log("Challenge triggered, waiting for authorization...");
 
-          // Extract 'up' link from response headers to get authorization URL
-          const upLink = challengeResp.headers.link?.find((o: string) => o.includes('up"'));
-          if (!upLink) {
-            return yield* Effect.fail(new Error("Cannot get 'up' link from challenge response"));
+          const upUrl = parseUpLink(challengeResp.headers.link);
+          if (!upUrl) {
+            return yield* new Acme.Error({
+              message: "Cannot parse authorization URL from challenge response",
+            });
           }
-          const upUrlMatch = /<([^<>]+)>/.exec(upLink);
-          if (!upUrlMatch?.[1]) {
-            return yield* Effect.fail(new Error("Cannot parse authorization URL from up link"));
-          }
-          const upUrl = upUrlMatch[1];
 
-          // Wait for authorization to be valid using Effect retry
-          const validAuth = yield* Effect.retry(
-            Effect.gen(function* () {
-              const resp = yield* Effect.tryPromise({
-                try: () => client.getAuthorization(upUrl),
-                catch: (error) =>
-                  new Error(
-                    `Failed to get authorization: ${error instanceof Error ? error.message : String(error)}`,
-                  ),
-              });
-              if (resp.content.status === "pending") {
-                return yield* Effect.fail(new Error("Authorization still pending"));
-              }
-              return resp;
-            }),
-            Schedule.spaced("5 seconds"),
-          );
+          // 4. Wait for authorization to be valid
+          const validAuth = yield* pollWhile(client.getAuthorization(upUrl), {
+            interval: "5 seconds",
+            while: (resp) => resp.content.status === "pending",
+          });
           yield* Effect.log("Authorization status:", validAuth);
 
           if (validAuth.content.status !== "valid") {
-            return yield* Effect.fail(
-              new Error(`Authorization status is ${validAuth.content.status}, expected valid`),
-            );
+            return yield* new Acme.Error({
+              message: `Authorization status is ${validAuth.content.status}, expected valid`,
+            });
           }
 
           yield* Effect.log("Authorization valid, finalizing order...");
 
-          // 4. Finalize order with CSR
-          const csrBase64Url = pemToBase64Url(csr.raw);
-          yield* Effect.tryPromise({
-            try: () =>
-              client.finalize(order.content.finalize!, {
-                csr: csrBase64Url,
-              }),
-            catch: (error) =>
-              new Error(
-                `Failed to finalize order: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-          });
+          // 5. Finalize order with CSR
+          if (!order.content.finalize) {
+            return yield* new Acme.Error({ message: "Order has no finalize URL" });
+          }
+          yield* client.finalize(order.content.finalize, { csr: pemToBase64Url(csr.raw) });
 
           yield* Effect.log("Finalized, waiting for certificate...");
 
-          // 5. Wait for order to be valid (certificate issued) using Effect retry
-          // Extract order URL from the Location header of newOrder response
           const orderUrl = order.headers.location;
           if (!orderUrl) {
-            return yield* Effect.fail(new Error("Cannot get order URL from newOrder response"));
+            return yield* new Acme.Error({
+              message: "Cannot get order URL from newOrder response",
+            });
           }
 
-          const validOrder = yield* Effect.retry(
-            Effect.gen(function* () {
-              const resp = yield* Effect.tryPromise({
-                try: () => client.getOrder(orderUrl),
-                catch: (error) =>
-                  new Error(
-                    `Failed to get order: ${error instanceof Error ? error.message : String(error)}`,
-                  ),
-              });
-              if (resp.content.status === "processing") {
-                return yield* Effect.fail(new Error("Order still processing"));
-              }
-              return resp;
-            }),
-            Schedule.spaced("3 seconds"),
-          );
+          // 6. Wait for certificate to be issued
+          const validOrder = yield* pollWhile(client.getOrder(orderUrl), {
+            interval: "3 seconds",
+            while: (resp) => resp.content.status === "processing",
+          });
           yield* Effect.log("Order status:", validOrder);
 
           if (validOrder.content.status !== "valid") {
-            return yield* Effect.fail(
-              new Error(`Order status is ${validOrder.content.status}, expected valid`),
-            );
+            return yield* new Acme.Error({
+              message: `Order status is ${validOrder.content.status}, expected valid`,
+            });
           }
 
-          // 6. Download certificate
           if (!validOrder.content.certificate) {
-            return yield* Effect.fail(new Error("Order is valid but no certificate URL found"));
+            return yield* new Acme.Error({
+              message: "Order is valid but no certificate URL found",
+            });
           }
 
-          const certResponse = yield* Effect.tryPromise({
-            try: () => client.getCertificate(validOrder.content.certificate!),
-            catch: (error) =>
-              new Error(
-                `Failed to get certificate: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-          });
+          // 7. Download certificate
+          const certResponse = yield* client.getCertificate(validOrder.content.certificate);
 
           yield* Effect.log("Certificate downloaded");
 
-          // Convert ArrayBuffer[] to PEM format
           const certChain = certResponse.content
             .map((buf: ArrayBuffer) => {
               const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
@@ -318,8 +252,6 @@ export namespace Certificate {
             })
             .join("\n");
 
-          // Store certificate (challenges will be replaced by ready state)
-          // Remove token from map since challenge is complete
           tokenMap = HashMap.remove(tokenMap, Token.makeUnsafe(httpChallenge.token));
 
           // TODO: Parse certificate for expiry date
@@ -334,21 +266,22 @@ export namespace Certificate {
           });
 
           return certChain;
-        }).pipe(
-          Effect.withSpan("acme"),
+        },
+        (effect, id) =>
           Effect.catch(
+            effect,
             Effect.fn(function* (err) {
               yield* Effect.logError("ACME flow failed:", err);
               yield* db.certificate.update({
                 id,
                 state: {
                   type: "failed",
-                  reason: err instanceof Error ? err.message : String(err),
+                  reason: err.message,
                 },
               });
             }),
           ),
-        );
+      );
 
       return Service.of({
         issue: Effect.fn(function* (csr) {
@@ -358,7 +291,7 @@ export namespace Certificate {
             id,
             state: { type: "issuing" },
           });
-          yield* acme(id, csr).pipe(Effect.forkDetach);
+          yield* acme(id, csr).pipe(Effect.forkIn(scope));
           return id;
         }),
         fromToken: Effect.fn(function* (token) {
