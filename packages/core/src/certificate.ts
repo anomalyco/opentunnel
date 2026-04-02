@@ -12,14 +12,17 @@ import {
 import { Database } from "./database.ts";
 import { CSR } from "./csr.ts";
 import { Acme } from "./acme.ts";
+import { Newtype } from "./newtype.ts";
 import { AppConfig } from "./config.ts";
 
 export namespace Certificate {
-  export const ID = Schema.String.pipe(Schema.brand("CertificateID"));
-  export type ID = Schema.Schema.Type<typeof ID>;
+  export class ID extends Newtype<ID>()("Certificate.ID", Schema.String) {
+    static random() {
+      return this.makeUnsafe(crypto.randomUUID());
+    }
+  }
 
-  export const Token = Schema.String.pipe(Schema.brand("ChallengeToken"));
-  export type Token = Schema.Schema.Type<typeof Token>;
+  export class Token extends Newtype<Token>()("Certificate.Token", Schema.String) {}
 
   export class StateNone extends Schema.Class<StateNone>("Certificate/StateNone")({
     type: Schema.Literal("none"),
@@ -270,7 +273,7 @@ export namespace Certificate {
 
       return Service.of({
         issue: Effect.fn(function* (csr) {
-          const id = ID.makeUnsafe(crypto.randomUUID());
+          const id = ID.random();
 
           yield* db.certificate.update({
             id,

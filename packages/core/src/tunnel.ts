@@ -3,13 +3,20 @@ import { Database } from "./database.ts";
 import { AppConfig } from "./config.ts";
 import { CSR } from "./csr.ts";
 import { Certificate } from "./certificate.ts";
+import { Newtype } from "./newtype.ts";
 
 export namespace Tunnel {
-  export const ID = Schema.String.pipe(Schema.brand("TunnelID"));
-  export type ID = Schema.Schema.Type<typeof ID>;
+  export class ID extends Newtype<ID>()("Tunnel.ID", Schema.String) {
+    static random() {
+      return this.makeUnsafe(crypto.randomUUID());
+    }
+  }
 
-  export const Token = Schema.String.pipe(Schema.brand("TunnelToken"));
-  export type Token = Schema.Schema.Type<typeof Token>;
+  export class Token extends Newtype<Token>()("Tunnel.Token", Schema.String) {
+    static random() {
+      return this.makeUnsafe(crypto.randomUUID());
+    }
+  }
 
   export class NotFoundError extends Schema.TaggedErrorClass()("NotFound", {
     tunnelID: ID,
@@ -42,7 +49,7 @@ export namespace Tunnel {
         token: Token;
       }>;
       fromID: (id: Tunnel.ID) => Effect.Effect<Tunnel.Info, NotFoundError>;
-      certficiate: (
+      certificate: (
         id: Tunnel.ID,
       ) => Effect.Effect<Certificate.Info, NotFoundError | NoCertificateError>;
       auth: (tunnel: Tunnel.ID, token: Token) => Effect.Effect<boolean>;
@@ -60,7 +67,7 @@ export namespace Tunnel {
       const config = yield* AppConfig;
       const certificate = yield* Certificate.Service;
 
-      const fromID = Effect.fn(function* (id) {
+      const fromID = Effect.fn(function* (id: ID) {
         const match = yield* db.tunnel.get(id);
         if (Option.isNone(match)) {
           return yield* new NotFoundError({ tunnelID: id });
@@ -70,7 +77,7 @@ export namespace Tunnel {
 
       return Service.of({
         fromID,
-        certficiate: Effect.fn(function* (id) {
+        certificate: Effect.fn(function* (id: ID) {
           const info = yield* fromID(id);
           if (!info.certificateID) {
             return yield* new NoCertificateError({ tunnelID: id });
@@ -82,7 +89,7 @@ export namespace Tunnel {
           return cert.value;
         }),
         create: Effect.fn(function* () {
-          const id = ID.makeUnsafe(crypto.randomUUID());
+          const id = ID.random();
           const info: Tunnel.Info = {
             id,
             hostname: CSR.Hostname.makeUnsafe(
@@ -92,7 +99,7 @@ export namespace Tunnel {
             state: "offline",
           };
           yield* db.tunnel.update(info);
-          return { tunnel: info, token: Token.makeUnsafe("asd") };
+          return { tunnel: info, token: Token.random() };
         }),
         auth: Effect.fn(function* (tunnel, token) {
           const id = yield* db.tunnel.fromToken(token);

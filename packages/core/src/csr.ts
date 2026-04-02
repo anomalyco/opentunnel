@@ -1,7 +1,6 @@
 import "reflect-metadata";
 import { Effect, Schema } from "effect";
 import { Pkcs10CertificateRequest } from "@peculiar/x509";
-
 export namespace CSR {
   export class ParseError extends Schema.TaggedErrorClass()("ParseError", {
     message: Schema.String,

@@ -34,7 +34,7 @@ export const TunnelApi = HttpApiBuilder.group(Api, "tunnel", (handlers) =>
       .handle(
         "certificate",
         Effect.fn(function* (req) {
-          const cert = yield* tunnel.certficiate(req.params.id as Tunnel.ID);
+          const cert = yield* tunnel.certificate(req.params.id as Tunnel.ID);
           return cert;
         }),
       )
