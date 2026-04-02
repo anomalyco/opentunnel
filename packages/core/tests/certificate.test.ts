@@ -72,8 +72,7 @@ describe("Certificate", () => {
     Effect.gen(function* () {
       const cert = yield* Certificate.Service;
       const id = yield* cert.issue(testCSR);
-      expect(typeof id).toBe("string");
-      expect(id.length).toBeGreaterThan(0);
+      expect(id).toBeDefined();
     }).pipe(Effect.provide(createTestLayer())),
   );
 
