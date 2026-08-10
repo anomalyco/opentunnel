@@ -5,6 +5,11 @@ unique `<id>.opentunnel.xyz` hostname and terminates TLS locally, so neither
 Cloudflare Workers nor the relay stores the certificate private key or sees
 HTTP plaintext.
 
+> [!NOTE]
+> We are waiting on the private beta of Cloudflare Spectrum + TCP Workers for
+> this to run fully on Cloudflare. Until then, inbound TCP is temporarily
+> handled by some dummy relay servers running on AWS.
+
 ## Architecture
 
 - Spectrum accepts public TCP 443 with TLS termination disabled.
