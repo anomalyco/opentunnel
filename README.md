@@ -10,6 +10,23 @@ HTTP plaintext.
 > this to run fully on Cloudflare. Until then, inbound TCP is temporarily
 > handled by some dummy relay servers running on AWS.
 
+## Installation
+
+The CLI requires [Bun](https://bun.sh):
+
+```bash
+bun install -g @opentunnel/cli
+```
+
+Then create a tunnel and route traffic to a local process:
+
+```bash
+opentunnel create
+opentunnel route add api 127.0.0.1:3000
+```
+
+See [packages/cli](packages/cli) for the full command reference.
+
 ## Architecture
 
 - Spectrum accepts public TCP 443 with TLS termination disabled.
