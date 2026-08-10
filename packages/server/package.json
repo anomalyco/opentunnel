@@ -1,0 +1,30 @@
+{
+  "name": "@opentunnel/server",
+  "version": "0.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opentunnel.git"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types worker-configuration.d.ts",
+    "build": "wrangler types worker-configuration.d.ts && tsc -p tsconfig.json && wrangler deploy --dry-run"
+  },
+  "dependencies": {
+    "@opentunnel/protocol": "workspace:*",
+    "@peculiar/acme-client": "catalog:",
+    "@peculiar/jose": "catalog:",
+    "@peculiar/x509": "catalog:",
+    "effect": "catalog:",
+    "reflect-metadata": "catalog:"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

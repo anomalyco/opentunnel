@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "opentunnel-website",
+  "compatibility_date": "2026-08-08",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "opentunnel.xyz/*",
+      "zone_name": "opentunnel.xyz"
+    }
+  ],
+  "assets": {
+    "directory": "./public"
+  }
+}

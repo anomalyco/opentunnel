@@ -1,0 +1,27 @@
+{
+  "name": "@opentunnel/client",
+  "version": "0.0.0",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/promise/index.ts",
+    "./promise": "./src/promise/index.ts",
+    "./effect": "./src/effect/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@opentunnel/protocol": "workspace:*",
+    "@peculiar/x509": "catalog:",
+    "effect": "catalog:",
+    "reflect-metadata": "catalog:",
+    "ws": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/ws": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
+  }
+}

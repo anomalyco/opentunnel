@@ -1,0 +1,57 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "opentunnel",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "opentunnel.xyz/api/*",
+      "zone_name": "opentunnel.xyz"
+    }
+  ],
+  "vars": {
+    "OPENTUNNEL_DOMAIN": "opentunnel.xyz",
+    "ACME_URL": "https://acme.zerossl.com/v2/DV90",
+    "ACME_EMAIL": "acme@opentunnel.xyz",
+    "ACME_DNS_PROPAGATION_DELAY_MS": "10000",
+    "CLOUDFLARE_ZONE_ID": "43d8e5cf1c0ccc8c3868125be74a5e68"
+  },
+  "secrets": {
+    "required": [
+      "ACME_EAB_KID",
+      "ACME_EAB_HMAC_KEY",
+      "ACME_ACCOUNT_KEY_JWK",
+      "CLOUDFLARE_API_TOKEN",
+      "RELAY_TOKEN"
+    ]
+  },
+  "alias": {
+    "@peculiar/acme-client": "@peculiar/acme-client/build/es2015/index.js"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TUNNELS",
+        "class_name": "TunnelObject"
+      }
+    ]
+  },
+  "exports": {
+    "TunnelObject": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "workflows": [
+    {
+      "name": "opentunnel-certificates",
+      "binding": "CERTIFICATES",
+      "class_name": "CertificateWorkflow"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
