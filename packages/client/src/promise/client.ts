@@ -6,7 +6,9 @@ import {
 import type {
   OpenTunnelClientEvent,
   OpenTunnelIdentity,
+  OpenTunnelPendingIdentity,
   OpenTunnelProfileOptions,
+  OpenTunnelProvisionStage,
   OpenTunnelRoute,
   OpenTunnelStoredTunnel,
 } from "../effect/types.js";
@@ -41,8 +43,19 @@ export interface OpenTunnelPromiseClient {
   readonly tunnel: {
     readonly list: () => Promise<ReadonlyArray<OpenTunnelStoredTunnel>>;
     readonly get: (options?: OpenTunnelProfileOptions) => Promise<OpenTunnelIdentity | undefined>;
+    readonly pending: (
+      options?: OpenTunnelProfileOptions,
+    ) => Promise<Pick<OpenTunnelPendingIdentity, "id" | "hostname"> | undefined>;
+    readonly resume: (
+      options?: OpenTunnelProfileOptions & {
+        readonly onProgress?: (stage: OpenTunnelProvisionStage) => void;
+      },
+    ) => Promise<OpenTunnelIdentity | undefined>;
     readonly create: (
-      options?: OpenTunnelProfileOptions & { readonly name?: string },
+      options?: OpenTunnelProfileOptions & {
+        readonly name?: string;
+        readonly onProgress?: (stage: OpenTunnelProvisionStage) => void;
+      },
     ) => Promise<OpenTunnelIdentity>;
     readonly ensure: (
       options?: OpenTunnelProfileOptions & { readonly name?: string },
@@ -75,6 +88,8 @@ export function create(options: OpenTunnelClientOptions = {}): OpenTunnelPromise
     tunnel: {
       list: () => withClient((client) => client.tunnel.list()),
       get: (input) => withClient((client) => client.tunnel.get(input)),
+      pending: (input) => withClient((client) => client.tunnel.pending(input)),
+      resume: (input) => withClient((client) => client.tunnel.resume(input)),
       create: (input) => withClient((client) => client.tunnel.create(input)),
       ensure: (input) => withClient((client) => client.tunnel.ensure(input)),
       remove: (input) => withClient((client) => client.tunnel.remove(input)),

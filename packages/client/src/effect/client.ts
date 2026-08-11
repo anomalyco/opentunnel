@@ -12,7 +12,9 @@ import { OpenTunnelStorage, type OpenTunnelStorage as Storage } from "./storage.
 import type {
   OpenTunnelEffectClient,
   OpenTunnelIdentity,
+  OpenTunnelPendingIdentity,
   OpenTunnelProfileOptions,
+  OpenTunnelProvisionStage,
   OpenTunnelRoute,
 } from "./types.js";
 import { connectBridge } from "./bridge.js";
@@ -52,12 +54,60 @@ export class OpenTunnelClient extends ServiceMap.Service<
           return yield* storage.load(profileName(input));
         });
 
+        const completePending = Effect.fn("OpenTunnelClient.tunnel.completePending")(function* (options: {
+          readonly profile: string;
+          readonly pending: OpenTunnelPendingIdentity;
+          readonly onProgress?: (stage: OpenTunnelProvisionStage) => void;
+        }) {
+          const authorized = yield* api.authorized(Tunnel.Token.makeUnsafe(options.pending.token));
+          yield* Effect.sync(() => options.onProgress?.("requesting-certificate"));
+          yield* authorized.tunnel["tunnel.bindCertificate"]({
+            params: { id: Tunnel.ID.makeUnsafe(options.pending.id) },
+            payload: { csr: options.pending.csr as CSR.Raw },
+          }).pipe(
+            Effect.mapError((cause) => clientError("Failed to start certificate issuance", cause)),
+          );
+
+          const certificate = yield* Effect.gen(function* () {
+            while (true) {
+              yield* Effect.sync(() => options.onProgress?.("waiting-certificate"));
+              const value = yield* authorized.tunnel["tunnel.getCertificate"]({
+                params: { id: Tunnel.ID.makeUnsafe(options.pending.id) },
+              }).pipe(
+                Effect.mapError((cause) => clientError("Failed to read certificate", cause)),
+              );
+              if (value.state.type === "ready") return value.state;
+              if (value.state.type === "failed") {
+                return yield* new OpenTunnelClientError({
+                  message: `Certificate issuance failed: ${value.state.reason}`,
+                });
+              }
+              yield* Effect.sleep("2 seconds");
+            }
+          });
+          const identity: OpenTunnelIdentity = {
+            id: options.pending.id,
+            hostname: options.pending.hostname,
+            token: options.pending.token,
+            privateKey: options.pending.privateKey,
+            certificate: certificate.certificate,
+            chain: certificate.chain,
+            certificateExpiry: new Date(certificate.expiry),
+          };
+          yield* Effect.sync(() => options.onProgress?.("saving-identity"));
+          yield* storage.save(options.profile, identity);
+          yield* Effect.sync(() => options.onProgress?.("ready"));
+          return identity;
+        });
+
         const provision = Effect.fn("OpenTunnelClient.tunnel.provision")(function* (options: {
           readonly profile: string;
           readonly id: Tunnel.ID;
           readonly hostname: string;
           readonly token: Tunnel.Token;
+          readonly onProgress?: (stage: OpenTunnelProvisionStage) => void;
         }) {
+          yield* Effect.sync(() => options.onProgress?.("generating-key"));
           const keys = yield* Effect.tryPromise({
             try: () =>
               crypto.subtle.generateKey(
@@ -67,6 +117,7 @@ export class OpenTunnelClient extends ServiceMap.Service<
               ) as Promise<CryptoKeyPair>,
             catch: (cause) => clientError("Failed to generate certificate key", cause),
           });
+          yield* Effect.sync(() => options.onProgress?.("generating-csr"));
           const csr = yield* Effect.tryPromise({
             try: () =>
               Pkcs10CertificateRequestGenerator.create({
@@ -82,49 +133,30 @@ export class OpenTunnelClient extends ServiceMap.Service<
               }),
             catch: (cause) => clientError("Failed to generate certificate request", cause),
           });
-          const authorized = yield* api.authorized(options.token);
-          yield* authorized.tunnel["tunnel.bindCertificate"]({
-            params: { id: options.id },
-            payload: { csr: csr.toString() as CSR.Raw },
-          }).pipe(
-            Effect.mapError((cause) => clientError("Failed to start certificate issuance", cause)),
-          );
-
-          const certificate = yield* Effect.gen(function* () {
-            while (true) {
-              const value = yield* authorized.tunnel["tunnel.getCertificate"]({
-                params: { id: options.id },
-              }).pipe(
-                Effect.mapError((cause) => clientError("Failed to read certificate", cause)),
-              );
-              if (value.state.type === "ready") return value.state;
-              if (value.state.type === "failed") {
-                return yield* new OpenTunnelClientError({
-                  message: `Certificate issuance failed: ${value.state.reason}`,
-                });
-              }
-              yield* Effect.sleep("2 seconds");
-            }
-          });
           const exported = yield* Effect.tryPromise({
             try: () => crypto.subtle.exportKey("pkcs8", keys.privateKey),
             catch: (cause) => clientError("Failed to export certificate key", cause),
           });
-          const identity: OpenTunnelIdentity = {
+          const pending: OpenTunnelPendingIdentity = {
             id: String(options.id),
             hostname: options.hostname,
             token: options.token,
             privateKey: privateKeyPem(exported),
-            certificate: certificate.certificate,
-            chain: certificate.chain,
-            certificateExpiry: new Date(certificate.expiry),
+            csr: csr.toString(),
           };
-          yield* storage.save(options.profile, identity);
-          return identity;
+          yield* storage.savePending(options.profile, pending);
+          return yield* completePending({
+            profile: options.profile,
+            pending,
+            onProgress: options.onProgress,
+          });
         });
 
         const create = Effect.fn("OpenTunnelClient.tunnel.create")(function* (
-          input?: OpenTunnelProfileOptions & { readonly name?: string },
+          input?: OpenTunnelProfileOptions & {
+            readonly name?: string;
+            readonly onProgress?: (stage: OpenTunnelProvisionStage) => void;
+          },
         ) {
           const profile = profileName(input);
           if (yield* storage.load(profile)) {
@@ -133,6 +165,13 @@ export class OpenTunnelClient extends ServiceMap.Service<
             });
           }
 
+          const pending = yield* storage.loadPending(profile);
+          if (pending) {
+            yield* Effect.sync(() => input?.onProgress?.("resuming-certificate"));
+            return yield* completePending({ profile, pending, onProgress: input?.onProgress });
+          }
+
+          yield* Effect.sync(() => input?.onProgress?.("creating-tunnel"));
           const created = yield* api.client.tunnel["tunnel.create"]({
             payload: { name: input?.name },
           }).pipe(Effect.mapError((cause) => clientError("Failed to create tunnel", cause)));
@@ -141,6 +180,7 @@ export class OpenTunnelClient extends ServiceMap.Service<
             id: created.tunnel.id,
             hostname: String(created.tunnel.hostname),
             token: created.token,
+            onProgress: input?.onProgress,
           });
         });
 
@@ -162,6 +202,25 @@ export class OpenTunnelClient extends ServiceMap.Service<
             hostname: existing.hostname,
             token: Tunnel.Token.makeUnsafe(existing.token),
           });
+        });
+
+        const pending = Effect.fn("OpenTunnelClient.tunnel.pending")(function* (
+          input?: OpenTunnelProfileOptions,
+        ) {
+          const value = yield* storage.loadPending(profileName(input));
+          return value ? { id: value.id, hostname: value.hostname } : undefined;
+        });
+
+        const resume = Effect.fn("OpenTunnelClient.tunnel.resume")(function* (
+          input?: OpenTunnelProfileOptions & {
+            readonly onProgress?: (stage: OpenTunnelProvisionStage) => void;
+          },
+        ) {
+          const profile = profileName(input);
+          const value = yield* storage.loadPending(profile);
+          if (!value) return undefined;
+          yield* Effect.sync(() => input?.onProgress?.("resuming-certificate"));
+          return yield* completePending({ profile, pending: value, onProgress: input?.onProgress });
         });
 
         const listRoutes = Effect.fn("OpenTunnelClient.route.list")(function* (
@@ -218,6 +277,8 @@ export class OpenTunnelClient extends ServiceMap.Service<
           tunnel: {
             list: storage.list,
             get,
+            pending,
+            resume,
             create,
             ensure,
             remove: Effect.fn("OpenTunnelClient.tunnel.remove")(function* (input) {

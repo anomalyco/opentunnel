@@ -5,6 +5,16 @@ export interface OpenTunnelProfileOptions {
   readonly profile?: string;
 }
 
+export type OpenTunnelProvisionStage =
+  | "creating-tunnel"
+  | "generating-key"
+  | "generating-csr"
+  | "resuming-certificate"
+  | "requesting-certificate"
+  | "waiting-certificate"
+  | "saving-identity"
+  | "ready";
+
 export interface OpenTunnelRoute {
   readonly name: string;
   readonly hostname: string;
@@ -19,6 +29,14 @@ export interface OpenTunnelIdentity {
   readonly certificate: string;
   readonly chain: string;
   readonly certificateExpiry: Date;
+}
+
+export interface OpenTunnelPendingIdentity {
+  readonly id: string;
+  readonly hostname: string;
+  readonly token: string;
+  readonly privateKey: string;
+  readonly csr: string;
 }
 
 export interface OpenTunnelStoredTunnel {
@@ -60,8 +78,19 @@ export interface OpenTunnelEffectClient {
     readonly get: (
       options?: OpenTunnelProfileOptions,
     ) => Effect.Effect<OpenTunnelIdentity | undefined, OpenTunnelError>;
+    readonly pending: (
+      options?: OpenTunnelProfileOptions,
+    ) => Effect.Effect<Pick<OpenTunnelPendingIdentity, "id" | "hostname"> | undefined, OpenTunnelError>;
+    readonly resume: (
+      options?: OpenTunnelProfileOptions & {
+        readonly onProgress?: (stage: OpenTunnelProvisionStage) => void;
+      },
+    ) => Effect.Effect<OpenTunnelIdentity | undefined, OpenTunnelError>;
     readonly create: (
-      options?: OpenTunnelProfileOptions & { readonly name?: string },
+      options?: OpenTunnelProfileOptions & {
+        readonly name?: string;
+        readonly onProgress?: (stage: OpenTunnelProvisionStage) => void;
+      },
     ) => Effect.Effect<OpenTunnelIdentity, OpenTunnelError>;
     readonly ensure: (
       options?: OpenTunnelProfileOptions & { readonly name?: string },

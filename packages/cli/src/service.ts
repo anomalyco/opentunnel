@@ -144,7 +144,7 @@ export const serve = Effect.fn("OpenTunnelService.serve")(function* (profile: st
     try: () => paths(profile),
     catch: (cause) => new OpenTunnelServiceError({ message: String(cause), cause }),
   });
-  const commands = yield* Queue.unbounded<"reload" | "stop">();
+  const commands = yield* Queue.unbounded<"reload" | "stop" | "provisioned">();
 
   yield* Effect.acquireRelease(
     Effect.tryPromise({
@@ -215,9 +215,11 @@ export const serve = Effect.fn("OpenTunnelService.serve")(function* (profile: st
   }
 
   let connectionScope: Scope.Closeable | undefined;
+  let provisioningScope: Scope.Closeable | undefined;
   let routeNames: ReadonlyArray<string> = [];
   yield* Effect.addFinalizer(() => Effect.gen(function* () {
     if (connectionScope) yield* Scope.close(connectionScope, Exit.void);
+    if (provisioningScope) yield* Scope.close(provisioningScope, Exit.void);
     yield* Queue.shutdown(commands);
   }));
   yield* Queue.offer(commands, "reload");
@@ -225,6 +227,10 @@ export const serve = Effect.fn("OpenTunnelService.serve")(function* (profile: st
   while (true) {
     const command = yield* Queue.take(commands);
     if (command === "stop") return;
+    if (command === "provisioned" && provisioningScope) {
+      yield* Scope.close(provisioningScope, Exit.void);
+      provisioningScope = undefined;
+    }
     if (connectionScope) {
       yield* Scope.close(connectionScope, Exit.void);
       connectionScope = undefined;
@@ -235,8 +241,26 @@ export const serve = Effect.fn("OpenTunnelService.serve")(function* (profile: st
     yield* Effect.gen(function* () {
       const tunnel = yield* client.tunnel.get({ profile });
       const config = yield* loadOpenTunnelConfig(profile);
-      if (!tunnel || Object.keys(config.routes).length === 0) {
-        yield* Console.log(`Profile ${profile} is waiting for a tunnel and routes.`);
+      if (!tunnel) {
+        const pending = yield* client.tunnel.pending({ profile });
+        if (pending && !provisioningScope) {
+          yield* Console.log(`Profile ${profile} is waiting for certificate verification.`);
+          const scope = yield* Scope.make();
+          provisioningScope = scope;
+          yield* client.tunnel.resume({ profile }).pipe(
+            Effect.catch((error) => Console.error(`Profile ${profile} provisioning failed:`, error)),
+            Effect.ensuring(Effect.sync(() => Queue.offerUnsafe(commands, "provisioned"))),
+            Effect.forkIn(scope),
+          );
+        } else if (!pending) {
+          yield* Console.log(`Profile ${profile} is waiting for a tunnel.`);
+          yield* Effect.sleep("2 seconds");
+          yield* Queue.offer(commands, "reload");
+        }
+        return;
+      }
+      if (Object.keys(config.routes).length === 0) {
+        yield* Console.log(`Profile ${profile} is waiting for routes.`);
         return;
       }
 

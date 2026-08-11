@@ -75,6 +75,11 @@ $XDG_DATA_HOME/opentunnel/default/
   chain.pem
 ```
 
+During certificate verification, `pending.json`, `token`, and
+`private-key.pem` are persisted in the profile directory. The background
+service resumes that pending CSR if `opentunnel create` is interrupted and
+removes `pending.json` after the certificate is ready.
+
 The profile directory must use `0700` permissions. The token and private key
 must use `0600` permissions.
 

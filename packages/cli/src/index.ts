@@ -35,10 +35,43 @@ const create = Command.make(
     const { profile } = yield* root;
     yield* ensureService(profile);
     const client = yield* OpenTunnelClient;
-    const tunnel = yield* client.tunnel.create({
-      profile,
-      ...(Option.isSome(name) ? { name: name.value } : {}),
-    });
+    let waiting = false;
+    const tunnel = yield* client.tunnel.create(
+      {
+        profile,
+        ...(Option.isSome(name) ? { name: name.value } : {}),
+        onProgress: (stage) => {
+          if (stage === "waiting-certificate") {
+            if (waiting) process.stdout.write(".");
+            else {
+              waiting = true;
+              process.stdout.write("Waiting for certificate verification (this can take a few minutes)...");
+            }
+            return;
+          }
+          if (waiting) {
+            waiting = false;
+            process.stdout.write("\n");
+          }
+          const message = {
+            "creating-tunnel": "Creating tunnel...",
+            "generating-key": "Generating private key...",
+            "generating-csr": "Generating certificate request...",
+            "resuming-certificate": "Resuming pending certificate verification...",
+            "requesting-certificate": "Requesting certificate...",
+            "saving-identity": "Saving tunnel identity...",
+            ready: "Tunnel is ready.",
+          }[stage as Exclude<typeof stage, "waiting-certificate">];
+          console.log(message);
+        },
+      },
+    ).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (waiting) process.stdout.write("\n");
+        }),
+      ),
+    );
     yield* reloadService(profile);
     yield* Effect.log(`Created https://${tunnel.hostname}`);
   }),
@@ -77,7 +110,15 @@ const info = Command.make(
     const tunnel = yield* client.tunnel.get({ profile });
 
     if (!tunnel) {
-      yield* Console.log(`No tunnel exists for profile ${profile}.`);
+      const pending = yield* client.tunnel.pending({ profile });
+      if (pending) {
+        yield* Console.log(`Profile: ${profile}`);
+        yield* Console.log(`Tunnel ID: ${pending.id}`);
+        yield* Console.log(`Hostname: ${pending.hostname}`);
+        yield* Console.log("Status: Waiting for certificate verification");
+      } else {
+        yield* Console.log(`No tunnel exists for profile ${profile}.`);
+      }
       yield* Console.log("");
       yield* printRoutes(profile);
       return;

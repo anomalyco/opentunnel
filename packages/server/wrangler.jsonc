@@ -15,7 +15,7 @@
     "OPENTUNNEL_DOMAIN": "opentunnel.xyz",
     "ACME_URL": "https://acme.zerossl.com/v2/DV90",
     "ACME_EMAIL": "acme@opentunnel.xyz",
-    "ACME_DNS_PROPAGATION_DELAY_MS": "10000",
+    "ACME_DNS_PROPAGATION_TIMEOUT_MS": "10000",
     "CLOUDFLARE_ZONE_ID": "43d8e5cf1c0ccc8c3868125be74a5e68"
   },
   "secrets": {

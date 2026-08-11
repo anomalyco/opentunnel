@@ -19,8 +19,63 @@ interface CloudflareResponse<A> {
   readonly errors?: ReadonlyArray<{ readonly message?: string }>;
 }
 
+interface DnsResponse {
+  readonly Status: number;
+  readonly Answer?: ReadonlyArray<{
+    readonly type: number;
+    readonly data: string;
+  }>;
+}
+
 const wait = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const waitForDns = async (
+  challenges: ReadonlyArray<{ readonly hostname: string; readonly key: string }>,
+  timeout: number,
+): Promise<void> => {
+  const records = new Map<string, Set<string>>();
+  for (const { hostname, key } of challenges) {
+    const name = `_acme-challenge.${hostname}`;
+    const keys = records.get(name) ?? new Set<string>();
+    keys.add(key);
+    records.set(name, keys);
+  }
+
+  const deadline = Date.now() + timeout;
+  while (true) {
+    const visible = await Promise.all(
+      [...records].map(async ([name, keys]) => {
+        const query = `name=${encodeURIComponent(name)}&type=TXT`;
+        const responses = await Promise.allSettled([
+          fetch(`https://cloudflare-dns.com/dns-query?${query}`, {
+            headers: { accept: "application/dns-json" },
+          }),
+          fetch(`https://dns.google/resolve?${query}`, {
+            headers: { accept: "application/dns-json" },
+          }),
+        ]);
+        for (const result of responses) {
+          if (result.status === "rejected" || !result.value.ok) continue;
+          const response = await result.value.json() as DnsResponse;
+          if (response.Status !== 0) continue;
+          const values = response.Answer
+            ?.filter((answer) => answer.type === 16)
+            .map((answer) => answer.data.replace(/^"|"$/g, "")) ?? [];
+          if ([...keys].every((key) => values.includes(key))) return true;
+        }
+        return false;
+      }),
+    );
+    if (visible.every(Boolean)) return;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      console.warn("DNS challenge records were not visible before the propagation timeout");
+      return;
+    }
+    await wait(Math.min(500, remaining));
+  }
+};
 
 const toPem = (buffer: ArrayBuffer): string => {
   const body = base64Url(new Uint8Array(buffer)).replace(/-/g, "+").replace(/_/g, "/");
@@ -211,7 +266,7 @@ export class CertificateWorkflow extends WorkflowEntrypoint<Cloudflare.Env, Cert
     );
 
     try {
-      await wait(Number(env.ACME_DNS_PROPAGATION_DELAY_MS || 10_000));
+      await waitForDns(challenges, Number(env.ACME_DNS_PROPAGATION_TIMEOUT_MS || 10_000));
       for (const { authorizationUrl, challenge } of challenges) {
         await client.getChallenge(challenge.url, "POST");
         let validAuthorization = await client.getAuthorization(authorizationUrl);
