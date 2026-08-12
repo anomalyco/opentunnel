@@ -15,7 +15,7 @@ HTTP plaintext.
 The CLI requires [Bun](https://bun.sh):
 
 ```bash
-bun install -g @opentunnel/cli
+bun install -g opentunnel
 ```
 
 Then create a tunnel and route traffic to a local process:

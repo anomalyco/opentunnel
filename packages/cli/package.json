@@ -1,7 +1,12 @@
 {
-  "name": "@opentunnel/cli",
-  "version": "0.0.3",
+  "name": "opentunnel",
+  "version": "0.0.29",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opentunnel.git",
+    "directory": "packages/cli"
+  },
   "type": "module",
   "files": [
     "dist"
