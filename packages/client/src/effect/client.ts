@@ -54,6 +54,21 @@ export class OpenTunnelClient extends ServiceMap.Service<
           return yield* storage.load(profileName(input));
         });
 
+        const status = Effect.fn("OpenTunnelClient.tunnel.status")(function* (
+          input?: OpenTunnelProfileOptions,
+        ) {
+          const profile = profileName(input);
+          const identity = yield* storage.load(profile);
+          if (!identity) return (yield* storage.loadPending(profile)) ? "pending" as const : undefined;
+          const authorized = yield* api.authorized(Tunnel.Token.makeUnsafe(identity.token));
+          const tunnel = yield* authorized.tunnel["tunnel.get"]({
+            params: { id: Tunnel.ID.makeUnsafe(identity.id) },
+          }).pipe(
+            Effect.mapError((cause) => clientError("Failed to read tunnel status", cause)),
+          );
+          return tunnel.state;
+        });
+
         const completePending = Effect.fn("OpenTunnelClient.tunnel.completePending")(function* (options: {
           readonly profile: string;
           readonly pending: OpenTunnelPendingIdentity;
@@ -277,6 +292,7 @@ export class OpenTunnelClient extends ServiceMap.Service<
           tunnel: {
             list: storage.list,
             get,
+            status,
             pending,
             resume,
             create,

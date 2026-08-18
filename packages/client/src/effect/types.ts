@@ -44,6 +44,8 @@ export interface OpenTunnelStoredTunnel {
   readonly tunnel: OpenTunnelIdentity;
 }
 
+export type OpenTunnelStatus = "offline" | "online" | "pending";
+
 export type OpenTunnelClientEvent =
   | { readonly type: "connected" }
   | { readonly type: "disconnected"; readonly reason?: string }
@@ -78,6 +80,9 @@ export interface OpenTunnelEffectClient {
     readonly get: (
       options?: OpenTunnelProfileOptions,
     ) => Effect.Effect<OpenTunnelIdentity | undefined, OpenTunnelError>;
+    readonly status: (
+      options?: OpenTunnelProfileOptions,
+    ) => Effect.Effect<OpenTunnelStatus | undefined, OpenTunnelError>;
     readonly pending: (
       options?: OpenTunnelProfileOptions,
     ) => Effect.Effect<Pick<OpenTunnelPendingIdentity, "id" | "hostname"> | undefined, OpenTunnelError>;
