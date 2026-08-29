@@ -16,11 +16,11 @@
     "@peculiar/x509": "catalog:",
     "effect": "catalog:",
     "reflect-metadata": "catalog:",
-    "ws": "catalog:"
+    "ws-node": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "@types/ws": "catalog:",
+    "@types/ws-node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "typescript": "catalog:"
   }
