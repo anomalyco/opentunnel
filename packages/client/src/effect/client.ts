@@ -241,7 +241,7 @@ export class OpenTunnelClient extends ServiceMap.Service<
             list: listRoutes,
             add: Effect.fn("OpenTunnelClient.route.add")(function* (input) {
               const profile = profileName(input);
-              const identity = yield* ensure(input);
+              const identity = (yield* get(input)) ?? (yield* create(input));
               const routes = routesByProfile.get(profile) ?? [];
               if (routes.some((route) => route.name === input.name)) {
                 return yield* new OpenTunnelClientError({
