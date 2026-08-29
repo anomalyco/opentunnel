@@ -164,7 +164,7 @@ export function parseDataFrame(data: Uint8Array): { conn: number; payload: Uint8
   }
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const conn = view.getUint32(0, false); // big-endian
-  const payload = data.slice(DataFrame.CONN_ID_SIZE);
+  const payload = data.subarray(DataFrame.CONN_ID_SIZE);
   return { conn, payload };
 }
 
