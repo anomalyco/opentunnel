@@ -10,13 +10,14 @@
     },
     "packages/cli": {
       "name": "opentunnel",
-      "version": "0.0.29",
+      "version": "0.0.30",
       "bin": {
         "opentunnel": "dist/index.js",
       },
       "devDependencies": {
         "@effect/platform-node": "catalog:",
         "@opentunnel/client": "workspace:*",
+        "@opentunnel/protocol": "workspace:*",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
