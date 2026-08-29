@@ -65,6 +65,7 @@
         "@peculiar/x509": "catalog:",
         "effect": "catalog:",
         "reflect-metadata": "catalog:",
+        "ws-node": "catalog:",
       },
       "devDependencies": {
         "@typescript/native-preview": "catalog:",
