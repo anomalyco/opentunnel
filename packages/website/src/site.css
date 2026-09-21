@@ -1,78 +1,56 @@
-/* One face for everything that reads (Commit Mono, set heavy), one grid of framed cells with equal
-   gutters, one set of hairlines (#383838 frames, #292929 rules, #131313 headers). */
+/* The page as it was: one 760px column of IBM Plex Mono on black, lowercase, nothing framed. The
+   only new thing on it is the diagram. */
 * { box-sizing: border-box; }
-html { background: #000; color-scheme: dark; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-body { margin: 0; background: #000; color: #fff; font: 400 clamp(15px, 2vw, 18px)/1.7 var(--font-text), monospace; }
-::selection { background: #e7e5e4; color: #000; }
-a { color: inherit; text-decoration: none; }
-a:hover { color: #fff; }
-p { margin: 0; }
-code { font-family: inherit; color: #fff; }
+html { background: #000; color-scheme: dark; -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: #000; color: #fff; font-family: var(--font-text), monospace; }
+::selection { background: #fff; color: #000; }
+a { color: #fff; text-decoration: none; }
 
-.site { --gutter: 24px; max-width: 1200px; margin: 0 auto; padding: 0 40px 40px; }
-.site-header { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; padding: 28px 0 24px; font-size: clamp(14px, 2vw, 17px); color: #fff; }
-.site-tagline { color: #fff; margin-right: 8px; }
-.site-mark { color: #fff; }
-.site-nav { display: flex; align-items: baseline; gap: 24px; }
-.site-nav a { opacity: .45; }
-.site-nav a:hover { opacity: 1; }
+main { width: min(100% - 48px, 760px); margin: 0 auto; padding: 9vh 0 14vh; }
 
-/* The grid: twelve columns, one gutter, generous rows. Alignment is the only structure. */
-.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 64px var(--gutter); }
-.cell { min-width: 0; }
-.cell-label { margin: 0 0 16px; font-size: inherit; font-weight: 500; letter-spacing: .02em; color: #fff; }
-/* Lists hang their numbers in a gutter; a heading line, when there is one, is white and the body dim. */
-.steps { margin: 0; padding: 0; list-style: none; counter-reset: step; max-width: 48em; }
-.steps li { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); color: #fff; }
-.steps li + li { margin-top: 24px; }
-.steps li::before { counter-increment: step; content: counter(step, decimal-leading-zero); color: #fff; opacity: .35; }
-.steps li > strong { font-weight: 500; grid-column: 2; }
-.steps li > p { grid-column: 2; margin: 6px 0 0; opacity: .55; }
-.steps li > p code { opacity: 1; }
-.cell > p strong { color: #fff; font-weight: 500; }
-.cell > p { color: #fff; opacity: .55; max-width: 34em; }
-.cell > p strong, .cell > p code { opacity: 1; }
+/* The wordmark, edge to edge of the column in the paper red; the old headline sits under it, smaller. */
+.wordmark { display: block; width: 100%; aspect-ratio: 5; color: #ff2a2a; font-family: var(--font-wordmark), monospace; overflow: visible; }
+h1 { margin: 22px 0 0; font-size: clamp(15px, 2.2vw, 20px); font-weight: 500; letter-spacing: .02em; line-height: 1.4; white-space: nowrap; }
+h2 { margin: 0 0 40px; font-size: clamp(20px, 3.2vw, 27px); font-weight: 500; letter-spacing: .02em; }
 
-.cell-lede h1 { margin: 0; font-size: inherit; line-height: inherit; font-weight: 400; color: #fff; text-wrap: pretty; max-width: 40em; }
-.cell-install { display: flex; align-items: flex-start; }
-.cell-install .install { flex: 1; }
+.description { margin: 40px 0 0; font-size: clamp(15px, 2vw, 18px); line-height: 1.7; }
 
-.install { display: flex; align-items: stretch; border: 1px solid #383838; font-size: clamp(14px, 2vw, 17px); line-height: 1.5; }
-.install-command { flex: 1; display: flex; align-items: center; padding: 14px 18px; color: #fff; white-space: nowrap; overflow-x: auto; }
-.install-command > span { opacity: .45; margin-right: .6em; }
-.install-copy { appearance: none; padding: 0 18px; border: 0; border-left: 1px solid #383838; background: transparent; color: #fff; opacity: .45; font: inherit; cursor: pointer; }
-.install-copy:hover { opacity: 1; background: #111; }
-.install-copy:focus-visible { outline: 1px solid #d4ad88; outline-offset: -1px; }
+.install { margin-top: 56px; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
+.tabs { display: flex; gap: 24px; margin-bottom: 16px; }
+.tabs button { appearance: none; margin: 0; padding: 0; border: 0; background: none; color: #fff; font: inherit; cursor: pointer; opacity: .45; }
+.tabs a { opacity: .45; }
+.tabs button:hover, .tabs a:hover, .tabs button[data-current] { opacity: 1; }
+.command { overflow-x: auto; white-space: nowrap; }
 
-.cell-diagram .diagram { margin-top: 8px; }
+.usage, .sdk, .how, .privacy { margin-top: 112px; }
 
-/* Code sits in the blog's frame: one hairline, the filename set into the top rule. */
-.code { position: relative; margin: 0; padding: 20px 20px 22px; border: 1px solid #383838; border-top-color: transparent; color: #fff; font: 400 clamp(14px, 2vw, 17px)/1.8 var(--font-text), monospace; tab-size: 2; }
-.code code { display: block; overflow-x: auto; font: inherit; color: inherit; }
-.code[data-filename]::before { content: attr(data-filename); position: absolute; top: -.5px; left: 14px; transform: translateY(-50%); padding: 0 6px; background: #000; color: #fff; opacity: .55; font: 400 clamp(13px, 1.6vw, 15px)/1.5 var(--font-text), monospace; z-index: 1; }
-.code[data-filename]::after { content: ""; position: absolute; top: -.5px; left: 0; right: 0; border-top: 1px solid #383838; }
-/* Highlighting by dimness, not colour: what you typed is bright, what came back is dim, punctuation dimmer. */
-.tok-cmd { color: #fff; }
-.tok-out { color: #fff; opacity: .55; }
-.tok-dim { color: #fff; opacity: .35; }
-.cell-code .note { margin-top: 18px; color: #fff; opacity: .55; max-width: 34em; }
-.cell-code { padding-top: 6px; }
+pre { margin: 0; overflow-x: auto; color: #fff; font: clamp(14px, 2vw, 17px)/1.8 var(--font-text), monospace; }
+.output { opacity: .55; }
 
-.site-footer { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-top: 96px; padding: 20px 0 0; border-top: 1px solid #292929; color: #fff; opacity: .45; }
-.site-footer a:hover { color: #fff; }
+.steps { display: grid; margin: 0; padding: 0; gap: 28px; list-style: none; counter-reset: step; }
+.steps li { display: grid; grid-template-columns: 44px 1fr; counter-increment: step; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
+.steps li::before { content: "0" counter(step); opacity: .45; }
+.steps p { margin: 0; }
 
-.hero-poster { max-width: 400px; }
-.poster { container-type: inline-size; }
+.privacy-list { display: grid; margin: 0; gap: 36px; }
+.privacy-list dt { margin-bottom: 6px; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
+.privacy-list dd { margin: 0; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; opacity: .55; }
 
-@media (max-width: 900px) {
-  .site { padding: 0 16px 32px; --gutter: 16px; }
-  .grid { gap: 40px var(--gutter); }
-  .grid > * { grid-column: span 12 !important; }
+/* The diagram takes the old drawing's slot and may run a little wider than the column, centred on it. */
+.diagram-wrap { --bleed: min(940px, 100vw - 48px); width: var(--bleed); margin: 48px 0 0 calc((100% - var(--bleed)) / 2); overflow-x: auto; }
+.diagram { min-width: 640px; }
+
+/* Dev: the red print above the page (`?hero=banner`). */
+.banner { margin-bottom: -4vh; }
+
+@media (max-width: 600px) {
+  main { width: min(100% - 32px, 760px); padding-top: 6vh; }
+  .install { margin-top: 44px; }
+  .usage, .sdk, .how, .privacy { margin-top: 80px; }
+  h2 { margin-bottom: 32px; }
 }
 
-/* Monotone: the page is a duotone of its own luminance (see theme.ts). The banner prints white
-   on black so the wordmark and the tunnel come out in the ink, not inverted. */
+/* Monotone (`?theme=mono`): the page as a duotone of its own luminance, see theme.ts. */
 html:has(.site[data-theme="mono"]) { background: #181617; }
 .site[data-theme="mono"] { filter: url(#monotone); background: #000; }
 .site[data-theme="mono"] .banner { --paper: #000; --ink: #fff; }
-.site[data-theme="mono"] .banner-canvas { image-rendering: auto; }

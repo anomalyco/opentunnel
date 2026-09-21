@@ -45,8 +45,8 @@ void main() {
   for (int i = 0; i < 4; i++) {
     if (i >= frontCount) break;
     float dx = x - fronts[i] * aspect;
-    line += exp(-dx * dx * 700.0);
-    glow += exp(-abs(dx) * 6.0) * 0.3;
+    line += exp(-dx * dx * 700.0) * 0.8;
+    glow += exp(-abs(dx) * 6.0) * 0.2;
   }
 
   // Afterburn: how long ago a front last passed this column, from the stamped texture.
@@ -54,12 +54,12 @@ void main() {
   float since = max(0.0, now - stamp);
   float burn = exp(-since * 0.9);
   float turbulence = fbm(vec2(p.x * 6.0 - time * 1.2, p.y * 6.0 + since * 3.0));
-  float wake = burn * (0.35 + 0.65 * turbulence) * 0.32;
+  float wake = burn * (0.35 + 0.65 * turbulence) * 0.2;
   // Hot core just behind the front, cooling into the wake.
-  float ember = exp(-since * 4.0) * 0.25;
+  float ember = exp(-since * 4.0) * 0.16;
 
   // The contents, seen only in the burn: a hatch, nothing legible, shimmering as it cools.
-  float hatch = step(0.55, fract((p.x + p.y + warp * 4.0) * 22.0)) * burn * 0.22;
+  float hatch = step(0.55, fract((p.x + p.y + warp * 4.0) * 22.0)) * burn * 0.14;
 
   // Light pools along the middle where the bytes travel.
   float lane = 1.0 - 0.5 * pow(abs(uv.y - 0.5) * 2.0, 2.0);

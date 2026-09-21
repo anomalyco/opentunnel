@@ -1,19 +1,16 @@
 import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react"
-import { useMotionValue, useMotionValueEvent, useTransform, type MotionValue } from "motion/react"
+import { motion, useMotionValue, useMotionValueEvent, useTransform, type MotionValue } from "motion/react"
 import { DiagramFrame, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
 import { CardGlow, Pulse, pulseEase, pulseGatherMs } from "../graphics/Pulse"
-import { pluginActivityAt, type PluginActivity } from "../graphics/pluginActivity"
+import { pluginActivity, usePluginActivity } from "../graphics/pluginActivity"
 import { roundedWire } from "../graphics/roundedWire"
 import { useScenePlayback } from "../graphics/useScenePlayback"
 import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel, viscousFlight } from "./tunnelScore"
 import { RelayField, type RelayFront } from "./RelayField"
+import { BurstField } from "./BurstField"
+import { ArrowsLeftRight, Stack, Terminal, WebhooksLogo } from "@phosphor-icons/react"
 import "./tunnel-scene.css"
-
-/** The page's one colour: the paper red, for everything that carries the signal. */
-export const accent = "#ff2a2a"
-/** The signal is the same red; nothing in the diagram is hotter than the paper. */
-export const hot = accent
 
 // browser ──▶ relay ──▶ opencode
 //                  ╲──▶ api          (your machine)
@@ -21,54 +18,58 @@ export const hot = accent
 //
 // HTML frames carry the anatomy; one SVG overlay measures them and draws wires,
 // sockets, pulses and light, as the blog's shipped diagrams do. Each leg is one
-// pulse that passes through the relay: the dot goes behind the card while a scan
-// beam sweeps its interior and finds only hatching, then leaves by the far socket.
+// pulse that passes through the relay: the dot goes behind the card while the
+// field inside burns where the bytes pass and finds only hatching, then leaves
+// by the far socket.
 
 type Box = { x: number; y: number; width: number; height: number }
 type Bounds = { width: number; height: number; browser: Box; relay: Box; machine: Box; routes: Box[] }
 /** Scene seconds at which each leg's pulse enters the relay, leaves it, and is read (its midpoint). */
 export type Crossing = { enter: number; leave: number; read: number }
 
-const channel = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16)
-const mix = (from: string, to: string, t: number) => `rgb(${[1, 3, 5].map(i => Math.round(channel(from, i) + (channel(to, i) - channel(from, i)) * t)).join(" ")})`
-
-/** Activity lifts every ink from its resting grey toward the red, never toward white. */
-function useSignalInks(clock: MotionValue<number>, activity: PluginActivity) {
-  const at = (time: number) => pluginActivityAt(time, activity)
-  return {
-    color: useTransform(clock, time => { const a = at(time); return mix("#c8c8c8", accent, Math.max(a.flash, a.running)) }),
-    iconColor: useTransform(clock, time => mix("#777777", accent, Math.max(at(time).flash, at(time).running))),
-    insetColor: useTransform(clock, time => mix("#292929", accent, at(time).frame * .35)),
-    frameColor: useTransform(clock, time => mix("#383838", accent, at(time).outer * .3)),
-  }
-}
-
-/** A socket rests grey and turns red while its card is active. */
-function Port({ x, y, clock, activity }: { x: number; y: number; clock: MotionValue<number>; activity: PluginActivity }) {
-  const fill = useTransform(clock, time => { const a = pluginActivityAt(time, activity); return mix("#555555", accent, Math.max(a.flash, a.running)) })
-  return <GraphPort x={x} y={y} fill={fill} />
-}
 /** The frame's 1px border, traced along its centre. */
 const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
 
+/** A wireframe globe turning: three meridians slide across the disc. Driven by the scene clock at a rate that
+ * completes a whole number of meridian spacings per loop, so the turn never skips when the scene restarts. */
+function Globe({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
+  const spacing = Math.PI / 3
+  const rate = Math.round(1.05 * tunnelScore.duration / spacing) * spacing / tunnelScore.duration
+  const r = 6.5
+  const rx = (k: number) => useTransform(clock, t => reduced ? r * Math.abs(Math.cos(k * spacing + .4)) : r * Math.abs(Math.cos(t * rate + k * spacing)))
+  const [a, b, c] = [rx(0), rx(1), rx(2)]
+  return <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round">
+    <circle cx={8} cy={8} r={r} />
+    <path d={`M${8 - r} 8h${2 * r}`} />
+    <motion.ellipse cx={8} cy={8} ry={r} style={{ rx: a }} />
+    <motion.ellipse cx={8} cy={8} ry={r} style={{ rx: b }} />
+    <motion.ellipse cx={8} cy={8} ry={r} style={{ rx: c }} />
+  </svg>
+}
+
+const routeIcons = { terminal: <Terminal size={16} />, layers: <Stack size={16} />, webhook: <WebhooksLogo size={16} /> } as const
+
 function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
-  const inks = useSignalInks(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
-  return <NodeCard name="browser" icon="globe" data-node="browser" aria-label="A visitor's browser" {...inks} />
+  const inks = usePluginActivity(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
+  return <NodeCard name="browser" icon={<Globe clock={clock} reduced={reduced} />} data-node="browser" aria-label="A visitor's browser" {...inks}>
+    {!reduced && <BurstField clock={clock} at={tunnelLegs.map(leg => leg.start)} origin={[1, .5]} mode="ember" className="tunnel-card-field" />}
+  </NodeCard>
 }
 
 function Relay({ clock, reduced, crossings, fronts, now }: { clock: MotionValue<number>; reduced: boolean; crossings: readonly Crossing[]; fronts: MotionValue<readonly RelayFront[]>; now: MotionValue<number> }) {
   // Working while the bytes are inside: the icon holds bright while the field is lit.
-  const inks = useSignalInks(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
-  return <NodeCard name="relay" icon="relay" data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
-    {!reduced && <RelayField fronts={fronts} now={now} ink={accent} className="tunnel-relay-field" />}
+  const inks = usePluginActivity(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
+  return <NodeCard name="relay" icon={<ArrowsLeftRight size={16} />} data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
+    {!reduced && <RelayField fronts={fronts} now={now} className="tunnel-relay-field" />}
   </NodeCard>
 }
 
 function Route({ index, clock, reduced }: { index: number; clock: MotionValue<number>; reduced: boolean }) {
   const route = tunnelRoutes[index]!, leg = tunnelLegs[index]!
   // The destination flashes as the bytes land and cools over the next second.
-  const inks = useSignalInks(clock, { dispatches: [leg.contact], reduced })
-  return <NodeCard name={route.name} icon={route.icon} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
+  const inks = usePluginActivity(clock, { dispatches: [leg.contact], reduced })
+  return <NodeCard name={route.name} icon={routeIcons[route.icon]} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
+    {!reduced && <BurstField clock={clock} at={[leg.contact]} origin={[0, .5]} mode="flood" className="tunnel-card-field" />}
     <span className="node-card-detail">{route.target}</span>
   </NodeCard>
 }
@@ -204,21 +205,21 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
     {wires.hops.map((d, index) => <GraphWire key={index} d={d} />)}
 
     <GraphSignals ports={<>
-      <Port {...browserOut} clock={clock} activity={{ dispatches: tunnelLegs.map(leg => leg.start), reduced }} />
-      <Port {...relayIn} clock={clock} activity={{ dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced }} />
-      <Port {...relayOut} clock={clock} activity={{ dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced }} />
-      {routes.map((box, index) => <Port key={index} {...routeLanding(box)} clock={clock} activity={{ dispatches: [tunnelLegs[index]!.contact], reduced }} />)}
+      <GraphPort {...browserOut} />
+      <GraphPort {...relayIn} />
+      <GraphPort {...relayOut} />
+      {routes.map((box, index) => <GraphPort key={index} {...routeLanding(box)} />)}
     </>} glows={!reduced && <>
       {/* Dispatch: an ember warms the socket the light leaves from. */}
-      <CardGlow id={`${id}-browser-leave`} {...browser} rx={0} cx={browserOut.x} cy={browserOut.y} clock={milliseconds} at={tunnelLegs.map(leg => leg.start * 1000)} role="leaving" tint={accent} size={260} strength={2.2} />
+      <CardGlow id={`${id}-browser-leave`} {...browser} rx={0} cx={browserOut.x} cy={browserOut.y} clock={milliseconds} at={tunnelLegs.map(leg => leg.start * 1000)} role="leaving" {...pluginActivity.ember} />
       {/* Contact: the destination is struck and floods from its socket. Only the local app ever opens the bytes. */}
       {routes.map((box, index) => <g key={index}>
-        <CardGlow id={`${id}-route-strike-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.contact * 1000} style="crack" strength={1} size={300} tint={accent} />
-        <CardGlow id={`${id}-route-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.contact * 1000} style="flood" strength={1.2} tint={accent} />
+        <CardGlow id={`${id}-route-strike-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.contact * 1000} style="crack" strength={1} size={300} />
+        <CardGlow id={`${id}-route-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.contact * 1000} style="flood" strength={1.2} />
       </g>)}
     </>}>
       {!reduced && <g mask={`url(#${id}-relay-cutout)`}>
-        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} color={accent} dotColor={hot} trail={{ cooling: 300, segments: 256 }} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
+        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} trail={{ cooling: 300, segments: 256 }} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
       </g>}
     </GraphSignals>
   </svg>
