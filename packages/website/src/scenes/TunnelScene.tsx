@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react"
-import { motion, useMotionValue, useMotionValueEvent, useTransform, type MotionValue } from "motion/react"
+import { useMotionValue, useMotionValueEvent, useTransform, type MotionValue } from "motion/react"
 import { DiagramFrame, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
 import { CardGlow, Pulse, pulseEase, pulseGatherMs } from "../graphics/Pulse"
@@ -29,25 +29,17 @@ type Bounds = { width: number; height: number; browser: Box; relay: Box; machine
 /** Scene seconds at which each leg's pulse enters the relay, leaves it, and is read (its midpoint). */
 export type Crossing = { enter: number; leave: number; read: number }
 
-type RGB = readonly [number, number, number]
-const rgb = (hex: string): RGB => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)) as unknown as RGB
-const lerp = (from: RGB, to: RGB, t: number): RGB => [0, 1, 2].map(i => from[i]! + (to[i]! - from[i]!) * t) as unknown as RGB
-const css = (c: RGB) => `rgb(${c.map(Math.round).join(" ")})`
-const mix = (from: string, to: string, t: number) => css(lerp(rgb(from), rgb(to), t))
-const black = rgb("#000000"), red = rgb("#ff2a2a")
+const channel = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16)
+const mix = (from: string, to: string, t: number) => `rgb(${[1, 3, 5].map(i => Math.round(channel(from, i) + (channel(to, i) - channel(from, i)) * t)).join(" ")})`
 
-/** Activity prints the card solid: the frame and fill go to the red and the type knocks out to black; at rest,
- * grey type in an outlined card. `solid` is the flash; `running` only warms the type toward the red. */
-function useSignalInks(clock: MotionValue<number>, activity: PluginActivity, { fill = true } = {}) {
+/** Activity lifts every ink from its resting grey toward the red, never toward white. */
+function useSignalInks(clock: MotionValue<number>, activity: PluginActivity) {
   const at = (time: number) => pluginActivityAt(time, activity)
-  const solid = (time: number) => fill ? at(time).flash : 0
   return {
-    color: useTransform(clock, time => { const a = at(time); const warm = lerp(rgb("#c8c8c8"), red, Math.max(a.flash, a.running)); return css(lerp(warm, black, solid(time))) }),
-    detailColor: useTransform(clock, time => mix("#6f6f6f", "#000000", solid(time))),
+    color: useTransform(clock, time => { const a = at(time); return mix("#c8c8c8", accent, Math.max(a.flash, a.running)) }),
     iconColor: useTransform(clock, time => mix("#777777", accent, Math.max(at(time).flash, at(time).running))),
     insetColor: useTransform(clock, time => mix("#292929", accent, at(time).frame * .35)),
-    frameColor: useTransform(clock, time => mix("#444444", accent, Math.max(at(time).outer * .3, solid(time)))),
-    background: useTransform(clock, time => mix("#000000", accent, solid(time))),
+    frameColor: useTransform(clock, time => mix("#383838", accent, at(time).outer * .3)),
   }
 }
 
@@ -60,13 +52,13 @@ function Port({ x, y, clock, activity }: { x: number; y: number; clock: MotionVa
 const outlineOf = (box: Box) => `M${box.x + 1} ${box.y + 1}h${box.width - 2}v${box.height - 2}h${2 - box.width}Z`
 
 function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
-  const { detailColor: _, ...inks } = useSignalInks(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
+  const inks = useSignalInks(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
   return <NodeCard name="browser" icon="globe" data-node="browser" aria-label="A visitor's browser" {...inks} />
 }
 
 function Relay({ clock, reduced, crossings, fronts, now }: { clock: MotionValue<number>; reduced: boolean; crossings: readonly Crossing[]; fronts: MotionValue<readonly RelayFront[]>; now: MotionValue<number> }) {
   // Working while the bytes are inside: the icon holds bright while the field is lit.
-  const { detailColor: _, background: __, ...inks } = useSignalInks(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced }, { fill: false })
+  const inks = useSignalInks(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
   return <NodeCard name="relay" icon="relay" data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
     {!reduced && <RelayField fronts={fronts} now={now} ink={accent} className="tunnel-relay-field" />}
   </NodeCard>
@@ -75,9 +67,9 @@ function Relay({ clock, reduced, crossings, fronts, now }: { clock: MotionValue<
 function Route({ index, clock, reduced }: { index: number; clock: MotionValue<number>; reduced: boolean }) {
   const route = tunnelRoutes[index]!, leg = tunnelLegs[index]!
   // The destination flashes as the bytes land and cools over the next second.
-  const { detailColor, ...inks } = useSignalInks(clock, { dispatches: [leg.contact], reduced })
+  const inks = useSignalInks(clock, { dispatches: [leg.contact], reduced })
   return <NodeCard name={route.name} icon={route.icon} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
-    <motion.span className="node-card-detail" style={{ color: detailColor }}>{route.target}</motion.span>
+    <span className="node-card-detail">{route.target}</span>
   </NodeCard>
 }
 

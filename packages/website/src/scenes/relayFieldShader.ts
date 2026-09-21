@@ -16,7 +16,7 @@ precision highp float;
 in vec2 uv;
 out vec4 color;
 uniform vec2 resolution;
-uniform float now, time, cell;
+uniform float now, time;
 uniform int frontCount;
 uniform float fronts[4];
 uniform vec3 ink;
@@ -65,10 +65,6 @@ void main() {
   float lane = 1.0 - 0.5 * pow(abs(uv.y - 0.5) * 2.0, 2.0);
 
   float alpha = clamp((line + glow + wake + ember + hatch) * lane, 0.0, 1.0);
-  // Printed, not shaded: the field is screened into dots of one ink, the way the banner is.
-  vec2 cellPx = floor(gl_FragCoord.xy / cell);
-  float threshold = fract(52.9829189 * fract(0.06711056 * cellPx.x + 0.00583715 * cellPx.y));
-  float printed = step(threshold, alpha * 1.15);
-  color = vec4(ink * printed, printed);
+  color = vec4(ink * alpha, alpha);
 }
 `

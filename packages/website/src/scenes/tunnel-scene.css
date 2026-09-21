@@ -1,7 +1,7 @@
 .tunnel-scene { position: relative; margin: 0; padding-top: 12px; color: #aaa; font: 13px/1.5 var(--font-mono), monospace; font-variant-numeric: tabular-nums lining-nums; }
-.tunnel-panels { position: relative; display: grid; grid-template-columns: 210px 260px minmax(0, 420px); justify-content: space-between; gap: 80px; align-items: center; padding-top: 12px; }
+.tunnel-panels { position: relative; display: grid; grid-template-columns: 200px 230px minmax(0, 460px); justify-content: space-between; gap: 80px; align-items: center; padding-top: 12px; }
 .tunnel-column { min-width: 0; }
-.tunnel-routes { display: grid; gap: 12px; padding: 18px; }
+.tunnel-routes { display: grid; gap: 10px; padding: 16px; }
 .tunnel-signals { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .graph-pulses { display: none; } }
 @media (max-width: 900px) { .tunnel-panels { grid-template-columns: 170px 200px minmax(0, 1fr); gap: 48px; } }
@@ -11,14 +11,14 @@
 }
 .tunnel-relay-field { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); display: block; pointer-events: none; }
 
-/* Huge type, no icons. Names in the wordmark's face fill the card; a route's address sits under its name. */
+/* White names, grey structure, and the red only for what carries the signal. */
 .tunnel-scene { --accent: #ff2a2a; font-family: var(--font-text), monospace; }
-.tunnel-scene .node-card { display: grid; align-content: center; gap: 0; min-height: 72px; padding: 14px 18px 12px; }
-.tunnel-scene .node-card-icon { display: none; }
-.tunnel-scene .node-card-name { display: block; font: 600 26px/38px var(--font-text), monospace; letter-spacing: .02em; text-transform: uppercase; }
-.tunnel-scene .node-card-detail { margin: 0; font: 600 12px/18px var(--font-text), monospace; letter-spacing: .02em; color: #6f6f6f; }
+.tunnel-scene .node-card { min-height: 52px; padding: 10px 16px; }
+.tunnel-scene .node-card-name { font: 600 13px/18px var(--font-text), monospace; letter-spacing: .02em; text-transform: uppercase; gap: 10px; }
+/* The wordmark's face: Plex Mono at its heaviest, given weight by a same-colour stroke and condensed by a vertical stretch. */
 .tunnel-scene .node-card-label, .tunnel-scene .node-card-detail, .tunnel-machine-label > span { display: inline-block; -webkit-text-stroke: .5px currentColor; transform: scaleY(1.45); transform-origin: left center; }
-.tunnel-scene .node-card-label { -webkit-text-stroke: 1px currentColor; }
+.tunnel-scene .node-card-icon { width: 16px; height: 16px; }
+.tunnel-scene .node-card-detail { font: 600 12px/18px var(--font-text), monospace; letter-spacing: .02em; color: #6f6f6f; }
 .tunnel-scene .diagram-frame { border-width: 2px; border-color: #444; }
 .tunnel-scene .node-card-inset { display: none; }
 .tunnel-relay-field { inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); }
