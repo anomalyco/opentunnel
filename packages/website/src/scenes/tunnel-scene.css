@@ -1,7 +1,7 @@
 .tunnel-scene { position: relative; margin: 0; padding-top: 12px; color: #aaa; font: 13px/1.5 var(--font-mono), monospace; font-variant-numeric: tabular-nums lining-nums; }
-.tunnel-panels { position: relative; display: grid; grid-template-columns: 170px 190px minmax(0, 1fr); gap: 120px; align-items: center; padding-top: 12px; }
+.tunnel-panels { position: relative; display: grid; grid-template-columns: 200px 230px minmax(0, 460px); justify-content: space-between; gap: 80px; align-items: center; padding-top: 12px; }
 .tunnel-column { min-width: 0; }
-.tunnel-routes { display: grid; gap: 8px; padding: 14px; }
+.tunnel-routes { display: grid; gap: 10px; padding: 16px; }
 .tunnel-signals { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .graph-pulses { display: none; } }
 @media (max-width: 900px) { .tunnel-panels { grid-template-columns: 170px 200px minmax(0, 1fr); gap: 48px; } }
@@ -13,14 +13,14 @@
 
 /* White names, grey structure, and the red only for what carries the signal. */
 .tunnel-scene { --accent: #ff2a2a; font-family: var(--font-text), monospace; }
-.tunnel-scene .node-card-name { font: 600 12px/16px var(--font-text), monospace; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
-.tunnel-scene .node-card-icon { color: var(--accent); }
-.tunnel-scene .node-card-detail { font: 500 11px/16px var(--font-text), monospace; color: #6f6f6f; }
-.tunnel-scene .graph-dots circle { fill: var(--accent); }
+.tunnel-scene .node-card { min-height: 52px; padding: 10px 16px; }
+.tunnel-scene .node-card-name { font: 600 13px/18px var(--font-text), monospace; letter-spacing: .08em; text-transform: uppercase; gap: 10px; }
+.tunnel-scene .node-card-icon { width: 16px; height: 16px; }
+.tunnel-scene .node-card-detail { font: 500 12px/18px var(--font-text), monospace; color: #6f6f6f; }
 .tunnel-scene .diagram-frame { border-color: #444; }
 .tunnel-scene .node-card-inset { border-color: #333; }
 .tunnel-scene .node-card[data-node=relay] .node-card-name { position: relative; z-index: 1; text-shadow: 0 0 2px #000, 0 0 4px #000, 0 0 8px #000; }
 
 /* The machine's name is set into its top rule, as a code frame carries its filename. */
 .tunnel-machine { position: relative; margin-top: 12px; }
-.tunnel-machine-label { position: absolute; top: 0; left: 14px; transform: translateY(-50%); padding: 0 6px; background: #000; color: #fff; font: 600 11px/14px var(--font-text), monospace; letter-spacing: .12em; text-transform: uppercase; }
+.tunnel-machine-label { position: absolute; top: 0; left: 14px; transform: translateY(-50%); padding: 0 6px; background: #000; color: #6f6f6f; font: 600 11px/14px var(--font-text), monospace; letter-spacing: .12em; text-transform: uppercase; }

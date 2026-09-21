@@ -108,17 +108,13 @@ opencode <span className="tok-dim">= "</span>localhost:47365<span className="tok
 api <span className="tok-dim">= "</span>localhost:3000<span className="tok-dim">"</span></code></pre>
         <p className="note">routes are subdomains under one wildcard certificate. no path routing. keys and certificates live outside the config.</p>
       </Cell>
-      <Cell span={3} title="privacy">
-        <p><strong>the relay can't read your traffic.</strong> connections are routed by the hostname in the tls handshake. the bytes stay encrypted until they reach your machine. the relay has no key to decrypt them.</p>
-      </Cell>
-      <Cell span={3} title="&nbsp;">
-        <p><strong>your tunnel hostname is public.</strong> anyone with your url can reach your services. when a tunnel is created, its certificate is published to certificate transparency logs, so the hostname is discoverable by anyone watching them.</p>
-      </Cell>
-      <Cell span={3} title="&nbsp;">
-        <p><strong>route names are private, not secret.</strong> the certificate is a wildcard, so route names never appear in any log. they are still guessable, especially common names like <code>api</code> or <code>postgres</code>, so don't treat them as authentication.</p>
-      </Cell>
-      <Cell span={3} title="&nbsp;">
-        <p><strong>put auth in the services themselves.</strong> anything sensitive behind a tunnel should authenticate on its own.</p>
+      <Cell span={7} title="privacy" className="cell-steps">
+        <ol className="steps">
+          <li><strong>the relay can't read your traffic</strong><p>connections are routed by the hostname in the tls handshake. the bytes stay encrypted until they reach your machine. the relay has no key to decrypt them.</p></li>
+          <li><strong>your tunnel hostname is public</strong><p>anyone with your url can reach your services. when a tunnel is created, its certificate is published to certificate transparency logs, so the hostname is discoverable by anyone watching them.</p></li>
+          <li><strong>route names are private, not secret</strong><p>the certificate is a wildcard, so route names never appear in any log. they are still guessable, especially common names like <code>api</code> or <code>postgres</code>, so don't treat them as authentication.</p></li>
+          <li><strong>put auth in the services themselves</strong><p>anything sensitive behind a tunnel should authenticate on its own.</p></li>
+        </ol>
       </Cell>
     </main>
 

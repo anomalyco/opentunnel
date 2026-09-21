@@ -3,7 +3,7 @@ import { useMotionValue, useMotionValueEvent, useTransform, type MotionValue } f
 import { DiagramFrame, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
 import { CardGlow, Pulse, pulseEase, pulseGatherMs } from "../graphics/Pulse"
-import { pluginActivity, usePluginActivity } from "../graphics/pluginActivity"
+import { pluginActivity, pluginActivityAt, type PluginActivity } from "../graphics/pluginActivity"
 import { roundedWire } from "../graphics/roundedWire"
 import { useScenePlayback } from "../graphics/useScenePlayback"
 import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel, viscousFlight } from "./tunnelScore"
@@ -28,17 +28,37 @@ type Box = { x: number; y: number; width: number; height: number }
 type Bounds = { width: number; height: number; browser: Box; relay: Box; machine: Box; routes: Box[] }
 /** Scene seconds at which each leg's pulse enters the relay, leaves it, and is read (its midpoint). */
 export type Crossing = { enter: number; leave: number; read: number }
+
+const channel = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16)
+const mix = (from: string, to: string, t: number) => `rgb(${[1, 3, 5].map(i => Math.round(channel(from, i) + (channel(to, i) - channel(from, i)) * t)).join(" ")})`
+
+/** Activity lifts every ink from its resting grey toward the red, never toward white. */
+function useSignalInks(clock: MotionValue<number>, activity: PluginActivity) {
+  const at = (time: number) => pluginActivityAt(time, activity)
+  return {
+    color: useTransform(clock, time => mix("#c8c8c8", accent, at(time).flash)),
+    iconColor: useTransform(clock, time => mix("#777777", accent, Math.max(at(time).flash, at(time).running))),
+    insetColor: useTransform(clock, time => mix("#292929", accent, at(time).frame * .35)),
+    frameColor: useTransform(clock, time => mix("#383838", accent, at(time).outer * .3)),
+  }
+}
+
+/** A socket rests grey and turns red while its card is active. */
+function Port({ x, y, clock, activity }: { x: number; y: number; clock: MotionValue<number>; activity: PluginActivity }) {
+  const fill = useTransform(clock, time => { const a = pluginActivityAt(time, activity); return mix("#555555", accent, Math.max(a.flash, a.running)) })
+  return <GraphPort x={x} y={y} fill={fill} />
+}
 /** The frame's 1px border, traced along its centre. */
 const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
 
 function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
-  const inks = usePluginActivity(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
+  const inks = useSignalInks(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
   return <NodeCard name="browser" icon="globe" data-node="browser" aria-label="A visitor's browser" {...inks} />
 }
 
 function Relay({ clock, reduced, crossings, fronts, now }: { clock: MotionValue<number>; reduced: boolean; crossings: readonly Crossing[]; fronts: MotionValue<readonly RelayFront[]>; now: MotionValue<number> }) {
   // Working while the bytes are inside: the icon holds bright while the field is lit.
-  const inks = usePluginActivity(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
+  const inks = useSignalInks(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
   return <NodeCard name="relay" icon="relay" data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
     {!reduced && <RelayField fronts={fronts} now={now} ink="#ff5a48" className="tunnel-relay-field" />}
   </NodeCard>
@@ -47,7 +67,7 @@ function Relay({ clock, reduced, crossings, fronts, now }: { clock: MotionValue<
 function Route({ index, clock, reduced }: { index: number; clock: MotionValue<number>; reduced: boolean }) {
   const route = tunnelRoutes[index]!, leg = tunnelLegs[index]!
   // The destination flashes as the bytes land, and works for a beat after.
-  const inks = usePluginActivity(clock, { dispatches: [leg.contact], running: [[leg.contact, leg.contact + 1.1]], reduced })
+  const inks = useSignalInks(clock, { dispatches: [leg.contact], running: [[leg.contact, leg.contact + 1.1]], reduced })
   return <NodeCard name={route.name} icon={route.icon} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
     <span className="node-card-detail">{route.target}</span>
   </NodeCard>
@@ -140,15 +160,16 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
     fronts.set(active)
   })
 
-  useEffect(() => {
-    if (!geometry) return
+  const crossings = useMemo(() => {
+    if (!geometry) return []
     const flight = tunnelTravel / 1000
-    onCrossings(geometry.legs.map((leg, index) => {
+    return geometry.legs.map((leg, index): Crossing => {
       const { send } = tunnelLegs[index]!
       const enter = send + leg.ease.inverse(leg.enter) * flight, leave = send + leg.ease.inverse(leg.leave) * flight
       return { enter, leave, read: (enter + leave) / 2 }
-    }))
-  }, [geometry, onCrossings])
+    })
+  }, [geometry])
+  useEffect(() => { if (geometry) onCrossings(crossings) }, [geometry, crossings, onCrossings])
   if (!bounds || !geometry) return null
 
   const { browser, relay, machine, routes } = bounds
@@ -183,10 +204,10 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
     {wires.hops.map((d, index) => <GraphWire key={index} d={d} />)}
 
     <GraphSignals ports={<>
-      <GraphPort {...browserOut} />
-      <GraphPort {...relayIn} />
-      <GraphPort {...relayOut} />
-      {routes.map((box, index) => <GraphPort key={index} {...routeLanding(box)} />)}
+      <Port {...browserOut} clock={clock} activity={{ dispatches: tunnelLegs.map(leg => leg.start), reduced }} />
+      <Port {...relayIn} clock={clock} activity={{ dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced }} />
+      <Port {...relayOut} clock={clock} activity={{ dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced }} />
+      {routes.map((box, index) => <Port key={index} {...routeLanding(box)} clock={clock} activity={{ dispatches: [tunnelLegs[index]!.contact], running: [[tunnelLegs[index]!.contact, tunnelLegs[index]!.contact + 1.1]], reduced }} />)}
     </>} glows={!reduced && <>
       {/* Dispatch: an ember warms the socket the light leaves from. */}
       <CardGlow id={`${id}-browser-leave`} {...browser} rx={0} cx={browserOut.x} cy={browserOut.y} clock={milliseconds} at={tunnelLegs.map(leg => leg.start * 1000)} role="leaving" tint={accent} {...pluginActivity.ember} />
