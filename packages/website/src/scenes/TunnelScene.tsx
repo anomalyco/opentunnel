@@ -227,7 +227,7 @@ export function TunnelScene() {
   }, [player.seek, crossings])
   // Sound: a click on the diagram turns it on (visitors start muted); the track follows the same clock as the picture.
   const sounds = useSounds(), ready = useSoundReady()
-  useTunnelSounds(player.clock, player.host, player.active && !player.reduced, crossings)
+  useTunnelSounds(player.elapsed, player.host, player.active && !player.reduced, crossings)
   const sounding = sounds && ready
   return <figure ref={player.host} className="tunnel-scene" data-sound={sounding || undefined} aria-label="A visitor's browser sends encrypted traffic through the relay, which scans it without being able to read it, to one of three apps on your machine. Only your machine decrypts it.">
     <button type="button" className="tunnel-sound" onClick={toggleSounds} aria-pressed={sounding} aria-label={sounding ? "Turn the diagram's sound off" : "Turn the diagram's sound on"}>

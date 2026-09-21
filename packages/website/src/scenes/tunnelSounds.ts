@@ -34,6 +34,7 @@ export function tunnelTravelingAt(elapsed: number) {
   return elapsed >= 0 && tunnelLegs.some(leg => time >= leg.start + pulseGatherMs / 1000 && time < leg.contact)
 }
 
+/** `elapsed` is the scene's animated time (not the looped clock: only the animated value reports `isAnimating`). */
 export function useTunnelSounds(clock: MotionValue<number>, host: RefObject<HTMLElement | null>, active: boolean, crossings: readonly Crossing[]) {
   const gain = useSoundProximity(host, active)
   const enabled = useSounds()
