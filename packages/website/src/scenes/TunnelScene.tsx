@@ -9,6 +9,7 @@ import { useScenePlayback } from "../graphics/useScenePlayback"
 import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel, viscousFlight } from "./tunnelScore"
 import { RelayField, type RelayFront } from "./RelayField"
 import { BurstField } from "./BurstField"
+import { Globe } from "./Globe"
 import { ArrowsLeftRight, Stack, Terminal, WebhooksLogo } from "@phosphor-icons/react"
 import "./tunnel-scene.css"
 
@@ -30,37 +31,11 @@ export type Crossing = { enter: number; leave: number; read: number }
 /** The frame's 1px border, traced along its centre. */
 const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
 
-/** A wireframe globe turning slowly left to right. Six meridians; only those on the near hemisphere are drawn, each
- * as a half-ellipse arc from pole to pole, so a line enters at the left limb, crosses the disc and leaves at the right.
- * Driven by the scene clock at a rate that completes whole meridian spacings per loop, so the turn never skips. */
-function Globe({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
-  const r = 6.5, cx = 8, cy = 8, count = 6, spacing = 2 * Math.PI / count
-  const rate = Math.round(.52 * tunnelScore.duration / spacing) * spacing / tunnelScore.duration
-  const meridians = useTransform(clock, t => {
-    const turn = reduced ? .3 : t * rate
-    let d = ""
-    for (let k = 0; k < count; k++) {
-      const lon = turn + k * spacing
-      if (Math.cos(lon) <= 0) continue
-      const rx = r * Math.abs(Math.sin(lon)), sweep = Math.sin(lon) > 0 ? 1 : 0
-      d += `M${cx} ${cy - r}A${rx} ${r} 0 0 ${sweep} ${cx} ${cy + r}`
-    }
-    return d
-  })
-  const path = useRef<SVGPathElement>(null)
-  useMotionValueEvent(meridians, "change", d => path.current?.setAttribute("d", d))
-  return <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round">
-    <circle cx={cx} cy={cy} r={r} />
-    <path d={`M${cx - r} ${cy}h${2 * r}`} />
-    <path ref={path} d={meridians.get()} />
-  </svg>
-}
-
 const routeIcons = { terminal: <Terminal size={16} />, layers: <Stack size={16} />, webhook: <WebhooksLogo size={16} /> } as const
 
 function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
   const inks = usePluginActivity(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
-  return <NodeCard name="browser" icon={<Globe clock={clock} reduced={reduced} />} data-node="browser" aria-label="A visitor's browser" {...inks}>
+  return <NodeCard name="browser" icon={<Globe clock={clock} reduced={reduced} period={tunnelScore.duration} />} data-node="browser" aria-label="A visitor's browser" {...inks}>
     {!reduced && <BurstField clock={clock} at={tunnelLegs.map(leg => leg.start)} origin={[1, .5]} mode="ember" className="tunnel-card-field" />}
   </NodeCard>
 }

@@ -73,8 +73,7 @@ h1 > span { display: inline-block; }
 [data-subtitle^="square-"]:not([data-subtitle^="square-just"]) h1 { color: #ff2a2a; opacity: 1; }
 [data-subtitle^="square-"]:not([data-subtitle^="square-just"]) h1 b { display: flex; align-items: center; }
 [data-subtitle^="square-"] h1 .fill { flex: 1; display: flex; align-items: center; justify-content: center; margin: 0 .7em; font-style: normal; }
-[data-subtitle="square-dots"] h1 .fill { border-bottom: 1px dotted currentColor; transform: translateY(-.35em); opacity: .6; }
-[data-subtitle="square-icons-end"] h1 .fill { border-bottom: 1px dotted currentColor; transform: translateY(-.35em); opacity: .6; }
+[data-subtitle="square-dots"] h1 .fill, [data-subtitle="square-icons-end"] h1 .fill { border-bottom: 1px dotted currentColor; opacity: .6; }
 [data-subtitle="square-icons-end"] h1 .tail { margin-left: .6em; }
 [data-subtitle="square-just-red"] h1 { color: #ff2a2a; opacity: 1; }
 [data-subtitle="square-just-rule"] h1 { padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, .3); }
