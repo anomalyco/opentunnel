@@ -1,21 +1,11 @@
-/* Valkyrie (MB Type) is licensed, not committed: public/fonts/valkyrie is supplied at deploy
-   time. Until it is present the page falls back to Georgia. Commit Mono is OFL. */
-@font-face { font-family: "Valkyrie"; src: url("/fonts/valkyrie/valkyrie_a_regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
-@font-face { font-family: "Valkyrie"; src: url("/fonts/valkyrie/valkyrie_a_italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
-@font-face { font-family: "Valkyrie"; src: url("/fonts/valkyrie/valkyrie_a_bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
-@font-face { font-family: "Valkyrie Caps"; src: url("/fonts/valkyrie/valkyrie_a_caps_regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+/* Commit Mono (OFL) for everything that reads; Archivo Black (OFL) for the headline; Anton (OFL)
+   for the wordmark. No serif on this site. */
 @font-face { font-family: "Commit Mono"; src: url("/fonts/CommitMonoV143-VF.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Anton"; src: url("/fonts/anton.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Archivo Black"; src: url("/fonts/archivo-black.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 
 :root {
-  --font-serif: "Valkyrie", Georgia, "Times New Roman", serif;
   --font-mono: "Commit Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --font-display: "Anton", Impact, "Arial Narrow Bold", sans-serif;
+  --font-headline: "Archivo Black", "Arial Black", Impact, sans-serif;
 }
-/* Anton (OFL) is the poster's display face. */
-@font-face { font-family: "Anton"; src: url("/fonts/anton.woff2") format("woff2"); font-weight: 400; font-display: swap; }
-@font-face { font-family: "Bebas Neue"; src: url("/fonts/bebas-neue.woff2") format("woff2"); font-display: swap; }
-@font-face { font-family: "League Gothic"; src: url("/fonts/league-gothic.woff2") format("woff2"); font-display: swap; }
-@font-face { font-family: "Archivo Black"; src: url("/fonts/archivo-black.woff2") format("woff2"); font-display: swap; }
-@font-face { font-family: "Oswald"; src: url("/fonts/oswald-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
-@font-face { font-family: "Big Shoulders Display"; src: url("/fonts/big-shoulders-900.woff2") format("woff2"); font-weight: 900; font-display: swap; }
-@font-face { font-family: "Anton SC"; src: url("/fonts/anton-sc.woff2") format("woff2"); font-display: swap; }

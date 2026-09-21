@@ -2,7 +2,7 @@
   --paper: #ff2a2a;
   --ink: #000;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   aspect-ratio: 3 / 5;
   padding: 10px 10px 8px;
   background: var(--paper);
@@ -17,30 +17,4 @@
 .poster-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .poster-canvas[data-fallback] { background: radial-gradient(circle at 50% 42%, var(--paper) 0, var(--ink) 55%); }
 .poster-tagline { display: block; width: 100%; height: auto; margin-top: 12px; font-family: var(--font-display), sans-serif; color: var(--ink); overflow: visible; }
-/* Footer band: notes, framed halftone, icon strip, print marks. Sized in cqw so it scales with the paper. */
-.poster-footer {
-  display: grid;
-  grid-template-columns: auto 34cqw auto auto;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 3cqw;
-  margin-top: 2.25cqw;
-  padding: 1.75cqw 0;
-  border-top: 1px solid var(--ink);
-}
-.poster-notes { display: flex; flex-direction: column; justify-content: space-between; gap: 1.6cqw; margin: 0; padding: 0; list-style: none; font-size: clamp(8px, 2.5cqw, 10px); line-height: 1.25; letter-spacing: .06em; font-weight: 600; }
-.poster-notes li { white-space: nowrap; }
-.poster-footer svg, .poster-colophon svg { display: block; overflow: visible; }
-.mark-frame { width: 100%; height: auto; }
-.poster-icons { display: flex; flex-direction: column; justify-content: space-between; align-items: center; width: 7cqw; padding: .25cqw 0; }
-.mark-icon { width: 100%; height: auto; }
-.poster-marks { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; width: 4.5cqw; padding: .25cqw 0; }
-.mark-sparkle { width: 100%; height: auto; }
-.mark-target { width: 3.5cqw; height: auto; }
-
-/* Colophon row: crop marks, a bar strip, a cut line and a sparkle under the closing rule. */
-.poster-colophon { display: flex; align-items: center; gap: 2.5cqw; padding-top: 1.5cqw; border-top: 1px solid var(--ink); }
-.mark-crop { width: 2cqw; height: 2cqw; flex: none; }
-.mark-bars { height: 2.5cqw; width: auto; flex: none; }
-.poster-cut { flex: 1; height: 0; border-top: 1px dashed var(--ink); }
-.mark-sparkle-solo { width: 2.5cqw; height: 2.5cqw; flex: none; }
+.poster-notes { margin: 10px 0 0; padding: 8px 0 2px; border-top: 1px solid var(--ink); list-style: none; font-size: 10px; line-height: 1.5; font-weight: 600; }
