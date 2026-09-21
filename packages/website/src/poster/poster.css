@@ -13,7 +13,7 @@
   user-select: none;
 }
 .poster-wordmark { display: block; width: 100%; height: auto; margin: 6px 0 10px; font-family: var(--font-display), sans-serif; color: var(--ink); overflow: visible; }
-.poster-art { position: relative; min-height: 0; border: 1px solid var(--ink); background: var(--ink); }
+.poster-art { position: relative; min-height: 0; background: var(--paper); }
 .poster-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .poster-canvas[data-fallback] { background: radial-gradient(circle at 50% 42%, var(--paper) 0, var(--ink) 55%); }
 .poster-tagline { display: block; width: 100%; height: auto; margin-top: 12px; font-family: var(--font-display), sans-serif; color: var(--ink); overflow: visible; }

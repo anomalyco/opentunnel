@@ -47,10 +47,10 @@ export const posterKnobs: Record<keyof PosterSettings, Knob> = {
 }
 
 export const posterDefaults: PosterSettings = {
-  eyeX: 0, eyeY: .3, depth: .3, ringFrequency: 4.2, ringSpeed: 6, warp: 2.2, streak: .8,
-  wallInk: .3, bandInk: .6, distanceInk: .35, eyeGlow: .1,
-  sphereX: 0, sphereY: -.12, sphereRadius: .25, sphereHalo: .12,
-  seaLevel: -.12, seaInk: .75,
+  eyeX: -.28, eyeY: .38, depth: .39, ringFrequency: 8.4, ringSpeed: 7.4, warp: 2.35, streak: .72,
+  wallInk: .4, bandInk: .96, distanceInk: .72, eyeGlow: .16,
+  sphereX: -.31, sphereY: -.33, sphereRadius: 0, sphereHalo: 0,
+  seaLevel: -.64, seaInk: .3,
   speed: .12, cell: 1,
 }
 
