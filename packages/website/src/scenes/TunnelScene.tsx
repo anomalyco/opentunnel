@@ -2,11 +2,11 @@ import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "rea
 import { useMotionValue, useMotionValueEvent, useTransform, type MotionValue } from "motion/react"
 import { DiagramFrame, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
-import { CardGlow, Pulse, pulseEase, pulseGatherMs } from "../graphics/Pulse"
+import { CardGlow, Pulse, pulseGatherMs } from "../graphics/Pulse"
 import { pluginActivity, pluginActivityAt, usePluginActivity } from "../graphics/pluginActivity"
 import { roundedWire } from "../graphics/roundedWire"
 import { useScenePlayback } from "../graphics/useScenePlayback"
-import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel, viscousFlight } from "./tunnelScore"
+import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel } from "./tunnelScore"
 import { RelayField, type RelayFront } from "./RelayField"
 import { useTunnelSounds } from "./tunnelSounds"
 import { toggleSounds, useSoundReady, useSounds } from "../sound/sounds"
@@ -29,7 +29,8 @@ import "./tunnel-scene.css"
 type Box = { x: number; y: number; width: number; height: number }
 type Bounds = { width: number; height: number; browser: Box; relay: Box; machine: Box; routes: Box[] }
 /** Scene seconds at which each leg's pulse enters the relay, leaves it, and is read (its midpoint). */
-export type Crossing = { enter: number; leave: number; read: number }
+import { legCrossing, legEase, type Crossing } from "./tunnelFlight"
+export type { Crossing }
 
 /** The frame's 1px border, traced along its centre. */
 const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
@@ -128,7 +129,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
       const length = path.getTotalLength()
       const enter = stacked ? 0 : fractionAtX(path, length, relay.x), leave = stacked ? 0 : fractionAtX(path, length, relay.x + relay.width)
       // Through the relay the bytes move as through something thick: that stretch takes four times its share.
-      const ease = stacked ? pulseEase : viscousFlight(enter, leave, 5)
+      const ease = legEase({ enter, leave }, stacked)
       return { d, path, length, enter, leave, ease }
     })
     return { stacked, browserOut, relayIn, relayOut, routeIn, legs, wires: { request: `M${browserOut.x} ${browserOut.y}L${relayIn.x} ${relayIn.y}`, hops: routes.map(box => `M${relayOut.x} ${relayOut.y}${hop(box)}`) } }
@@ -151,15 +152,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
     fronts.set(active)
   })
 
-  const crossings = useMemo(() => {
-    if (!geometry) return []
-    const flight = tunnelTravel / 1000
-    return geometry.legs.map((leg, index): Crossing => {
-      const { send } = tunnelLegs[index]!
-      const enter = send + leg.ease.inverse(leg.enter) * flight, leave = send + leg.ease.inverse(leg.leave) * flight
-      return { enter, leave, read: (enter + leave) / 2 }
-    })
-  }, [geometry])
+  const crossings = useMemo(() => geometry ? geometry.legs.map((leg, index) => legCrossing(index, leg, geometry.stacked)) : [], [geometry])
   useEffect(() => { if (geometry) onCrossings(crossings) }, [geometry, crossings, onCrossings])
   if (!bounds || !geometry) return null
 
@@ -223,7 +216,7 @@ export function TunnelScene() {
   // Development: headless checks pose the scene through `window.__tunnel.seek(seconds)`.
   useEffect(() => {
     if (!import.meta.env.DEV) return
-    ;(window as unknown as { __tunnel?: unknown }).__tunnel = { seek: player.seek, crossings, legs: tunnelLegs, duration: tunnelScore.duration }
+    ;(window as unknown as { __tunnel?: unknown }).__tunnel = { seek: player.seek, crossings, legs: tunnelLegs, duration: tunnelScore.duration, stacked: crossings[0]?.stacked }
   }, [player.seek, crossings])
   // Sound: a click on the diagram turns it on (visitors start muted); the track follows the same clock as the picture.
   const sounds = useSounds(), ready = useSoundReady()

@@ -1,13 +1,13 @@
-import { createTravelSound, getAudioContext, type LiveGain, type TravelSoundSettings } from "../sfx"
 import type { MotionValue } from "motion/react"
+import { createTravelSound, getAudioContext, type LiveGain, type TravelSoundSettings } from "../sfx"
 
-/** One sustained voice follows forward transport, with live gain on its entire tail. */
-export function bindSceneTravelSound(clock: MotionValue<number>, gain: LiveGain, travelingAt: (elapsed: number) => boolean,
-  contextFor = getAudioContext, settings?: TravelSoundSettings) {
+/** One sustained voice follows the dot, retuned every frame from the scene's state; live gain on its entire tail.
+ * `voiceAt` returns the voice's settings while something is flying and nothing otherwise. */
+export function bindFlightVoice(clock: MotionValue<number>, gain: LiveGain, voiceAt: (elapsed: number) => TravelSoundSettings | undefined, contextFor = getAudioContext) {
   let previous = clock.get()
   let rig: { context: AudioContext; bus: GainNode; voice: ReturnType<typeof createTravelSound> } | undefined
-  let traveling = false
-  const silence = () => { traveling = false; rig?.voice.silence() }
+  let last: TravelSoundSettings | undefined
+  const silence = () => { last = undefined; rig?.voice.silence() }
   const stopGain = gain.subscribe(value => {
     if (!rig) return
     const now = rig.context.currentTime
@@ -21,19 +21,23 @@ export function bindSceneTravelSound(clock: MotionValue<number>, gain: LiveGain,
     const delta = now - previous
     previous = now
     if (!clock.isAnimating() || delta <= 0 || delta > .12 || gain.get() <= 0 || document.hidden) { silence(); return }
-    const next = travelingAt(now)
-    if (next === traveling) return
-    if (next && !rig) {
+    const next = voiceAt(now)
+    if (!next) {
+      if (last) rig?.voice.set(false, last)
+      last = undefined
+      return
+    }
+    if (!rig) {
       const context = contextFor()
-      // The page's explicit speaker gesture unlocks this same context.
+      // The page's explicit gesture unlocks this same context.
       if (!context || context.state !== "running") return
       const bus = context.createGain()
       bus.gain.value = gain.get()
       bus.connect(context.destination)
       rig = { context, bus, voice: createTravelSound(context, bus) }
     }
-    traveling = next
-    rig?.voice.set(next, settings)
+    last = next
+    rig.voice.set(true, next)
   })
   const stopCancel = clock.on("animationCancel", silence)
   return () => {

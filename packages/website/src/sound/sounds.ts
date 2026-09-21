@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useSyncExternalStore, type RefObject } from "react"
 import { cancelFrame, frame, useMotionValue } from "motion/react"
-import { getAudioContext, play, signalRecipes, type LiveGain, type SoundName, type SoundRecipe } from "../sfx"
+import { getAudioContext, play, type LiveGain, type SoundName, type SoundRecipe } from "../sfx"
+import { dispatch, plunge, strike, strikeRatios } from "./recipes"
 import { createSoundPreference, soundPreferenceKey, soundVolumeKey } from "./preference"
 import { createSoundActivation } from "./activation"
 import { soundProximity } from "./proximity"
@@ -10,18 +11,13 @@ import { soundProximity } from "./proximity"
 // a real gesture, and a gain that follows how much of the scene is in view.
 
 type Layer = { sound: SoundName | SoundRecipe; volume: number }
-const signal = signalRecipes()
 export const soundPalette = {
   select: [{ sound: "release", volume: 2.3 }],
-  sendPress: [{ sound: signal.lead, volume: 2.601 }],
-  send: [{ sound: signal.send, volume: .899 }],
-  travel: [{ sound: signal.flight, volume: 3.421 }],
-  scan: [{ sound: "scan", volume: .516 }],
-  plunge: [{ sound: "droplet", volume: .9 }],
-  read: [{ sound: "tick", volume: .895 }],
-  leave: [{ sound: "flick", volume: 1.12 }],
-  contact: [{ sound: signal.contact, volume: 1.513 }],
-  open: [{ sound: "complete", volume: .881 }],
+  dispatch: [{ sound: dispatch, volume: .7 }],
+  plunge: [{ sound: plunge, volume: .28 }],
+  strike0: [{ sound: strike(strikeRatios[0]), volume: .5 }],
+  strike1: [{ sound: strike(strikeRatios[1]), volume: .5 }],
+  strike2: [{ sound: strike(strikeRatios[2]), volume: .5 }],
 } as const satisfies Record<string, readonly Layer[]>
 export type SceneSoundEvent = keyof typeof soundPalette
 export type SceneSoundCue = { at: number; event: SceneSoundEvent }
