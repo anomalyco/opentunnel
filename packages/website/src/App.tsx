@@ -49,7 +49,7 @@ const subtitleVariants = [
 ] as const
 type SubtitleVariant = typeof subtitleVariants[number]
 function useSubtitleVariant(): SubtitleVariant {
-  const [variant, setVariant] = useState<SubtitleVariant>(() => (import.meta.env.DEV && localStorage.getItem("subtitle") as SubtitleVariant) || "square-icons-end")
+  const [variant, setVariant] = useState<SubtitleVariant>(() => (import.meta.env.DEV && localStorage.getItem("subtitle") as SubtitleVariant) || "square-end-tight")
   useEffect(() => {
     if (!import.meta.env.DEV) return
     const onKey = (event: KeyboardEvent) => {
@@ -72,7 +72,7 @@ function useSubtitleVariant(): SubtitleVariant {
 const markInks = ["white", "red", "red-white-caption"] as const
 type MarkInk = typeof markInks[number]
 function useMarkInk(): MarkInk {
-  const [ink, setInk] = useState<MarkInk>(() => (import.meta.env.DEV && localStorage.getItem("mark") as MarkInk) || "white")
+  const [ink, setInk] = useState<MarkInk>(() => (import.meta.env.DEV && localStorage.getItem("mark") as MarkInk) || "red")
   useEffect(() => {
     if (!import.meta.env.DEV) return
     const onKey = (event: KeyboardEvent) => {
