@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { posterDefaults, posterKnobs, posterSettings, usePosterSettings, type PosterSettings } from "./posterSettings"
+import { posterDefaults, posterKnobs, posterPresets, posterSettings, usePosterSettings, type PosterSettings } from "./posterSettings"
 import "./poster-controls.css"
 
 // Development only: a panel of knobs for the poster's print, with Randomize, Reset and
@@ -28,6 +28,9 @@ export function PosterControls() {
   }, [copied])
   if (!open) return <button type="button" className="poster-controls-toggle" onClick={() => setOpen(true)} title="Tune the poster (T)">tune poster</button>
   const changed = keys.filter(key => settings[key] !== posterDefaults[key])
+  const presets = posterSettings.presets()
+  const current = Object.entries(presets).find(([, preset]) => keys.every(key => preset[key] === settings[key]))?.[0]
+  const save = () => { const name = window.prompt("Name this print", current ?? "")?.trim(); if (name) posterSettings.save(name) }
   const copy = async () => {
     const patch = Object.fromEntries(changed.map(key => [key, settings[key]]))
     await navigator.clipboard.writeText(`posterDefaults patch:\n${JSON.stringify(patch, null, 2)}`)
@@ -43,6 +46,13 @@ export function PosterControls() {
         <button type="button" onClick={() => setOpen(false)} aria-label="Close">×</button>
       </span>
     </header>
+    <section>
+      <h3>Prints</h3>
+      <div className="poster-controls-presets">
+        {Object.keys(presets).map(name => <button key={name} type="button" data-current={current === name || undefined} onClick={() => posterSettings.apply(name)} onDoubleClick={() => { if (!(name in posterPresets) && window.confirm(`Forget "${name}"?`)) posterSettings.forget(name) }}>{name}</button>)}
+        <button type="button" onClick={save}>Save…</button>
+      </div>
+    </section>
     {groups.map(group => <section key={group}>
       <h3>{group}</h3>
       {keys.filter(key => posterKnobs[key].group === group).map(key => {

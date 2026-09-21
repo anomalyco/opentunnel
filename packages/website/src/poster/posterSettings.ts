@@ -46,13 +46,27 @@ export const posterKnobs: Record<keyof PosterSettings, Knob> = {
   cell: { label: "Dither cell", min: 1, max: 4, step: 1, group: "Print" },
 }
 
-export const posterDefaults: PosterSettings = {
-  eyeX: .6, eyeY: 0, depth: .49, ringFrequency: 3.5, ringSpeed: 14, warp: 1.7, streak: 1.6,
-  wallInk: .51, bandInk: .57, distanceInk: 0, eyeGlow: .055,
-  sphereX: -.49, sphereY: .21, sphereRadius: 0, sphereHalo: .175,
-  seaLevel: -.77, seaInk: .8,
-  speed: .12, cell: 1,
+/** Named prints. The first is the default; the panel can save more to this browser. */
+export const posterPresets: Record<string, PosterSettings> = {
+  Shore: {
+    eyeX: -.34, eyeY: -.12, depth: .67, ringFrequency: 8.7, ringSpeed: 1.5, warp: 4.35, streak: 1.18,
+    wallInk: .24, bandInk: .16, distanceInk: .42, eyeGlow: .295,
+    sphereX: -.52, sphereY: -.25, sphereRadius: 0, sphereHalo: .075,
+    seaLevel: .12, seaInk: .92,
+    speed: .12, cell: 1,
+  },
+  Vortex: {
+    eyeX: .6, eyeY: 0, depth: .49, ringFrequency: 3.5, ringSpeed: 14, warp: 1.7, streak: 1.6,
+    wallInk: .51, bandInk: .57, distanceInk: 0, eyeGlow: .055,
+    sphereX: -.49, sphereY: .21, sphereRadius: 0, sphereHalo: .175,
+    seaLevel: -.77, seaInk: .8,
+    speed: .12, cell: 1,
+  },
 }
+export const posterDefaults: PosterSettings = posterPresets.Shore!
+
+const saved = "opentunnel.poster.presets"
+const loadSaved = (): Record<string, PosterSettings> => { try { return JSON.parse(localStorage.getItem(saved) ?? "{}") } catch { return {} } }
 
 let settings: PosterSettings = { ...posterDefaults }
 const listeners = new Set<() => void>()
@@ -71,6 +85,11 @@ export const posterSettings = {
     if (Math.random() < .33) next.sphereRadius = 0
     settings = next; emit()
   },
+  /** Built-in prints plus any saved in this browser. */
+  presets(): Record<string, PosterSettings> { return { ...posterPresets, ...loadSaved() } },
+  apply(name: string) { const preset = this.presets()[name]; if (preset) { settings = { ...preset }; emit() } },
+  save(name: string) { localStorage.setItem(saved, JSON.stringify({ ...loadSaved(), [name]: settings })); emit() },
+  forget(name: string) { const all = loadSaved(); delete all[name]; localStorage.setItem(saved, JSON.stringify(all)); emit() },
   subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } },
 }
 
