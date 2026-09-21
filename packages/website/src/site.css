@@ -76,3 +76,14 @@ a:hover { color: #fafaf9; }
   .steps li { padding-left: 36px; }
   .install { font-size: 15px; }
 }
+
+/* Comparison only (dev, ?type=mono): the same page set in the monospace. Mono needs a smaller size,
+   a longer line and ragged-right to read; justified mono goes gappy. */
+.site[data-type="mono"] { font-family: var(--font-mono); font-size: 16px; line-height: 1.7; font-variant-numeric: tabular-nums lining-nums; }
+.site[data-type="mono"] .hero h1 { font-family: var(--font-mono); font-size: clamp(30px, 3.6vw, 44px); font-weight: 500; letter-spacing: -.01em; line-height: 1.15; }
+.site[data-type="mono"] .hero-lede { font-size: 17px; }
+.site[data-type="mono"] .prose h2 { font-family: var(--font-mono); font-size: 22px; font-weight: 500; letter-spacing: 0; }
+.site[data-type="mono"] .prose p, .site[data-type="mono"] .steps li, .site[data-type="mono"] .limits dd { text-align: left; hyphens: manual; }
+.site[data-type="mono"] .prose code { font-size: 1em; color: #e7e5e4; }
+.site[data-type="mono"] .prose strong { font-weight: 600; }
+.site[data-type="mono"] .prose { max-width: 680px; }

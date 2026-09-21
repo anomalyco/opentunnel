@@ -6,8 +6,11 @@ import { PosterControls } from "./poster/PosterControls"
 const github = "https://github.com/anomalyco/opentunnel"
 const npm = "https://www.npmjs.com/package/opentunnel"
 
+/** Dev only: `?type=mono` sets the prose in Commit Mono to compare against the serif. */
+const typeOverride = import.meta.env.DEV ? new URLSearchParams(location.search).get("type") : null
+
 export function App() {
-  return <div className="site">
+  return <div className="site" data-type={typeOverride ?? undefined}>
     <header className="site-header">
       <a className="site-mark" href="/">Open Tunnel</a>
       <nav className="site-nav">
