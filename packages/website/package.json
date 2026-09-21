@@ -7,7 +7,8 @@
     "dev": "vite --host 127.0.0.1 --port 4190 --strictPort",
     "build": "tsc -p tsconfig.json && vite build && wrangler deploy --dry-run",
     "preview": "vite preview --host 127.0.0.1 --port 4190 --strictPort",
-    "deploy": "vite build && wrangler deploy"
+    "deploy": "vite build && wrangler deploy",
+    "deploy:preview": "tsc -p tsconfig.json && vite build && wrangler deploy -c wrangler.preview.jsonc"
   },
   "dependencies": {
     "@phosphor-icons/react": "2.1.10",

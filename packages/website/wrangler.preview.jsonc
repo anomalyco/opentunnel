@@ -1,0 +1,11 @@
+// A preview of the landing page on workers.dev, in whoever's account is logged in. The real site
+// (wrangler.jsonc) is routed to opentunnel.xyz and deployed from CI.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "opentunnel-landing-preview",
+  "compatibility_date": "2026-08-08",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./dist"
+  }
+}
