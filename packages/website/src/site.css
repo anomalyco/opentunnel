@@ -1,80 +1,60 @@
-/* Black page, one monospace for everything that reads, one heavy grotesque for the headline,
-   the poster's Anton for the wordmark. Hairlines are the blog's #383838 / #292929. */
+/* One face for everything that reads (Commit Mono, set heavy), one grid of framed cells with equal
+   gutters, one set of hairlines (#383838 frames, #292929 rules, #131313 headers). */
 * { box-sizing: border-box; }
 html { background: #000; color-scheme: dark; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-body { margin: 0; background: #000; color: #c9c9c9; font: 15px/1.7 var(--font-mono), monospace; font-variant-numeric: tabular-nums lining-nums; }
+body { margin: 0; background: #000; color: #c9c9c9; font: 600 14px/1.65 var(--font-mono), monospace; font-variant-numeric: tabular-nums lining-nums; }
 ::selection { background: #e7e5e4; color: #000; }
 a { color: inherit; text-decoration: none; }
 a:hover { color: #fff; }
 p { margin: 0; }
-.measure { max-width: 640px; }
+code { font-family: var(--font-mono); color: #e7e5e4; }
 
-.site { max-width: 1200px; margin: 0 auto; padding: 0 40px 56px; }
-.site-header { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 28px 0 24px; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: #a8a8a8; }
+.site { --gutter: 12px; max-width: 1200px; margin: 0 auto; padding: 0 40px 40px; }
+.site-header { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 26px 0 20px; font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: #a8a8a8; }
 .site-mark { color: #e7e5e4; }
 .site-nav { display: flex; align-items: center; gap: 24px; }
 
-/* The pitch: one sentence and the install line, on the same 44% column as the paper. */
-.pitch { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: start; padding: 48px 0 72px; }
-.pitch-lede { margin: 0; max-width: 520px; font-size: 17px; line-height: 1.65; font-weight: 400; color: #d6d6d6; }
-.pitch .install { margin-top: 0; align-self: center; }
+/* The grid: twelve columns, framed cells, one gutter everywhere. */
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gutter); }
+.cell { position: relative; min-width: 0; border: 1px solid #383838; background: #ffffff02; }
+.cell > .diagram-header { text-transform: uppercase; }
+.cell > p { padding: 18px 18px 20px; color: #bdbdbd; font-size: 13px; line-height: 1.6; }
+.cell > p code { color: #e7e5e4; }
+.cell-hero { border: 0; background: none; }
 
-.install { display: flex; align-items: stretch; margin-top: 24px; border: 1px solid #383838; background: #0a0a0a; font-size: 14px; line-height: 1.5; }
-.install-command { flex: 1; padding: 14px 18px; color: #e7e5e4; white-space: nowrap; overflow-x: auto; }
+.cell-lede { display: flex; align-items: center; }
+.cell-lede h1 { margin: 0; padding: 22px 22px; font-size: 17px; line-height: 1.6; font-weight: 700; color: #ecebe9; text-wrap: pretty; }
+.cell-install { display: flex; align-items: center; }
+.cell-install .install { flex: 1; margin: 0; border: 0; background: none; height: 100%; }
+
+.install { display: flex; align-items: stretch; font-size: 13px; line-height: 1.5; }
+.install-command { flex: 1; display: flex; align-items: center; padding: 14px 18px; color: #e7e5e4; white-space: nowrap; overflow-x: auto; }
 .install-command > span { color: #6f6f6f; margin-right: .6em; }
-.install-copy { appearance: none; padding: 0 18px; border: 0; border-left: 1px solid #383838; background: transparent; color: #a8a8a8; font: 11px/1 var(--font-mono), monospace; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+.install-copy { appearance: none; padding: 0 18px; border: 0; border-left: 1px solid #383838; background: transparent; color: #a8a8a8; font: 700 11px/1 var(--font-mono), monospace; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
 .install-copy:hover { color: #fff; background: #111; }
 .install-copy:focus-visible { outline: 1px solid #d4ad88; outline-offset: -1px; }
 
-/* Chapters: a numbered small-caps heading over a rule, then the matter. */
-.chapter { padding-top: 28px; border-top: 1px solid #292929; }
-.chapter + .chapter { margin-top: 88px; }
-.chapter h2 { margin: 0 0 22px; font-size: 12px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase; color: #a8a8a8; }
-.chapter p + .code, .chapter p + .diagram, .chapter p + .columns { margin-top: 32px; }
-.chapter h2 + .columns { margin-top: 32px; }
-code { font-family: var(--font-mono); color: #e7e5e4; }
-strong { font-weight: 600; color: #ecebe9; }
+.cell-diagram .diagram { padding: 24px 24px 28px; }
 
-.diagram { width: 100%; margin-top: 40px; }
-
-.steps { margin: 0; padding: 0; list-style: none; max-width: 640px; }
-.steps li + li { margin-top: 14px; }
-
-.columns { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 32px; align-items: start; }
-.note { margin-top: 20px; color: #a8a8a8; font-size: 13px; line-height: 1.7; }
-
-.code { position: relative; margin: 0; padding: 20px 20px 22px; border: 1px solid #383838; color: #d6d6d6; font: 13px/1.7 var(--font-mono), monospace; tab-size: 2; }
+.cell-code .code { margin: 0; padding: 18px 18px 20px; border: 0; }
+.code { position: relative; color: #d6d6d6; font: 500 13px/1.7 var(--font-mono), monospace; tab-size: 2; }
 .code code { display: block; overflow-x: auto; font: inherit; color: inherit; }
 /* Highlighting by dimness, not colour: what you typed is bright, what came back is dim, punctuation dimmer. */
-.tok-cmd { color: #ecebe9; }
+.tok-cmd { color: #ecebe9; font-weight: 700; }
 .tok-out { color: #8a8a8a; }
 .tok-dim { color: #5c5c5c; }
-.code[data-filename] { border-top-color: transparent; margin-top: 8px; }
-.code[data-filename]::before { content: attr(data-filename); position: absolute; top: -.5px; left: 14px; transform: translateY(-50%); padding: 0 6px; background: #000; color: #858585; font: 400 11px/1.5 var(--font-mono), monospace; letter-spacing: .06em; z-index: 1; }
-.code[data-filename]::after { content: ""; position: absolute; top: -.5px; left: 0; right: 0; border-top: 1px solid #383838; }
+.cell-code .note { padding: 0 18px 20px; color: #8a8a8a; font-size: 12px; line-height: 1.6; }
 
-.limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 0; background: #292929; border: 1px solid #292929; }
-.limits > div { padding: 22px 22px 24px; background: #000; }
-.limits dt { color: #ecebe9; font-weight: 600; }
-.limits dd { margin: 8px 0 0; color: #a8a8a8; font-size: 13px; line-height: 1.7; }
-
-.site-footer { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-top: 112px; padding-top: 22px; border-top: 1px solid #292929; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #6f6f6f; }
+.site-footer { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-top: var(--gutter); padding: 20px 0 0; border-top: 1px solid #292929; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #6f6f6f; }
 .site-footer a:hover { color: #fff; }
 
 .hero-poster { max-width: 400px; }
 .poster { container-type: inline-size; }
 
 @media (max-width: 900px) {
-  .site { padding: 0 20px 40px; }
-  .pitch { grid-template-columns: 1fr; gap: 28px; padding: 40px 0 56px; }
-  .columns, .limits { grid-template-columns: 1fr; }
-  .chapter + .chapter { margin-top: 64px; }
-}
-@media (max-width: 600px) {
-  body { font-size: 14px; }
-  .site-header { padding: 20px 0 16px; }
-  .steps li { padding-left: 36px; }
-  .install { font-size: 13px; }
+  .site { padding: 0 16px 32px; --gutter: 10px; }
+  .grid > * { grid-column: span 12 !important; }
+  .cell-diagram .diagram { padding: 16px; }
 }
 
 /* Monotone: the page is a duotone of its own luminance (see theme.ts). The banner prints white

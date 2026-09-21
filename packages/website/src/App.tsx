@@ -2,6 +2,7 @@ import { Banner } from "./banner/Banner"
 import { Poster } from "./poster/Poster"
 import { PosterControls } from "./poster/PosterControls"
 import { TunnelScene } from "./scenes/TunnelScene"
+import { DiagramHeader } from "./graphics/Diagram"
 import { Install } from "./Install"
 import { monoTables, theme } from "./theme"
 
@@ -16,6 +17,14 @@ const out = (text: string) => <><span className="tok-out">{text}</span>{"\n"}</>
 /** Dev only: `?hero=poster` shows the earlier portrait print in place of the banner. */
 const hero = import.meta.env.DEV ? new URLSearchParams(location.search).get("hero") : null
 
+/** One framed cell of the grid: a header set into the frame, then its matter. */
+function Cell({ span, title, className = "", children }: { span: number; title?: string; className?: string; children: React.ReactNode }) {
+  return <section className={`cell ${className}`} style={{ gridColumn: `span ${span}` }}>
+    {title && <DiagramHeader as="h3">{title}</DiagramHeader>}
+    {children}
+  </section>
+}
+
 export function App() {
   return <div className="site" data-theme={theme}>
     {theme === "mono" && <svg width={0} height={0} style={{ position: "absolute" }} aria-hidden="true"><defs>
@@ -29,6 +38,7 @@ export function App() {
         </feComponentTransfer>
       </filter>
     </defs></svg>}
+
     <header className="site-header">
       <a className="site-mark" href="/">OpenTunnel</a>
       <nav className="site-nav">
@@ -38,80 +48,65 @@ export function App() {
       </nav>
     </header>
 
-    <main>
-      {hero === "poster" ? <div className="hero-poster"><Poster /></div> : <Banner />}
+    <main className="grid">
+      <div className="cell cell-hero" style={{ gridColumn: "span 12" }}>
+        {hero === "poster" ? <div className="hero-poster"><Poster /></div> : <Banner />}
+      </div>
 
-      <section className="pitch">
-        <h1 className="pitch-lede">Public HTTPS URLs for anything on your machine. End-to-end encrypted: the relay can't read your traffic.</h1>
+      <Cell span={8} className="cell-lede">
+        <h1>Public HTTPS URLs for anything on your machine. End-to-end encrypted. The relay can't read your traffic.</h1>
+      </Cell>
+      <Cell span={4} className="cell-install">
         <Install />
-      </section>
+      </Cell>
 
-      <section className="chapter">
-        <h2>Encrypted by default</h2>
-        <p className="measure">The relay reads the hostname and forwards the encrypted bytes. TLS ends on your machine.</p>
+      <Cell span={12} title="Encrypted by default" className="cell-diagram">
         <div className="diagram"><TunnelScene /></div>
-      </section>
+      </Cell>
 
-      <section className="chapter">
-        <h2>How it works</h2>
-        <ul className="steps">
-          <li><code>opentunnel create</code> reserves <code>&lt;id&gt;.opentunnel.xyz</code> and generates a private key on your machine. It never leaves.</li>
-          <li>A wildcard certificate is issued for it. The relay sees only the public half.</li>
-          <li>Your machine holds an encrypted bridge to the relay.</li>
-          <li>The relay reads the hostname from the TLS handshake and forwards the encrypted stream.</li>
-          <li>Your machine terminates TLS and proxies to the local app.</li>
-        </ul>
-      </section>
+      <Cell span={4} title="Your machine">
+        <p>The private key is generated here and never leaves.</p>
+      </Cell>
+      <Cell span={4} title="The relay">
+        <p>Routes by hostname. Holds no key. Reads nothing.</p>
+      </Cell>
+      <Cell span={4} title="The certificate">
+        <p>One wildcard per tunnel. The relay sees only the public half.</p>
+      </Cell>
 
-      <section className="chapter">
-        <h2>Using it</h2>
-        <div className="columns">
-          <pre className="code" data-filename="terminal"><code>
+      <Cell span={7} title="terminal" className="cell-code">
+        <pre className="code"><code>
 {cmd("opentunnel create")}
-{out("Creating tunnel...")}
 {out("Generating private key...")}
 {out("Requesting certificate...")}
-{out("Tunnel is ready.")}
 {out("Created https://f7a2mx4kq9vn.opentunnel.xyz")}
 {"\n"}
 {cmd("opentunnel route add opencode 127.0.0.1:47365")}
-{out("Added route opencode.f7a2mx4kq9vn.opentunnel.xyz -> 127.0.0.1:47365")}
-{"\n"}
 {cmd("opentunnel route add api 127.0.0.1:3000")}
 {cmd("opentunnel route list")}
 {out("api.f7a2mx4kq9vn.opentunnel.xyz       →  127.0.0.1:3000")}
 {out("opencode.f7a2mx4kq9vn.opentunnel.xyz  →  127.0.0.1:47365")}</code></pre>
-          <div>
-            <pre className="code" data-filename="~/.config/opentunnel/default.toml"><code>
+      </Cell>
+      <Cell span={5} title="~/.config/opentunnel/default.toml" className="cell-code">
+        <pre className="code"><code>
 <span className="tok-dim">[</span>routes<span className="tok-dim">]</span>{"\n"}
 opencode <span className="tok-dim">= "</span>127.0.0.1:47365<span className="tok-dim">"</span>{"\n"}
 api <span className="tok-dim">= "</span>127.0.0.1:3000<span className="tok-dim">"</span></code></pre>
-            <p className="note">Routes are subdomains under one wildcard certificate. No path routing. Keys and certificates live outside the config.</p>
-          </div>
-        </div>
-      </section>
+        <p className="note">Subdomains under one wildcard certificate. No path routing. Keys live outside the config.</p>
+      </Cell>
 
-      <section className="chapter">
-        <h2>Privacy</h2>
-        <dl className="limits">
-          <div>
-            <dt>The relay can't read your traffic.</dt>
-            <dd>It routes by hostname and holds no key.</dd>
-          </div>
-          <div>
-            <dt>Your hostname is public.</dt>
-            <dd>Certificates go to CT logs. Anyone can find <code>&lt;id&gt;.opentunnel.xyz</code>.</dd>
-          </div>
-          <div>
-            <dt>Route names are private, not secret.</dt>
-            <dd>They stay out of logs, but <code>api</code> is guessable. Not authentication.</dd>
-          </div>
-          <div>
-            <dt>Put auth in the service.</dt>
-            <dd>Anything sensitive should authenticate on its own.</dd>
-          </div>
-        </dl>
-      </section>
+      <Cell span={3} title="Unreadable">
+        <p>The relay routes by hostname and holds no key.</p>
+      </Cell>
+      <Cell span={3} title="Public hostname">
+        <p>Certificates go to CT logs. Anyone can find <code>&lt;id&gt;.opentunnel.xyz</code>.</p>
+      </Cell>
+      <Cell span={3} title="Guessable routes">
+        <p>Route names stay out of logs, but <code>api</code> is a guess. Not authentication.</p>
+      </Cell>
+      <Cell span={3} title="Bring auth">
+        <p>Anything sensitive should authenticate on its own.</p>
+      </Cell>
     </main>
 
     {import.meta.env.DEV && <PosterControls />}

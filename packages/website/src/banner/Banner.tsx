@@ -38,7 +38,7 @@ export function Banner() {
   return <div ref={banner} className="banner" role="img" aria-label="OpenTunnel">
     <TunnelArt className="banner-canvas" fade={fade} {...theme === "mono" ? { ink: "#ffffff", paper: "#000000" } : {}} />
     <div ref={paper} className="banner-paper">
-      <FitText className="banner-wordmark" aspect={3.6} weight={.03} stretch>OPENTUNNEL</FitText>
+      <FitText className="banner-wordmark" capHeight={.71} aspect={5} weight={.028} fontWeight={800} stretch>OPENTUNNEL</FitText>
     </div>
     <div className="banner-space" aria-hidden="true" />
   </div>

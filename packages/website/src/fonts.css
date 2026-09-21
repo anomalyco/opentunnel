@@ -1,8 +1,9 @@
-/* Commit Mono (OFL) for everything that reads; Anton (OFL) for the wordmark. No serif on this site. */
+/* Commit Mono (OFL) for everything, the wordmark included. Anton stays available for the portrait poster. */
 @font-face { font-family: "Commit Mono"; src: url("/fonts/CommitMonoV143-VF.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: "Anton"; src: url("/fonts/anton.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 
 :root {
   --font-mono: "Commit Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --font-display: "Anton", Impact, "Arial Narrow Bold", sans-serif;
+  --font-wordmark: "Commit Mono", ui-monospace, monospace;
 }

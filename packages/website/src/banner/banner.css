@@ -9,8 +9,8 @@
 /* One print across the whole banner; it fades to paper under the wordmark. */
 .banner-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .banner-paper { position: relative; display: flex; flex-direction: column; justify-content: center; width: 44%; min-width: 0; padding: 2.2% 1.76%; color: var(--ink); }
-/* A box 1.55× taller than Anton's natural line condenses the letterforms a little; the SVG fills it. */
-.banner-wordmark { display: block; width: 100%; aspect-ratio: 2.3; font-family: var(--font-display), sans-serif; color: var(--ink); overflow: visible; }
+/* Commit Mono at 800, condensed: the box is 1.6× taller than the face's natural line and the SVG fills it. */
+.banner-wordmark { display: block; width: 100%; aspect-ratio: 3.2; font-family: var(--font-wordmark), monospace; color: var(--ink); overflow: visible; }
 .banner-space { display: none; }
 @media (max-width: 900px) {
   .banner-paper { width: 100%; padding: 20px 20px 12px; }
