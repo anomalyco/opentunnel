@@ -1,7 +1,7 @@
 .tunnel-scene { position: relative; margin: 0; padding-top: 24px; color: #aaa; font: 13px/1.5 var(--font-mono), monospace; font-variant-numeric: tabular-nums lining-nums; }
-.tunnel-panels { position: relative; display: grid; grid-template-columns: 170px 190px minmax(0, 1fr); gap: 120px; align-items: center; }
+.tunnel-panels { position: relative; display: grid; grid-template-columns: 220px 260px minmax(0, 1fr); gap: 120px; align-items: center; }
 .tunnel-column { min-width: 0; }
-.tunnel-routes { display: grid; gap: 8px; padding: 14px; }
+.tunnel-routes { display: grid; gap: 14px; padding: 20px; }
 .tunnel-signals { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .graph-pulses { display: none; } }
 @media (max-width: 900px) { .tunnel-panels { grid-template-columns: 170px 200px minmax(0, 1fr); gap: 48px; } }
@@ -25,3 +25,18 @@
 .tunnel-scene .node-card-inset { border-color: var(--ink-rule); }
 .tunnel-scene .node-card[data-armored] .node-card-inset { border-color: var(--ink-faint); }
 .tunnel-scene .tunnel-signals path { stroke: var(--ink-faint); }
+
+/* Chunky: taller cards, bigger type, 2px frames, fatter sockets and wires. */
+.tunnel-scene .node-card { min-height: 64px; padding: 12px 20px; }
+.tunnel-scene .node-card[data-armored] { min-height: 76px; padding-inline: 26px; }
+.tunnel-scene .node-card[data-armored] .node-card-inset { inset: 11px; }
+.tunnel-scene .node-card-armor { padding: 11px; background: repeating-linear-gradient(-45deg, var(--ink-dim) 0 2px, transparent 2px 7px); }
+.tunnel-scene .node-card-name { font-size: 15px; line-height: 20px; gap: 12px; }
+.tunnel-scene .node-card-icon { width: 18px; height: 18px; }
+.tunnel-scene .node-card-detail { font-size: 13px; line-height: 20px; }
+.tunnel-scene .diagram-frame { border-width: 2px; }
+.tunnel-scene .node-card-inset { inset: 4px; }
+.tunnel-scene .diagram-header { height: 52px; font-size: 13px; padding-inline: 20px; }
+.tunnel-scene .graph-dots circle { r: 5px; }
+.tunnel-scene .tunnel-signals > path { stroke-width: 2px; }
+.tunnel-scene .pulse-trail { stroke-width: 2.4px; }
