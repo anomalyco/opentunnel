@@ -1,449 +1,1159 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta
       name="description"
-      content="a cli and sdk to create end-to-end encrypted public urls for apps running on your machine."
-    />
-    <meta name="theme-color" content="#000000" />
-    <title>opentunnel</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
+      content="OpenTunnel creates end-to-end encrypted public URLs for apps running on your machine."
+    >
+    <meta name="theme-color" content="#000000">
+    <meta property="og:title" content="OpenTunnel — public URLs for anything">
+    <meta
+      property="og:description"
+      content="A CLI and SDK for end-to-end encrypted public URLs. TLS terminates on your machine."
+    >
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://opentunnel.xyz">
+    <link rel="canonical" href="https://opentunnel.xyz">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%23e7e5e4' stroke-width='2'/%3E%3C/svg%3E">
+    <title>OpenTunnel — public URLs for anything</title>
     <style>
+      /*
+       * Valkyrie is intentionally not bundled until Anomaly owns the appropriate
+       * company license. The stack below lets the licensed webfonts drop in later
+       * without changing the page or its type scale.
+       */
+      :root {
+        --paper: #000;
+        --ink: #e7e5e4;
+        --bright: #fafaf9;
+        --muted: #9a9691;
+        --faint: #66635f;
+        --rule: #292929;
+        --frame: #383838;
+        --panel: #090909;
+        --panel-raised: #131313;
+        --signal: #f2eadf;
+        --warm: #d4ad88;
+        --font-reading: "Valkyrie", "Iowan Old Style", "Palatino Linotype", Palatino,
+          Georgia, serif;
+        --font-mono: "Commit Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", monospace;
+      }
+
       * {
         box-sizing: border-box;
       }
 
       html {
         color-scheme: dark;
+        background: var(--paper);
+        scroll-behavior: smooth;
         -webkit-font-smoothing: antialiased;
       }
 
       body {
         margin: 0;
-        background: #000;
-        color: #fff;
-        font-family: "IBM Plex Mono", monospace;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--font-reading);
+      }
+
+      button,
+      a {
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      a {
+        color: inherit;
       }
 
       ::selection {
-        background: #fff;
-        color: #000;
+        background: var(--signal);
+        color: #111;
       }
 
-      main {
-        width: min(100% - 48px, 760px);
+      .shell {
+        width: min(100% - 80px, 1120px);
         margin: 0 auto;
-        padding: 9vh 0 14vh;
+      }
+
+      .site-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        min-height: 84px;
+        color: var(--muted);
+        font-size: 17px;
+      }
+
+      .wordmark,
+      .site-nav a {
+        text-decoration: none;
+      }
+
+      .wordmark {
+        color: var(--bright);
+        letter-spacing: -0.01em;
+      }
+
+      .wordmark::before {
+        content: "";
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        margin-right: 11px;
+        border: 1px solid var(--muted);
+        border-radius: 50%;
+        vertical-align: 1px;
+      }
+
+      .site-nav {
+        display: flex;
+        gap: 24px;
+      }
+
+      .site-nav a:hover,
+      .site-nav a:focus-visible {
+        color: var(--bright);
+      }
+
+      .hero {
+        padding: 80px 0 56px;
+      }
+
+      .eyebrow,
+      .diagram-label,
+      .diagram-status,
+      .section-kicker,
+      .code-label,
+      .route-name,
+      .route-address,
+      .privacy-index,
+      .footer-note {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums lining-nums;
+      }
+
+      .eyebrow {
+        margin: 0 0 28px;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
       }
 
       h1 {
-        margin: 0;
-        font-size: clamp(19px, 4.8vw, 38px);
-        font-weight: 500;
-        letter-spacing: 0.02em;
-        line-height: 1.1;
-        white-space: nowrap;
+        max-width: 900px;
+        margin-bottom: 32px;
+        color: var(--bright);
+        font-size: clamp(54px, 8vw, 98px);
+        font-weight: 400;
+        letter-spacing: -0.045em;
+        line-height: 0.94;
       }
 
-      .description {
-        margin: 40px 0 0;
-        font-size: clamp(15px, 2vw, 18px);
-        line-height: 1.7;
+      .hero-copy {
+        max-width: 710px;
+        margin-bottom: 0;
+        color: #c9c5c0;
+        font-size: clamp(22px, 2.6vw, 30px);
+        line-height: 1.42;
+        text-wrap: pretty;
       }
 
-      .install {
-        margin-top: 56px;
+      .hero-copy em {
+        color: var(--bright);
+        font-style: italic;
       }
 
-      .package-input {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        opacity: 0;
-        pointer-events: none;
+      .install-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0;
+        margin: 48px 0 112px;
+        border: 1px solid var(--frame);
+        background: var(--panel);
+        font-family: var(--font-mono);
       }
 
-      .tabs {
+      .install-main {
+        min-width: 0;
+      }
+
+      .package-tabs {
         display: flex;
-        gap: 24px;
-        margin-bottom: 16px;
+        gap: 4px;
+        min-height: 43px;
+        padding: 7px 10px;
+        border-bottom: 1px solid var(--rule);
+        background: var(--panel-raised);
       }
 
-      .tabs label {
+      .package-tabs button,
+      .copy-button {
+        border: 0;
+        background: transparent;
+        color: var(--faint);
         cursor: pointer;
-        opacity: 0.45;
+        font-family: var(--font-mono);
+        font-size: 12px;
       }
 
-      .tabs a {
-        color: #fff;
-        text-decoration: none;
-        opacity: 0.45;
+      .package-tabs button {
+        min-width: 48px;
+        min-height: 44px;
+        padding: 4px 9px;
       }
 
-      .tabs a:hover,
-      .tabs label:hover,
-      #npm:checked ~ .tabs label[for="npm"],
-      #bun:checked ~ .tabs label[for="bun"],
-      #pnpm:checked ~ .tabs label[for="pnpm"] {
-        opacity: 1;
+      .package-tabs button[aria-selected="true"] {
+        color: var(--bright);
+        background: #202020;
       }
 
-      .command {
-        display: none;
+      .package-tabs button:hover,
+      .package-tabs button:focus-visible,
+      .copy-button:hover,
+      .copy-button:focus-visible {
+        color: var(--bright);
+      }
+
+      .install-command {
+        display: flex;
+        align-items: center;
+        min-height: 82px;
+        margin: 0;
+        padding: 24px;
         overflow-x: auto;
-        font-size: clamp(14px, 2vw, 17px);
-        line-height: 1.7;
+        color: #ddd;
+        font: 15px/1.6 var(--font-mono);
         white-space: nowrap;
       }
 
-      #npm:checked ~ .commands .npm,
-      #bun:checked ~ .commands .bun,
-      #pnpm:checked ~ .commands .pnpm {
-        display: block;
+      .prompt {
+        margin-right: 12px;
+        color: var(--faint);
+        user-select: none;
       }
 
-      .usage,
-      .sdk,
-      .how,
-      .privacy {
-        margin-top: 112px;
+      .copy-button {
+        min-width: 94px;
+        border-left: 1px solid var(--rule);
+      }
+
+      .copy-button[data-copied="true"] {
+        color: var(--warm);
+      }
+
+      .section {
+        padding: 112px 0;
+        border-top: 1px solid var(--rule);
+      }
+
+      .section-intro {
+        display: grid;
+        grid-template-columns: 160px minmax(0, 740px);
+        gap: 40px;
+        margin-bottom: 64px;
+      }
+
+      .section-kicker {
+        padding-top: 9px;
+        color: var(--faint);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
       }
 
       h2 {
-        margin: 0 0 40px;
-        font-size: clamp(20px, 3.2vw, 27px);
-        font-weight: 500;
-        letter-spacing: 0.02em;
+        margin-bottom: 24px;
+        color: var(--bright);
+        font-size: clamp(38px, 5vw, 58px);
+        font-weight: 400;
+        letter-spacing: -0.025em;
+        line-height: 1.03;
       }
 
-      .steps {
+      .section-description {
+        max-width: 690px;
+        margin-bottom: 0;
+        color: #bbb6b0;
+        font-size: 22px;
+        line-height: 1.58;
+        text-wrap: pretty;
+      }
+
+      .diagram {
+        margin: 0;
+        border: 1px solid var(--frame);
+        background: var(--panel);
+        font-family: var(--font-mono);
+      }
+
+      .diagram-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 44px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--rule);
+        background: var(--panel-raised);
+      }
+
+      .diagram-label {
+        color: #aaa;
+        font-size: 12px;
+      }
+
+      .diagram-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--faint);
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+
+      .diagram-status::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #a5ad93;
+        box-shadow: 0 0 0 3px #a5ad9314;
+      }
+
+      .architecture {
+        position: relative;
         display: grid;
-        margin: 0;
-        padding: 0;
-        gap: 28px;
-        list-style: none;
-        counter-reset: step;
+        grid-template-columns: 178px minmax(170px, 1fr) minmax(300px, 1.55fr);
+        gap: 64px;
+        align-items: center;
+        min-height: 420px;
+        padding: 52px;
+        overflow: hidden;
       }
 
-      .steps li {
+      .architecture-wires {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .wire {
+        fill: none;
+        stroke: #444;
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .packet {
+        fill: var(--signal);
+        filter: drop-shadow(0 0 5px #f2eadf99);
+      }
+
+      .architecture-node,
+      .local-machine {
+        position: relative;
+        z-index: 1;
+        border: 1px solid var(--frame);
+        background: #080808;
+      }
+
+      .architecture-node {
+        min-height: 108px;
+        padding: 20px;
+      }
+
+      .architecture-node strong,
+      .machine-title {
+        display: block;
+        margin-bottom: 8px;
+        color: #ddd;
+        font-size: 13px;
+        font-weight: 400;
+      }
+
+      .architecture-node span,
+      .machine-subtitle {
+        color: #777;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .relay-node::after {
+        content: "no private key";
+        display: block;
+        margin-top: 16px;
+        color: var(--warm);
+        font-size: 10px;
+      }
+
+      .local-machine {
+        padding: 0 16px 16px;
+      }
+
+      .machine-header {
+        margin: 0 -16px 16px;
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--rule);
+        background: var(--panel-raised);
+      }
+
+      .machine-title {
+        display: inline;
+        margin: 0;
+      }
+
+      .machine-subtitle {
+        float: right;
+      }
+
+      .route-list {
         display: grid;
-        grid-template-columns: 44px 1fr;
-        counter-increment: step;
-        font-size: clamp(14px, 2vw, 17px);
-        line-height: 1.7;
+        gap: 8px;
       }
 
-      .steps li::before {
-        content: "0" counter(step);
-        opacity: 0.45;
-      }
-
-      .steps p {
-        margin: 0;
-      }
-
-      .privacy-list {
+      .route {
         display: grid;
-        margin: 0;
-        gap: 36px;
+        grid-template-columns: minmax(88px, 1fr) auto;
+        gap: 16px;
+        padding: 12px;
+        border: 1px solid var(--rule);
+        background: #0c0c0c;
       }
 
-      .privacy-list dt {
-        margin-bottom: 6px;
-        font-size: clamp(14px, 2vw, 17px);
-        line-height: 1.7;
+      .route-name {
+        min-width: 0;
+        overflow: hidden;
+        color: #c9c9c9;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
-      .privacy-list dd {
-        margin: 0;
-        font-size: clamp(14px, 2vw, 17px);
-        line-height: 1.7;
-        opacity: 0.55;
+      .route-address {
+        color: #777;
+        font-size: 10px;
+      }
+
+      .diagram figcaption {
+        padding: 14px 16px;
+        border-top: 1px solid var(--rule);
+        color: #777;
+        font: 11px/1.5 var(--font-mono);
+      }
+
+      .cli-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.3fr) minmax(260px, 0.7fr);
+        gap: 32px;
+        align-items: start;
+      }
+
+      .code-frame {
+        min-width: 0;
+        border: 1px solid var(--frame);
+        background: var(--panel);
+        font-family: var(--font-mono);
+      }
+
+      .code-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 43px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--rule);
+        background: var(--panel-raised);
+        color: #aaa;
+        font-size: 11px;
       }
 
       pre {
         margin: 0;
         overflow-x: auto;
-        color: #fff;
-        font: clamp(14px, 2vw, 17px)/1.8 "IBM Plex Mono", monospace;
+        font: 13px/1.8 var(--font-mono);
+        tab-size: 2;
       }
 
-      .output {
-        opacity: 0.55;
+      .code-frame pre {
+        min-height: 335px;
+        padding: 26px;
+        color: #ddd;
       }
 
-      .diagram-wrap {
-        overflow-x: auto;
-        margin-top: 48px;
+      .code-output {
+        color: #777;
       }
 
-      .diagram-svg {
+      .code-accent {
+        color: #c6b398;
+      }
+
+      .outcome-panel {
+        border: 1px solid var(--frame);
+      }
+
+      .outcome-heading {
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--rule);
+        background: var(--panel-raised);
+        color: #aaa;
+        font: 11px/1.5 var(--font-mono);
+      }
+
+      .outcome-row {
+        min-height: 96px;
+        padding: 18px 16px;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .outcome-row:last-child {
+        border-bottom: 0;
+      }
+
+      .outcome-row strong {
         display: block;
-        width: 100%;
-        min-width: 640px;
-        font-family: "IBM Plex Mono", monospace;
+        margin-bottom: 8px;
+        color: #d8d4cf;
+        font-size: 18px;
+        font-weight: 400;
       }
 
-      .diagram-svg text {
-        fill: #fff;
-        font-size: 13px;
+      .outcome-row span {
+        display: block;
+        overflow-wrap: anywhere;
+        color: #777;
+        font: 10px/1.55 var(--font-mono);
       }
 
-      .diagram-svg .sub {
-        font-size: 11px;
-        fill-opacity: 0.5;
+      .sdk-frame {
+        margin-top: 32px;
       }
 
-      .diagram-svg .wire path {
-        fill: none;
-        stroke: #fff;
-        stroke-opacity: 0.3;
+      .sdk-frame pre {
+        padding: 26px;
+        color: #ccc;
       }
 
-      .diagram-svg .node {
-        fill: #000;
-        stroke: #fff;
-        stroke-opacity: 0.85;
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        margin: 0;
+        padding: 0;
+        border: 1px solid var(--frame);
+        list-style: none;
+        counter-reset: step;
       }
 
-      .diagram-svg .boundary {
-        fill: none;
-        stroke: #fff;
-        stroke-opacity: 0.4;
-        stroke-dasharray: 5 5;
-        animation: boundary-march 50s linear infinite;
+      .steps li {
+        position: relative;
+        min-height: 280px;
+        padding: 22px 20px;
+        border-right: 1px solid var(--rule);
+        counter-increment: step;
       }
 
-      .diagram-svg .packet {
-        fill: #fff;
+      .steps li:last-child {
+        border-right: 0;
       }
 
-      @keyframes boundary-march {
-        to {
-          stroke-dashoffset: -200;
-        }
+      .steps li::before {
+        content: "0" counter(step);
+        display: block;
+        margin-bottom: 72px;
+        color: var(--faint);
+        font: 10px/1 var(--font-mono);
+      }
+
+      .steps li::after {
+        content: "";
+        position: absolute;
+        top: 58px;
+        left: 20px;
+        width: calc(100% - 20px);
+        border-top: 1px solid #444;
+      }
+
+      .steps li:last-child::after {
+        width: 16px;
+      }
+
+      .step-dot {
+        position: absolute;
+        z-index: 1;
+        top: 54px;
+        left: 20px;
+        width: 9px;
+        height: 9px;
+        border: 1px solid #777;
+        border-radius: 50%;
+        background: var(--paper);
+      }
+
+      .steps h3 {
+        margin-bottom: 12px;
+        color: #d8d4cf;
+        font-size: 19px;
+        font-weight: 400;
+        line-height: 1.2;
+      }
+
+      .steps p {
+        margin-bottom: 0;
+        color: #898581;
+        font-size: 15px;
+        line-height: 1.48;
+      }
+
+      .privacy-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        border-top: 1px solid var(--frame);
+        border-left: 1px solid var(--frame);
+      }
+
+      .privacy-card {
+        min-height: 260px;
+        padding: 28px;
+        border-right: 1px solid var(--frame);
+        border-bottom: 1px solid var(--frame);
+      }
+
+      .privacy-index {
+        display: block;
+        margin-bottom: 72px;
+        color: var(--faint);
+        font-size: 10px;
+      }
+
+      .privacy-card h3 {
+        margin-bottom: 14px;
+        color: #ddd8d2;
+        font-size: 23px;
+        font-weight: 400;
+      }
+
+      .privacy-card p {
+        max-width: 440px;
+        margin-bottom: 0;
+        color: #8e8984;
+        font-size: 17px;
+        line-height: 1.55;
+      }
+
+      .site-footer {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 48px 0 64px;
+        border-top: 1px solid var(--rule);
+        color: var(--muted);
+        font-size: 17px;
+      }
+
+      .site-footer a:hover,
+      .site-footer a:focus-visible {
+        color: var(--bright);
+      }
+
+      .footer-note {
+        color: var(--faint);
+        font-size: 10px;
+      }
+
+      :focus-visible {
+        outline: 1px solid var(--warm);
+        outline-offset: 4px;
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .diagram-svg .packet {
+        html {
+          scroll-behavior: auto;
+        }
+
+        .packet {
+          display: none;
+        }
+      }
+
+      @media (max-width: 900px) {
+        .shell {
+          width: min(100% - 48px, 760px);
+        }
+
+        .hero {
+          padding-top: 56px;
+        }
+
+        .section-intro {
+          grid-template-columns: 1fr;
+          gap: 16px;
+        }
+
+        .section-kicker {
+          padding-top: 0;
+        }
+
+        .architecture {
+          grid-template-columns: 1fr;
+          gap: 24px;
+          padding: 32px;
+        }
+
+        .architecture-wires {
           display: none;
         }
 
-        .diagram-svg .boundary {
-          animation: none;
+        .architecture-node {
+          min-height: auto;
+        }
+
+        .architecture-node:not(:last-child)::after {
+          content: "↓";
+          position: absolute;
+          left: 50%;
+          bottom: -21px;
+          color: #555;
+          font-size: 11px;
+        }
+
+        .relay-node::after {
+          position: static;
+        }
+
+        .cli-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .steps {
+          grid-template-columns: 1fr;
+        }
+
+        .steps li {
+          min-height: 0;
+          padding: 24px 24px 24px 92px;
+          border-right: 0;
+          border-bottom: 1px solid var(--rule);
+        }
+
+        .steps li:last-child {
+          border-bottom: 0;
+        }
+
+        .steps li::before {
+          position: absolute;
+          top: 31px;
+          left: 24px;
+          margin: 0;
+        }
+
+        .steps li::after {
+          top: 48px;
+          bottom: -1px;
+          left: 31px;
+          width: 0;
+          border-top: 0;
+          border-left: 1px solid #444;
+        }
+
+        .steps li:last-child::after {
+          height: 12px;
+        }
+
+        .step-dot {
+          top: 47px;
+          left: 27px;
         }
       }
 
       @media (max-width: 600px) {
-        main {
+        .shell {
           width: min(100% - 32px, 760px);
-          padding-top: 6vh;
         }
 
-        .install {
-          margin-top: 44px;
+        .site-header {
+          min-height: 68px;
+          font-size: 15px;
         }
 
-        .usage,
-        .sdk,
-        .how,
-        .privacy {
-          margin-top: 80px;
+        .site-nav a:first-child {
+          display: none;
         }
 
-        h2 {
-          margin-bottom: 32px;
+        .hero {
+          padding: 46px 0 40px;
+        }
+
+        h1 {
+          font-size: clamp(50px, 17vw, 76px);
+        }
+
+        .hero-copy,
+        .section-description {
+          font-size: 20px;
+        }
+
+        .install-panel {
+          grid-template-columns: 1fr;
+          margin-bottom: 80px;
+        }
+
+        .copy-button {
+          min-height: 48px;
+          border-top: 1px solid var(--rule);
+          border-left: 0;
+        }
+
+        .section {
+          padding: 80px 0;
+        }
+
+        .section-intro {
+          margin-bottom: 44px;
+        }
+
+        .architecture {
+          padding: 20px;
+        }
+
+        .machine-subtitle {
+          display: block;
+          float: none;
+          margin-top: 6px;
+        }
+
+        .route {
+          grid-template-columns: 1fr;
+          gap: 5px;
+        }
+
+        .code-frame pre,
+        .sdk-frame pre {
+          padding: 20px;
+          font-size: 12px;
+        }
+
+        .privacy-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .privacy-card {
+          min-height: 0;
+        }
+
+        .privacy-index {
+          margin-bottom: 42px;
+        }
+
+        .site-footer {
+          align-items: flex-start;
+          flex-direction: column;
         }
       }
     </style>
   </head>
   <body>
-    <main>
-      <h1>public urls for anything</h1>
+    <header class="site-header shell">
+      <a class="wordmark" href="#top" aria-label="OpenTunnel home">opentunnel</a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="#how">how it works</a>
+        <a href="https://github.com/anomalyco/opentunnel">github</a>
+      </nav>
+    </header>
 
-      <div class="diagram-wrap">
-        <svg
-          class="diagram-svg"
-          viewBox="0 0 760 304"
-          role="img"
-          aria-label="traffic flows encrypted from the browser through the opentunnel relay, which cannot decrypt it. tls terminates on your machine, where traffic is routed to local apps."
-        >
-          <g class="wire">
-            <path d="M118 90 H248" />
-            <path d="M392 90 H538" />
-            <path d="M538 72 V240" />
-            <path d="M538 72 H556 M538 156 H556 M538 240 H556" />
-          </g>
-
-          <rect class="boundary" x="520" y="8" width="236" height="268" />
-
-          <rect class="node" x="2" y="68" width="116" height="44" />
-          <text x="60" y="94" text-anchor="middle">browser</text>
-
-          <rect class="node" x="248" y="68" width="144" height="44" />
-          <text x="320" y="94" text-anchor="middle">relay</text>
-          <text class="sub" x="320" y="130" text-anchor="middle">cannot decrypt</text>
-
-          <text class="sub" x="183" y="76" text-anchor="middle">encrypted tls</text>
-          <text class="sub" x="456" y="76" text-anchor="middle">encrypted tls</text>
-
-          <text x="532" y="34">your machine</text>
-          <text class="sub" x="520" y="294">tls terminates here</text>
-
-          <rect class="node" x="556" y="48" width="192" height="48" />
-          <text x="568" y="68">opencode</text>
-          <text class="sub" x="568" y="86">localhost:47365</text>
-
-          <rect class="node" x="556" y="132" width="192" height="48" />
-          <text x="568" y="152">api</text>
-          <text class="sub" x="568" y="170">localhost:3000</text>
-
-          <rect class="node" x="556" y="216" width="192" height="48" />
-          <text x="568" y="236">webhooks</text>
-          <text class="sub" x="568" y="254">localhost:8080</text>
-
-          <g>
-            <rect class="packet" x="-2.5" y="-2.5" width="5" height="5" opacity="0">
-              <animateMotion dur="3.2s" begin="0s" repeatCount="indefinite" path="M118 90 H538 V72 H556" />
-              <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.06;0.94;1" dur="3.2s" begin="0s" repeatCount="indefinite" />
-            </rect>
-            <rect class="packet" x="-2.5" y="-2.5" width="5" height="5" opacity="0">
-              <animateMotion dur="3.2s" begin="1.1s" repeatCount="indefinite" path="M118 90 H538 V156 H556" />
-              <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.06;0.94;1" dur="3.2s" begin="1.1s" repeatCount="indefinite" />
-            </rect>
-            <rect class="packet" x="-2.5" y="-2.5" width="5" height="5" opacity="0">
-              <animateMotion dur="3.2s" begin="2.2s" repeatCount="indefinite" path="M118 90 H538 V240 H556" />
-              <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.06;0.94;1" dur="3.2s" begin="2.2s" repeatCount="indefinite" />
-            </rect>
-          </g>
-        </svg>
-      </div>
-
-      <p class="description">
-        a cli and sdk to create end-to-end encrypted public urls for apps running on your
-        machine reachable from anywhere in the world
-      </p>
-
-      <div class="install">
-        <input class="package-input" type="radio" name="package" id="npm" checked />
-        <input class="package-input" type="radio" name="package" id="bun" />
-        <input class="package-input" type="radio" name="package" id="pnpm" />
-
-        <div class="tabs">
-          <label for="npm">npm</label>
-          <label for="bun">bun</label>
-          <label for="pnpm">pnpm</label>
-          <a href="https://github.com/anomalyco/opentunnel" target="_blank" rel="noopener">github</a>
-        </div>
-
-        <div class="commands">
-          <div class="command npm">$ npm i -g @opentunnel/cli</div>
-          <div class="command bun">$ bun add -g @opentunnel/cli</div>
-          <div class="command pnpm">$ pnpm add -g @opentunnel/cli</div>
-        </div>
-      </div>
-
-      <section class="usage">
-        <h2>cli</h2>
-        <pre>$ opentunnel create
-<span class="output">created f7a2mx4kq9vn.opentunnel.xyz</span>
-
-$ opentunnel route add opencode localhost:47365
-<span class="output">added route opencode.f7a2mx4kq9vn.opentunnel.xyz -> localhost:47365</span>
-
-$ curl https://opencode.f7a2mx4kq9vn.opentunnel.xyz
-<span class="output">hello from localhost:47365</span></pre>
+    <main id="top">
+      <section class="hero shell" aria-labelledby="hero-title">
+        <p class="eyebrow">local service · public address · private traffic</p>
+        <h1 id="hero-title">Public URLs for anything.</h1>
+        <p class="hero-copy">
+          A CLI and SDK for making apps on your machine reachable from anywhere.
+          <em>TLS terminates locally</em>, so the relay never gets the keys to your traffic.
+        </p>
       </section>
 
-      <section class="sdk">
-        <h2>sdk</h2>
-        <pre>import { create } from "@opentunnel/client"
+      <section class="install-panel shell" aria-label="Install OpenTunnel">
+        <div class="install-main">
+          <div class="package-tabs" role="tablist" aria-label="Package manager">
+            <button type="button" role="tab" aria-controls="install-panel" aria-selected="true" tabindex="0" data-manager="npm">npm</button>
+            <button type="button" role="tab" aria-controls="install-panel" aria-selected="false" tabindex="-1" data-manager="bun">bun</button>
+            <button type="button" role="tab" aria-controls="install-panel" aria-selected="false" tabindex="-1" data-manager="pnpm">pnpm</button>
+          </div>
+          <pre id="install-panel" class="install-command" role="tabpanel"><span class="prompt">$</span><code id="install-command">npm i -g @opentunnel/cli</code></pre>
+        </div>
+        <button class="copy-button" type="button" aria-label="Copy install command">copy</button>
+      </section>
+
+      <section class="section shell" aria-labelledby="encrypted-title">
+        <div class="section-intro">
+          <span class="section-kicker">01 / the path</span>
+          <div>
+            <h2 id="encrypted-title">A tunnel the relay can’t look inside.</h2>
+            <p class="section-description">
+              Visitors connect to a stable public hostname. OpenTunnel reads enough of the TLS
+              handshake to route the connection, then passes the encrypted bytes to your machine.
+            </p>
+          </div>
+        </div>
+
+        <figure class="diagram">
+          <div class="diagram-header">
+            <span class="diagram-label">request path</span>
+            <span class="diagram-status">tunnel connected</span>
+          </div>
+          <div class="architecture">
+            <svg class="architecture-wires" viewBox="0 0 1120 420" aria-hidden="true" preserveAspectRatio="none">
+              <path class="wire" d="M230 210 H430" />
+              <path class="wire" d="M650 210 H760" />
+              <circle class="packet" r="4">
+                <animateMotion dur="3.8s" begin="0s" repeatCount="indefinite" path="M230 210 H760" />
+              </circle>
+              <circle class="packet" r="4" opacity="0.5">
+                <animateMotion dur="3.8s" begin="1.9s" repeatCount="indefinite" path="M760 222 H230" />
+              </circle>
+            </svg>
+
+            <div class="architecture-node">
+              <strong>visitor</strong>
+              <span>browser, webhook, agent, or API client</span>
+            </div>
+
+            <div class="architecture-node relay-node">
+              <strong>opentunnel relay</strong>
+              <span>routes by hostname while the connection stays encrypted</span>
+            </div>
+
+            <div class="local-machine">
+              <div class="machine-header">
+                <span class="machine-title">your machine</span>
+                <span class="machine-subtitle">TLS ends here</span>
+              </div>
+              <div class="route-list">
+                <div class="route">
+                  <span class="route-name">opencode.f7a2mx4kq9vn.opentunnel.xyz</span>
+                  <span class="route-address">localhost:47365</span>
+                </div>
+                <div class="route">
+                  <span class="route-name">api.f7a2mx4kq9vn.opentunnel.xyz</span>
+                  <span class="route-address">localhost:3000</span>
+                </div>
+                <div class="route">
+                  <span class="route-name">webhooks.f7a2mx4kq9vn.opentunnel.xyz</span>
+                  <span class="route-address">localhost:8080</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption>encrypted TLS in both directions · private key remains on your machine</figcaption>
+        </figure>
+      </section>
+
+      <section class="section shell" aria-labelledby="minutes-title">
+        <div class="section-intro">
+          <span class="section-kicker">02 / use it</span>
+          <div>
+            <h2 id="minutes-title">From localhost to a real URL in three commands.</h2>
+            <p class="section-description">
+              Create a tunnel once, add as many named routes as you need, and connect. The same
+              behavior is available through the TypeScript SDK.
+            </p>
+          </div>
+        </div>
+
+        <div class="cli-layout">
+          <div class="code-frame">
+            <div class="code-label"><span>terminal</span><span>3 commands</span></div>
+            <pre><code><span class="code-accent">$ opentunnel create</span>
+<span class="code-output">created f7a2mx4kq9vn.opentunnel.xyz</span>
+
+<span class="code-accent">$ opentunnel route add opencode localhost:47365</span>
+<span class="code-output">added opencode.f7a2mx4kq9vn.opentunnel.xyz
+   → localhost:47365</span>
+
+<span class="code-accent">$ opentunnel connect</span>
+<span class="code-output">connected · 1 route</span></code></pre>
+          </div>
+
+          <aside class="outcome-panel" aria-label="Created tunnel details">
+            <div class="outcome-heading">created locally</div>
+            <div class="outcome-row">
+              <strong>one identity</strong>
+              <span>f7a2mx4kq9vn.opentunnel.xyz</span>
+            </div>
+            <div class="outcome-row">
+              <strong>one private key</strong>
+              <span>stored on this machine · never uploaded</span>
+            </div>
+            <div class="outcome-row">
+              <strong>many routes</strong>
+              <span>name each local service independently</span>
+            </div>
+          </aside>
+        </div>
+
+        <div class="code-frame sdk-frame">
+          <div class="code-label"><span>TypeScript SDK</span><span>@opentunnel/client</span></div>
+          <pre><code>import { create } from "@opentunnel/client"
 
 const client = create()
 
-await client.route.add({
-  name: "opencode",
-  target: "localhost:47365",
-})
-
+await client.route.add({ name: "opencode", target: "localhost:47365" })
 const connection = await client.tunnel.connect()
 
 console.log(connection.routes[0].hostname)
-<span class="output">opencode.f7a2mx4kq9vn.opentunnel.xyz</span></pre>
+<span class="code-output">// opencode.f7a2mx4kq9vn.opentunnel.xyz</span></code></pre>
+        </div>
       </section>
 
-      <section class="how">
-        <h2>how it works</h2>
+      <section id="how" class="section shell" aria-labelledby="how-title">
+        <div class="section-intro">
+          <span class="section-kicker">03 / under the hood</span>
+          <div>
+            <h2 id="how-title">Five steps. One encrypted connection.</h2>
+            <p class="section-description">
+              OpenTunnel separates public routing from private decryption. The relay knows where
+              bytes should go, but not what they say.
+            </p>
+          </div>
+        </div>
+
         <ol class="steps">
           <li>
-            <p>
-              opentunnel create reserves your hostname and generates a private key on your
-              machine. the key never leaves it.
-            </p>
+            <span class="step-dot" aria-hidden="true"></span>
+            <h3>Reserve</h3>
+            <p>The CLI reserves a stable tunnel hostname.</p>
           </li>
           <li>
-            <p>
-              the cli sends a certificate request for that hostname. a certificate is issued
-              and bound to your tunnel name. the relay only ever sees the public half.
-            </p>
+            <span class="step-dot" aria-hidden="true"></span>
+            <h3>Generate</h3>
+            <p>A private key is created and kept on your machine.</p>
           </li>
           <li>
-            <p>opentunnel connect opens an encrypted bridge from your machine to the relay.</p>
+            <span class="step-dot" aria-hidden="true"></span>
+            <h3>Connect</h3>
+            <p>The client opens an encrypted bridge to the relay.</p>
           </li>
           <li>
-            <p>
-              visitors hit your public url. the relay reads only the hostname from the tls
-              handshake and forwards the encrypted stream through the bridge.
-            </p>
+            <span class="step-dot" aria-hidden="true"></span>
+            <h3>Route</h3>
+            <p>The relay reads the hostname, not the request.</p>
           </li>
           <li>
-            <p>
-              your machine terminates tls with its private key and proxies the traffic to
-              your local apps.
-            </p>
+            <span class="step-dot" aria-hidden="true"></span>
+            <h3>Decrypt</h3>
+            <p>Your machine terminates TLS and reaches the local app.</p>
           </li>
         </ol>
       </section>
 
-      <section class="privacy">
-        <h2>privacy</h2>
-        <dl class="privacy-list">
+      <section class="section shell" aria-labelledby="privacy-title">
+        <div class="section-intro">
+          <span class="section-kicker">04 / boundaries</span>
           <div>
-            <dt>the relay can't read your traffic</dt>
-            <dd>
-              connections are routed by the hostname in the tls handshake. the bytes stay
-              encrypted until they reach your machine. the relay has no key to decrypt them.
-            </dd>
+            <h2 id="privacy-title">Private traffic, public address.</h2>
+            <p class="section-description">
+              The encryption boundary is simple. So are the limits: your URL is reachable by
+              anyone who knows it, and sensitive services still need their own authentication.
+            </p>
           </div>
-          <div>
-            <dt>your tunnel hostname is public</dt>
-            <dd>
-              anyone with your url can reach your services. when a tunnel is created, its
-              certificate is published to certificate transparency logs, so the hostname is
-              discoverable by anyone watching them.
-            </dd>
-          </div>
-          <div>
-            <dt>route names are private, not secret</dt>
-            <dd>
-              the certificate is a wildcard, so route names never appear in any log. they are
-              still guessable, especially common names like api or postgres, so don't treat
-              them as authentication.
-            </dd>
-          </div>
-          <div>
-            <dt>put auth in the services themselves</dt>
-            <dd>anything sensitive behind a tunnel should authenticate on its own.</dd>
-          </div>
-        </dl>
+        </div>
+
+        <div class="privacy-grid">
+          <article class="privacy-card">
+            <span class="privacy-index">01 / encrypted</span>
+            <h3>The relay can’t read traffic.</h3>
+            <p>It forwards TLS bytes without the private key required to decrypt them.</p>
+          </article>
+          <article class="privacy-card">
+            <span class="privacy-index">02 / discoverable</span>
+            <h3>Your tunnel hostname is public.</h3>
+            <p>Certificate transparency logs make the base tunnel hostname discoverable.</p>
+          </article>
+          <article class="privacy-card">
+            <span class="privacy-index">03 / obscured</span>
+            <h3>Route names stay out of certificates.</h3>
+            <p>The wildcard certificate hides route names from logs, but names can still be guessed.</p>
+          </article>
+          <article class="privacy-card">
+            <span class="privacy-index">04 / authenticated</span>
+            <h3>Your services remain responsible for auth.</h3>
+            <p>Anything sensitive behind a tunnel should authenticate every visitor on its own.</p>
+          </article>
+        </div>
       </section>
     </main>
+
+    <footer class="site-footer shell">
+      <span>OpenTunnel is open source.</span>
+      <a href="https://github.com/anomalyco/opentunnel">github.com/anomalyco/opentunnel</a>
+      <span class="footer-note">end-to-end encrypted</span>
+    </footer>
+
+    <script>
+      const commands = {
+        npm: "npm i -g @opentunnel/cli",
+        bun: "bun add -g @opentunnel/cli",
+        pnpm: "pnpm add -g @opentunnel/cli",
+      };
+
+      const command = document.querySelector("#install-command");
+      const copy = document.querySelector(".copy-button");
+      const tabs = [...document.querySelectorAll('[role="tab"]')];
+
+      function selectTab(next) {
+        for (const tab of tabs) {
+          const selected = tab === next;
+          tab.setAttribute("aria-selected", String(selected));
+          tab.tabIndex = selected ? 0 : -1;
+        }
+        command.textContent = commands[next.dataset.manager];
+        copy.dataset.copied = "false";
+        copy.textContent = "copy";
+      }
+
+      for (const tab of tabs) {
+        tab.addEventListener("click", () => selectTab(tab));
+        tab.addEventListener("keydown", (event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          const offset = event.key === "ArrowRight" ? 1 : -1;
+          const next = tabs[(tabs.indexOf(tab) + offset + tabs.length) % tabs.length];
+          selectTab(next);
+          next.focus();
+        });
+      }
+
+      copy.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(command.textContent);
+          copy.dataset.copied = "true";
+          copy.textContent = "copied";
+        } catch {
+          copy.textContent = "select + copy";
+          const range = document.createRange();
+          range.selectNodeContents(command);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      });
+    </script>
   </body>
 </html>
