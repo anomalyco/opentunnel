@@ -64,26 +64,35 @@ export function App() {
         <div className="diagram"><TunnelScene /></div>
       </Cell>
 
-      <Cell span={7} className="cell-code">
+      <Cell span={6} className="cell-code">
         <pre className="code" data-filename="cli"><code>
 {cmd("opentunnel create")}
-{out("Created https://f7a2mx4kq9vn.opentunnel.xyz")}
+{out("created f7a2mx4kq9vn.opentunnel.xyz")}
 {"\n"}
-{cmd("opentunnel route add opencode 127.0.0.1:47365")}
-{out("Added route opencode.f7a2mx4kq9vn.opentunnel.xyz -> 127.0.0.1:47365")}
+{cmd("opentunnel route add opencode localhost:47365")}
+{out("added route opencode.f7a2mx4kq9vn.opentunnel.xyz -> localhost:47365")}
 {"\n"}
 {cmd("curl https://opencode.f7a2mx4kq9vn.opentunnel.xyz")}
 {out("hello from localhost:47365")}</code></pre>
       </Cell>
-      <Cell span={5} className="cell-code">
-        <pre className="code" data-filename="~/.config/opentunnel/default.toml"><code>
-<span className="tok-dim">[</span>routes<span className="tok-dim">]</span>{"\n"}
-opencode <span className="tok-dim">= "</span>127.0.0.1:47365<span className="tok-dim">"</span>{"\n"}
-api <span className="tok-dim">= "</span>127.0.0.1:3000<span className="tok-dim">"</span></code></pre>
-        <p className="note">routes are subdomains under one wildcard certificate. no path routing. keys and certificates live outside the config.</p>
+      <Cell span={6} className="cell-code">
+        <pre className="code" data-filename="sdk"><code>
+<span className="tok-dim">import</span> {"{ create }"} <span className="tok-dim">from</span> "@opentunnel/client"{"\n"}
+{"\n"}
+<span className="tok-dim">const</span> client = create(){"\n"}
+{"\n"}
+<span className="tok-dim">await</span> client.route.add({"{"}{"\n"}
+{"  "}name: "opencode",{"\n"}
+{"  "}target: "localhost:47365",{"\n"}
+{"}"}){"\n"}
+{"\n"}
+<span className="tok-dim">const</span> connection = <span className="tok-dim">await</span> client.tunnel.connect(){"\n"}
+{"\n"}
+console.log(connection.routes[0].hostname){"\n"}
+{out("opencode.f7a2mx4kq9vn.opentunnel.xyz")}</code></pre>
       </Cell>
 
-      <Cell span={12} title="how it works" className="cell-steps">
+      <Cell span={7} title="how it works" className="cell-steps">
         <ol className="steps">
           <li><code>opentunnel create</code> reserves your hostname and generates a private key on your machine. the key never leaves it.</li>
           <li>the cli sends a certificate request for that hostname. a certificate is issued and bound to your tunnel name. the relay only ever sees the public half.</li>
@@ -92,7 +101,13 @@ api <span className="tok-dim">= "</span>127.0.0.1:3000<span className="tok-dim">
           <li>your machine terminates tls with its private key and proxies the traffic to your local apps.</li>
         </ol>
       </Cell>
-
+      <Cell span={5} className="cell-code">
+        <pre className="code" data-filename="~/.config/opentunnel/default.toml"><code>
+<span className="tok-dim">[</span>routes<span className="tok-dim">]</span>{"\n"}
+opencode <span className="tok-dim">= "</span>localhost:47365<span className="tok-dim">"</span>{"\n"}
+api <span className="tok-dim">= "</span>localhost:3000<span className="tok-dim">"</span></code></pre>
+        <p className="note">routes are subdomains under one wildcard certificate. no path routing. keys and certificates live outside the config.</p>
+      </Cell>
       <Cell span={3} title="privacy">
         <p><strong>the relay can't read your traffic.</strong> connections are routed by the hostname in the tls handshake. the bytes stay encrypted until they reach your machine. the relay has no key to decrypt them.</p>
       </Cell>

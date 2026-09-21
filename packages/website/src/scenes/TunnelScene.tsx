@@ -13,6 +13,24 @@ import "./tunnel-scene.css"
 /** The page's one colour: the paper red, for everything that carries the signal. */
 export const accent = "#ff2a2a"
 
+/** pluginActivity's inks are grey ramps (rgb(n n n)); print them as the red at that strength instead. */
+function useRedInks(clock: MotionValue<number>, activity: Parameters<typeof usePluginActivity>[1]) {
+  const inks = usePluginActivity(clock, activity)
+  // Each ink rests at a known grey (pluginActivity): map rest→its red level, and the lift above rest→toward full red.
+  const red = (grey: string, rest: number, restLevel: number, peak: number, peakLevel: number) => {
+    const n = parseInt(grey.slice(4), 10)
+    const t = Math.max(0, Math.min(1, (n - rest) / (peak - rest)))
+    const k = restLevel + (peakLevel - restLevel) * t
+    return `rgb(${Math.round(255 * k)} ${Math.round(42 * k)} ${Math.round(42 * k)})`
+  }
+  return {
+    color: useTransform(inks.color, grey => red(grey, 170, 1, 255, 1.2)),
+    iconColor: useTransform(inks.iconColor, grey => red(grey, 119, .65, 238, 1.2)),
+    insetColor: useTransform(inks.insetColor, grey => red(grey, 41, .18, 55, .8)),
+    frameColor: useTransform(inks.frameColor, grey => red(grey, 56, .29, 64, .9)),
+  }
+}
+
 // browser ──▶ relay ──▶ opencode
 //                  ╲──▶ api          (your machine)
 //                   ╲─▶ webhooks
@@ -29,13 +47,13 @@ export type Crossing = { enter: number; leave: number; read: number }
 const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
 
 function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
-  const inks = usePluginActivity(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
+  const inks = useRedInks(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
   return <NodeCard name="browser" icon="globe" data-node="browser" aria-label="A visitor's browser" {...inks} />
 }
 
 function Relay({ clock, reduced, crossings, front, age }: { clock: MotionValue<number>; reduced: boolean; crossings: readonly Crossing[]; front: MotionValue<number>; age: MotionValue<number> }) {
   // Working while the bytes are inside: the icon holds bright while the field is lit.
-  const inks = usePluginActivity(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
+  const inks = useRedInks(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
   return <NodeCard name="relay" icon="relay" armored data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
     {!reduced && <RelayField front={front} age={age} ink={accent} className="tunnel-relay-field" />}
   </NodeCard>
@@ -44,7 +62,7 @@ function Relay({ clock, reduced, crossings, front, age }: { clock: MotionValue<n
 function Route({ index, clock, reduced, crossing }: { index: number; clock: MotionValue<number>; reduced: boolean; crossing?: Crossing }) {
   const route = tunnelRoutes[index]!, leg = tunnelLegs[index]!
   // The relay's read shows on the destination: its name flashes as the hostname is read, and it works once the bytes land.
-  const inks = usePluginActivity(clock, { dispatches: crossing ? [crossing.read] : [], running: [[leg.contact, leg.contact + 1.1]], reduced })
+  const inks = useRedInks(clock, { dispatches: crossing ? [crossing.read] : [], running: [[leg.contact, leg.contact + 1.1]], reduced })
   return <NodeCard name={route.name} icon={route.icon} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
     <span className="node-card-detail">{route.target}</span>
   </NodeCard>

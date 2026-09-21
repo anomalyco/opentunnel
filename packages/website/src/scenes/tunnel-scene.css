@@ -12,13 +12,16 @@
 .tunnel-relay-field { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); display: block; pointer-events: none; }
 .node-card[data-armored] .node-card-name { position: relative; z-index: 1; }
 
-/* Bold print: heavy white names, red for everything that carries the signal, grey for structure. */
-.tunnel-scene { --accent: #ff2a2a; font-family: var(--font-text), monospace; }
-.tunnel-scene .node-card-name { font: 600 12px/16px var(--font-text), monospace; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
+/* One ink. Every mark in the diagram is the red at some strength: full for names and signals,
+   dim for structure, faint for rules. Nothing white, nothing grey. */
+.tunnel-scene { --accent: #ff2a2a; --ink-dim: #a11c1c; --ink-faint: #4a1010; --ink-rule: #2e0a0a; --ink-header: #150404; font-family: var(--font-text), monospace; color: var(--accent); }
+.tunnel-scene .node-card-name { font: 600 12px/16px var(--font-text), monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
 .tunnel-scene .node-card-icon { color: var(--accent); }
-.tunnel-scene .node-card-detail { font: 500 11px/16px var(--font-text), monospace; color: #6f6f6f; }
-.tunnel-scene .diagram-header { font: 600 11px/16px var(--font-text), monospace; letter-spacing: .12em; color: #fff; }
+.tunnel-scene .node-card-detail { font: 500 11px/16px var(--font-text), monospace; color: var(--ink-dim); }
+.tunnel-scene .diagram-header { font: 600 11px/16px var(--font-text), monospace; letter-spacing: .12em; color: var(--accent); background: var(--ink-header); box-shadow: inset 0 -1px var(--ink-rule); }
 .tunnel-scene .graph-dots circle { fill: var(--accent); }
-.tunnel-scene .node-card-armor { background: repeating-linear-gradient(-45deg, #7a1d1d 0 1.5px, transparent 1.5px 5px); }
-.tunnel-scene .diagram-frame { border-color: #444; }
-.tunnel-scene .node-card-inset { border-color: #333; }
+.tunnel-scene .node-card-armor { background: repeating-linear-gradient(-45deg, var(--ink-dim) 0 1.5px, transparent 1.5px 5px); }
+.tunnel-scene .diagram-frame { border-color: var(--ink-faint); background: transparent; }
+.tunnel-scene .node-card-inset { border-color: var(--ink-rule); }
+.tunnel-scene .node-card[data-armored] .node-card-inset { border-color: var(--ink-faint); }
+.tunnel-scene .tunnel-signals path { stroke: var(--ink-faint); }

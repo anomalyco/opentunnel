@@ -5,7 +5,7 @@ import "./poster-controls.css"
 // Development only: a panel of knobs for the poster's print, with Randomize, Reset and
 // Copy settings. Press T to toggle it. Copy pastes a `posterDefaults` patch back into chat.
 
-const keys = Object.keys(posterKnobs) as (keyof PosterSettings)[]
+const keys = Object.keys(posterKnobs) as (keyof typeof posterKnobs)[]
 const groups = [...new Set(keys.map(key => posterKnobs[key].group))]
 
 export function PosterControls() {
@@ -27,9 +27,9 @@ export function PosterControls() {
     return () => window.clearTimeout(timer)
   }, [copied])
   if (!open) return <button type="button" className="poster-controls-toggle" onClick={() => setOpen(true)} title="Tune the poster (T)">tune poster</button>
-  const changed = keys.filter(key => settings[key] !== posterDefaults[key])
+  const changed = (keys as (keyof PosterSettings)[]).filter(key => settings[key] !== posterDefaults[key]).concat(settings.scene !== posterDefaults.scene ? ["scene" as const] : [])
   const presets = posterSettings.presets()
-  const current = Object.entries(presets).find(([, preset]) => keys.every(key => preset[key] === settings[key]))?.[0]
+  const current = Object.entries(presets).find(([, preset]) => keys.every(key => preset[key] === settings[key]) && preset.scene === settings.scene)?.[0]
   const save = () => { const name = window.prompt("Name this print", current ?? "")?.trim(); if (name) posterSettings.save(name) }
   const copy = async () => {
     const patch = Object.fromEntries(changed.map(key => [key, settings[key]]))
@@ -46,6 +46,12 @@ export function PosterControls() {
         <button type="button" onClick={() => setOpen(false)} aria-label="Close">×</button>
       </span>
     </header>
+    <section>
+      <h3>Scene</h3>
+      <div className="poster-controls-presets">
+        {(["tunnel", "pipe"] as const).map(scene => <button key={scene} type="button" data-current={settings.scene === scene || undefined} onClick={() => posterSettings.set({ scene })}>{scene}</button>)}
+      </div>
+    </section>
     <section>
       <h3>Prints</h3>
       <div className="poster-controls-presets">

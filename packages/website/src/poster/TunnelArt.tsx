@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
 import { fragmentSource, vertexSource } from "./tunnelShader"
-import { posterSettings, type PosterSettings } from "./posterSettings"
+import { pipeFragmentSource } from "./pipeShader"
+import { posterSettings, usePosterSettings, type PosterSettings } from "./posterSettings"
 
 const hex = (value: string): [number, number, number] => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16) / 255) as [number, number, number]
 
@@ -10,6 +11,7 @@ const scalarUniforms = ["depth", "ringFrequency", "ringSpeed", "wallInk", "bandI
  * `fade` dissolves the print into paper along an axis: no ink before `from`, the full print after `to` (fractions; x runs left to right, y top to bottom). */
 export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className }: { ink?: string; paper?: string; fade?: { axis: "x" | "y"; from: number; to: number }; className?: string }) {
   const fadeStart = fade?.from ?? 0, fadeEnd = fade?.to ?? 0, fadeAxis = fade?.axis === "y" ? 1 : 0
+  const scene = usePosterSettings().scene
   const canvas = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -26,7 +28,7 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className 
     }
     const program = gl.createProgram()!
     gl.attachShader(program, shader(gl.VERTEX_SHADER, vertexSource))
-    gl.attachShader(program, shader(gl.FRAGMENT_SHADER, fragmentSource))
+    gl.attachShader(program, shader(gl.FRAGMENT_SHADER, scene === "pipe" ? pipeFragmentSource : fragmentSource))
     gl.linkProgram(program)
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) ?? "program")
     gl.useProgram(program)
@@ -97,7 +99,7 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className 
       document.removeEventListener("visibilitychange", visibility); media.removeEventListener("change", run)
       gl.deleteProgram(program); gl.deleteBuffer(quad)
     }
-  }, [ink, paper, fadeStart, fadeEnd, fadeAxis])
+  }, [ink, paper, fadeStart, fadeEnd, fadeAxis, scene])
 
   return <canvas ref={canvas} className={className} aria-hidden="true" />
 }

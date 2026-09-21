@@ -21,10 +21,12 @@ export type PosterSettings = {
   seaLevel: number; seaInk: number
   /** Playback speed and dither cell size in CSS pixels. */
   speed: number; cell: number
+  /** Which print: the tunnel, or the pipe. */
+  scene: "tunnel" | "pipe"
 }
 
 type Knob = { label: string; min: number; max: number; step: number; group: string }
-export const posterKnobs: Record<keyof PosterSettings, Knob> = {
+export const posterKnobs: Record<Exclude<keyof PosterSettings, "scene">, Knob> = {
   eyeX: { label: "Eye x", min: -.6, max: .6, step: .01, group: "Tunnel" },
   eyeY: { label: "Eye y", min: -.6, max: .7, step: .01, group: "Tunnel" },
   depth: { label: "Depth", min: .1, max: .8, step: .01, group: "Tunnel" },
@@ -53,14 +55,21 @@ export const posterPresets: Record<string, PosterSettings> = {
     wallInk: .24, bandInk: .16, distanceInk: .42, eyeGlow: .295,
     sphereX: -.52, sphereY: -.25, sphereRadius: 0, sphereHalo: .075,
     seaLevel: .12, seaInk: .92,
-    speed: .12, cell: 1,
+    speed: .12, cell: 1, scene: "tunnel",
   },
   Vortex: {
     eyeX: .6, eyeY: 0, depth: .49, ringFrequency: 3.5, ringSpeed: 14, warp: 1.7, streak: 1.6,
     wallInk: .51, bandInk: .57, distanceInk: 0, eyeGlow: .055,
     sphereX: -.49, sphereY: .21, sphereRadius: 0, sphereHalo: .175,
     seaLevel: -.77, seaInk: .8,
-    speed: .12, cell: 1,
+    speed: .12, cell: 1, scene: "tunnel",
+  },
+  Pipe: {
+    eyeX: .12, eyeY: -.02, depth: .5, ringFrequency: 3, ringSpeed: 6, warp: 0, streak: .5,
+    wallInk: .45, bandInk: .5, distanceInk: .3, eyeGlow: .1,
+    sphereX: 0, sphereY: 0, sphereRadius: 0, sphereHalo: 0,
+    seaLevel: 0, seaInk: 0,
+    speed: .12, cell: 1, scene: "pipe",
   },
 }
 export const posterDefaults: PosterSettings = posterPresets.Shore!
@@ -79,7 +88,7 @@ export const posterSettings = {
   /** A fresh print: every knob somewhere in its travel, the sphere present two times in three. */
   randomize() {
     const draw = (knob: Knob) => { const value = knob.min + Math.random() * (knob.max - knob.min); return Math.round(value / knob.step) * knob.step }
-    const next = Object.fromEntries((Object.keys(posterKnobs) as (keyof PosterSettings)[]).map(key => [key, draw(posterKnobs[key])])) as PosterSettings
+    const next = { ...settings, ...Object.fromEntries((Object.keys(posterKnobs) as (keyof typeof posterKnobs)[]).map(key => [key, draw(posterKnobs[key])])) } as PosterSettings
     next.speed = posterDefaults.speed
     next.cell = Math.random() < .7 ? 1 : 2
     if (Math.random() < .33) next.sphereRadius = 0
