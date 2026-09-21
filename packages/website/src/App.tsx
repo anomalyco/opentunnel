@@ -28,14 +28,12 @@ function Install() {
   </div>
 }
 
-/** The wordmark as a tunnel mouth. Set like FitText (glyphs stretched to the box), but drawn here so the O's top and
- * bottom tangents can run on as rails in the same coordinates as the letters, out past the left edge of the screen,
- * and so mist can be hung from the O's counter. The O is measured with a canvas in the same resolved font. */
+/** The wordmark as a tunnel mouth. Set like FitText (glyphs stretched to the box), drawn here so mist can be hung
+ * from the O's counter, which is measured with a canvas in the same resolved font. */
 const WORDMARK = "OPENTUNNEL", WIDTH = 1000, ASPECT = 4.6, CAP = .867
 function Masthead() {
   const host = useRef<HTMLDivElement>(null), svg = useRef<SVGSVGElement>(null), text = useRef<SVGTextElement>(null)
   const height = WIDTH / ASPECT, fontSize = height / CAP
-  const [o, setO] = useState({ top: 0, bottom: height, centre: WIDTH * .049 })
   const [mist, setMist] = useState<{ left: number; top: number; width: number; height: number; source: [number, number] } | null>(null)
   useEffect(() => {
     const element = host.current, root = svg.current, glyphs = text.current
@@ -46,7 +44,6 @@ function Masthead() {
       const first = context.measureText("O"), all = context.measureText(WORDMARK)
       const stretch = WIDTH / all.width
       const next = { top: height - first.actualBoundingBoxAscent, bottom: height + first.actualBoundingBoxDescent, centre: first.width / 2 * stretch }
-      setO(next)
       // The mist rises from the O's counter and may wander anywhere: the canvas spans the viewport, from well
       // above the mark to a little below it.
       const ctm = root.getScreenCTM(), box = element.getBoundingClientRect()
@@ -64,9 +61,6 @@ function Masthead() {
     {mist && <Mist className="mist" style={{ left: mist.left, top: mist.top, width: mist.width, height: mist.height }} source={mist.source} />}
     <svg ref={svg} className="wordmark" viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <text ref={text} x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={fontSize} fill="currentColor">{WORDMARK}</text>
-      {/* Rails: the O's tangents, run out to the left, well past the viewport. */}
-      <line className="rail" x1={-20000} x2={o.centre} y1={o.top + 1} y2={o.top + 1} />
-      <line className="rail" x1={-20000} x2={o.centre} y1={o.bottom - 1} y2={o.bottom - 1} />
     </svg>
   </div>
 }
