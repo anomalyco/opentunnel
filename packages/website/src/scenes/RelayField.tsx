@@ -39,6 +39,7 @@ export function RelayField({ fronts, now, ink = "#e8e4dc", className }: { fronts
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0)
     const u = (name: string) => gl.getUniformLocation(program, name)
     const uniforms = { resolution: u("resolution"), now: u("now"), time: u("time"), frontCount: u("frontCount"), fronts: u("fronts") }
+    const cellLocation = u("cell")
     gl.uniform3fv(u("ink"), hex(ink))
     gl.clearColor(0, 0, 0, 0)
 
@@ -83,6 +84,7 @@ export function RelayField({ fronts, now, ink = "#e8e4dc", className }: { fronts
       element.width = width; element.height = height
       gl.viewport(0, 0, width, height)
       gl.uniform2f(uniforms.resolution, width, height)
+      gl.uniform1f(cellLocation, 1.5 * scale)
     }
     // Draw only while the field is alive: while a dot is inside, and until the last burn has cooled.
     const start = performance.now()

@@ -31,15 +31,17 @@ export const nodeIcons = {
 export type NodeIcon = keyof typeof nodeIcons
 
 /** PluginFile's anatomy with a choosable icon: outer border, inset rule at 3px, icon + name, trailing content. */
-export function NodeCard({ name, icon = "plug", armored = false, color, iconColor, frameColor, insetColor, children, className = "", ...props }: Omit<HTMLMotionProps<"section">, "color" | "style" | "children"> & {
+export function NodeCard({ name, icon = "plug", armored = false, color, iconColor, frameColor, insetColor, background, children, className = "", ...props }: Omit<HTMLMotionProps<"section">, "color" | "style" | "children"> & {
   name: ReactNode; icon?: NodeIcon
   /** A hatched band between border and inset rule: a sealed box. */
   armored?: boolean
   color?: MotionValue<string>; iconColor?: MotionValue<string>
   /** Live frame inks (outer border and inset rule); omit for the resting diagram inks. */
   frameColor?: MotionValue<string>; insetColor?: MotionValue<string>; children?: ReactNode
+  /** Live fill; a card can print solid when it acts. */
+  background?: MotionValue<string>
 }) {
-  return <motion.section {...props} className={`diagram-frame node-card ${className}`} data-armored={armored || undefined} style={{ borderColor: frameColor }}>
+  return <motion.section {...props} className={`diagram-frame node-card ${className}`} data-armored={armored || undefined} style={{ borderColor: frameColor, backgroundColor: background }}>
     {armored && <span className="node-card-armor" aria-hidden="true" />}
     <motion.span className="node-card-inset" style={{ borderColor: insetColor }} data-node-inset="" aria-hidden="true" />
     <motion.div className="node-card-name" style={{ color }}>
