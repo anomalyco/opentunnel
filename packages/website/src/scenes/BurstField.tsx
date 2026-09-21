@@ -5,9 +5,9 @@ import { burstFragmentSource, burstVertexSource } from "./burstFieldShader"
 const hex = (value: string): [number, number, number] => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16) / 255) as [number, number, number]
 
 /** A card's interior lit from one socket: the ember when light leaves it (`mode: "ember"`), the flood when
- * light lands (`mode: "flood"`). `at` are the scene seconds of each event; `clock` is the scene clock. */
-export function BurstField({ clock, at, origin, mode, duration = mode === "ember" ? 2.2 : 1.8, ink = "#e8e4dc", className }: {
-  clock: MotionValue<number>; at: readonly number[]; origin: readonly [number, number]; mode: "ember" | "flood"; duration?: number; ink?: string; className?: string
+ * light lands (`mode: "strike"`). `at` are the scene seconds of each event; `clock` is the scene clock. */
+export function BurstField({ clock, at, origin, mode, duration = mode === "ember" ? 1.6 : 1.4, ink = "#e8e4dc", className }: {
+  clock: MotionValue<number>; at: readonly number[]; origin: readonly [number, number]; mode: "ember" | "strike"; duration?: number; ink?: string; className?: string
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const events = at.join(",")

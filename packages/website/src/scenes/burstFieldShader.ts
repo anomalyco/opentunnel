@@ -1,8 +1,8 @@
 // A card's interior when light leaves it or lands on it: the relay field's texture, as a burst
 // from one socket. `origin` is the socket in card space (0..1 across, 0..1 up); `age` is seconds
 // since the event, `duration` how long the burst lives. Mode 0 is the ember (light leaving: a
-// warm pool at the socket that seeps outward and cools); mode 1 is the flood (light landing: a
-// front that sweeps across the card from the socket and drains). Premultiplied alpha over the card.
+// warm pool at the socket that seeps outward and cools); mode 1 is the strike (light landing: a
+// small bright burst at the socket that fades). Premultiplied alpha over the card.
 
 export const burstVertexSource = `#version 300 es
 in vec2 position;
@@ -46,17 +46,15 @@ void main() {
 
   float field;
   if (mode < 0.5) {
-    // Ember: bright at the socket at once, seeping outward as it cools.
-    float radius = 0.35 + 1.4 * sqrt(t);
-    float core = smoothstep(0.0, 0.04, t) * pow(1.0 - t, 0.9);
-    field = core * pow(max(0.0, 1.0 - d / radius), 2.2) * 0.9;
+    // Ember: warm at the socket at once, seeping a little outward as it cools quickly.
+    float radius = 0.35 + 0.9 * sqrt(t);
+    float core = smoothstep(0.0, 0.04, t) * pow(1.0 - t, 1.8);
+    field = core * pow(max(0.0, 1.0 - d / radius), 2.2) * 0.55;
   } else {
-    // Flood: a front sweeps from the socket across the card, the interior filling behind it, then drains.
-    float reach = (aspect + 0.6) * smoothstep(0.0, 0.55, t);
-    float front = exp(-pow((d - reach) * 5.0, 2.0)) * 0.7;
-    float filled = smoothstep(reach, reach - 0.9, d) * 0.45;
-    float drain = 1.0 - smoothstep(0.45, 1.0, t);
-    field = (front + filled) * drain;
+    // Strike: a small burst at the socket, brightest at once, growing a little as it fades.
+    float radius = 0.5 + 0.7 * sqrt(t);
+    float fade = pow(1.0 - t, 1.6);
+    field = fade * pow(max(0.0, 1.0 - d / radius), 2.0) * 0.8;
   }
 
   // The contents show only as hatching in the light: shape, never text.

@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react"
-import { motion, useMotionValue, useMotionValueEvent, useTransform, type MotionValue } from "motion/react"
+import { useMotionValue, useMotionValueEvent, useTransform, type MotionValue } from "motion/react"
 import { DiagramFrame, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
 import { CardGlow, Pulse, pulseEase, pulseGatherMs } from "../graphics/Pulse"
@@ -30,20 +30,29 @@ export type Crossing = { enter: number; leave: number; read: number }
 /** The frame's 1px border, traced along its centre. */
 const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
 
-/** A wireframe globe turning: three meridians slide across the disc. Driven by the scene clock at a rate that
- * completes a whole number of meridian spacings per loop, so the turn never skips when the scene restarts. */
+/** A wireframe globe turning slowly left to right. Six meridians; only those on the near hemisphere are drawn, each
+ * as a half-ellipse arc from pole to pole, so a line enters at the left limb, crosses the disc and leaves at the right.
+ * Driven by the scene clock at a rate that completes whole meridian spacings per loop, so the turn never skips. */
 function Globe({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
-  const spacing = Math.PI / 3
-  const rate = Math.round(1.05 * tunnelScore.duration / spacing) * spacing / tunnelScore.duration
-  const r = 6.5
-  const rx = (k: number) => useTransform(clock, t => reduced ? r * Math.abs(Math.cos(k * spacing + .4)) : r * Math.abs(Math.cos(t * rate + k * spacing)))
-  const [a, b, c] = [rx(0), rx(1), rx(2)]
+  const r = 6.5, cx = 8, cy = 8, count = 6, spacing = 2 * Math.PI / count
+  const rate = Math.round(.52 * tunnelScore.duration / spacing) * spacing / tunnelScore.duration
+  const meridians = useTransform(clock, t => {
+    const turn = reduced ? .3 : t * rate
+    let d = ""
+    for (let k = 0; k < count; k++) {
+      const lon = turn + k * spacing
+      if (Math.cos(lon) <= 0) continue
+      const rx = r * Math.abs(Math.sin(lon)), sweep = Math.sin(lon) > 0 ? 1 : 0
+      d += `M${cx} ${cy - r}A${rx} ${r} 0 0 ${sweep} ${cx} ${cy + r}`
+    }
+    return d
+  })
+  const path = useRef<SVGPathElement>(null)
+  useMotionValueEvent(meridians, "change", d => path.current?.setAttribute("d", d))
   return <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round">
-    <circle cx={8} cy={8} r={r} />
-    <path d={`M${8 - r} 8h${2 * r}`} />
-    <motion.ellipse cx={8} cy={8} ry={r} style={{ rx: a }} />
-    <motion.ellipse cx={8} cy={8} ry={r} style={{ rx: b }} />
-    <motion.ellipse cx={8} cy={8} ry={r} style={{ rx: c }} />
+    <circle cx={cx} cy={cy} r={r} />
+    <path d={`M${cx - r} ${cy}h${2 * r}`} />
+    <path ref={path} d={meridians.get()} />
   </svg>
 }
 
@@ -69,7 +78,7 @@ function Route({ index, clock, reduced }: { index: number; clock: MotionValue<nu
   // The destination flashes as the bytes land and cools over the next second.
   const inks = usePluginActivity(clock, { dispatches: [leg.contact], reduced })
   return <NodeCard name={route.name} icon={routeIcons[route.icon]} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
-    {!reduced && <BurstField clock={clock} at={[leg.contact]} origin={[0, .5]} mode="flood" className="tunnel-card-field" />}
+    {!reduced && <BurstField clock={clock} at={[leg.contact]} origin={[0, .5]} mode="strike" className="tunnel-card-field" />}
     <span className="node-card-detail">{route.target}</span>
   </NodeCard>
 }
