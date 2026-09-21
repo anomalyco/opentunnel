@@ -29,8 +29,7 @@ p { margin: 0; }
 /* Chapters: a numbered small-caps heading over a rule, then the matter. */
 .chapter { padding-top: 28px; border-top: 1px solid #292929; }
 .chapter + .chapter { margin-top: 88px; }
-.chapter h2 { display: flex; align-items: baseline; gap: 18px; margin: 0 0 22px; font-size: 12px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase; color: #e7e5e4; }
-.chapter h2 > span { color: #6f6f6f; }
+.chapter h2 { margin: 0 0 22px; font-size: 12px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase; color: #a8a8a8; }
 .chapter p + .code, .chapter p + .diagram, .chapter p + .columns { margin-top: 32px; }
 .chapter h2 + .columns { margin-top: 32px; }
 code { font-family: var(--font-mono); color: #e7e5e4; }
@@ -38,16 +37,18 @@ strong { font-weight: 600; color: #ecebe9; }
 
 .diagram { width: 100%; margin-top: 40px; }
 
-.steps { margin: 0; padding: 0; list-style: none; counter-reset: step; max-width: 720px; }
-.steps li { position: relative; padding-left: 44px; counter-increment: step; }
-.steps li + li { margin-top: 18px; }
-.steps li::before { content: "0" counter(step); position: absolute; left: 0; top: 0; color: #6f6f6f; font-size: 11px; line-height: inherit; letter-spacing: .1em; }
+.steps { margin: 0; padding: 0; list-style: none; max-width: 640px; }
+.steps li + li { margin-top: 14px; }
 
 .columns { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 32px; align-items: start; }
 .note { margin-top: 20px; color: #a8a8a8; font-size: 13px; line-height: 1.7; }
 
 .code { position: relative; margin: 0; padding: 20px 20px 22px; border: 1px solid #383838; color: #d6d6d6; font: 13px/1.7 var(--font-mono), monospace; tab-size: 2; }
 .code code { display: block; overflow-x: auto; font: inherit; color: inherit; }
+/* Highlighting by dimness, not colour: what you typed is bright, what came back is dim, punctuation dimmer. */
+.tok-cmd { color: #ecebe9; }
+.tok-out { color: #8a8a8a; }
+.tok-dim { color: #5c5c5c; }
 .code[data-filename] { border-top-color: transparent; margin-top: 8px; }
 .code[data-filename]::before { content: attr(data-filename); position: absolute; top: -.5px; left: 14px; transform: translateY(-50%); padding: 0 6px; background: #000; color: #858585; font: 400 11px/1.5 var(--font-mono), monospace; letter-spacing: .06em; z-index: 1; }
 .code[data-filename]::after { content: ""; position: absolute; top: -.5px; left: 0; right: 0; border-top: 1px solid #383838; }

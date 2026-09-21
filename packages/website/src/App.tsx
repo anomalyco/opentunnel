@@ -8,6 +8,10 @@ const github = "https://github.com/anomalyco/opentunnel"
 const docs = `${github}/tree/master/packages/cli`
 const npm = "https://www.npmjs.com/package/opentunnel"
 
+/** Terminal lines: what you typed is bright, what came back is dim. */
+const cmd = (text: string) => <><span className="tok-dim">$ </span><span className="tok-cmd">{text}</span>{"\n"}</>
+const out = (text: string) => <><span className="tok-out">{text}</span>{"\n"}</>
+
 /** Dev only: `?hero=poster` shows the earlier portrait print in place of the banner. */
 const hero = import.meta.env.DEV ? new URLSearchParams(location.search).get("hero") : null
 
@@ -31,50 +35,52 @@ export function App() {
       </section>
 
       <section className="chapter">
-        <h2><span>01</span>Encrypted by default</h2>
+        <h2>Encrypted by default</h2>
         <p className="measure">The relay reads the hostname and forwards the encrypted bytes. TLS ends on your machine.</p>
         <div className="diagram"><TunnelScene /></div>
       </section>
 
       <section className="chapter">
-        <h2><span>02</span>How it works</h2>
-        <ol className="steps">
+        <h2>How it works</h2>
+        <ul className="steps">
           <li><code>opentunnel create</code> reserves <code>&lt;id&gt;.opentunnel.xyz</code> and generates a private key on your machine. It never leaves.</li>
           <li>A wildcard certificate is issued for it. The relay sees only the public half.</li>
           <li>Your machine holds an encrypted bridge to the relay.</li>
           <li>The relay reads the hostname from the TLS handshake and forwards the encrypted stream.</li>
           <li>Your machine terminates TLS and proxies to the local app.</li>
-        </ol>
+        </ul>
       </section>
 
       <section className="chapter">
-        <h2><span>03</span>Using it</h2>
+        <h2>Using it</h2>
         <div className="columns">
-          <pre className="code" data-filename="terminal"><code>{`$ opentunnel create
-Creating tunnel...
-Generating private key...
-Requesting certificate...
-Tunnel is ready.
-Created https://f7a2mx4kq9vn.opentunnel.xyz
-
-$ opentunnel route add opencode 127.0.0.1:47365
-Added route opencode.f7a2mx4kq9vn.opentunnel.xyz -> 127.0.0.1:47365
-
-$ opentunnel route add api 127.0.0.1:3000
-$ opentunnel route list
-api.f7a2mx4kq9vn.opentunnel.xyz       →  127.0.0.1:3000
-opencode.f7a2mx4kq9vn.opentunnel.xyz  →  127.0.0.1:47365`}</code></pre>
+          <pre className="code" data-filename="terminal"><code>
+{cmd("opentunnel create")}
+{out("Creating tunnel...")}
+{out("Generating private key...")}
+{out("Requesting certificate...")}
+{out("Tunnel is ready.")}
+{out("Created https://f7a2mx4kq9vn.opentunnel.xyz")}
+{"\n"}
+{cmd("opentunnel route add opencode 127.0.0.1:47365")}
+{out("Added route opencode.f7a2mx4kq9vn.opentunnel.xyz -> 127.0.0.1:47365")}
+{"\n"}
+{cmd("opentunnel route add api 127.0.0.1:3000")}
+{cmd("opentunnel route list")}
+{out("api.f7a2mx4kq9vn.opentunnel.xyz       →  127.0.0.1:3000")}
+{out("opencode.f7a2mx4kq9vn.opentunnel.xyz  →  127.0.0.1:47365")}</code></pre>
           <div>
-            <pre className="code" data-filename="~/.config/opentunnel/default.toml"><code>{`[routes]
-opencode = "127.0.0.1:47365"
-api = "127.0.0.1:3000"`}</code></pre>
+            <pre className="code" data-filename="~/.config/opentunnel/default.toml"><code>
+<span className="tok-dim">[</span>routes<span className="tok-dim">]</span>{"\n"}
+opencode <span className="tok-dim">= "</span>127.0.0.1:47365<span className="tok-dim">"</span>{"\n"}
+api <span className="tok-dim">= "</span>127.0.0.1:3000<span className="tok-dim">"</span></code></pre>
             <p className="note">Routes are subdomains under one wildcard certificate. No path routing. Keys and certificates live outside the config.</p>
           </div>
         </div>
       </section>
 
       <section className="chapter">
-        <h2><span>04</span>Privacy</h2>
+        <h2>Privacy</h2>
         <dl className="limits">
           <div>
             <dt>The relay can't read your traffic.</dt>

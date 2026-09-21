@@ -7,9 +7,9 @@ const hex = (value: string): [number, number, number] => [1, 3, 5].map(i => pars
 const scalarUniforms = ["depth", "ringFrequency", "ringSpeed", "wallInk", "bandInk", "distanceInk", "eyeGlow", "sphereRadius", "sphereHalo", "seaLevel", "seaInk"] as const satisfies readonly (keyof PosterSettings)[]
 
 /** The poster's printed image: a WebGL tunnel dithered to two inks. Pauses offscreen and in hidden tabs; reduced motion prints one still frame.
- * `fade` dissolves the print into paper along x: no ink left of the first fraction, the full print right of the second. */
-export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className }: { ink?: string; paper?: string; fade?: readonly [number, number]; className?: string }) {
-  const [fadeStart, fadeEnd] = fade ?? [0, 0]
+ * `fade` dissolves the print into paper along an axis: no ink before `from`, the full print after `to` (fractions; x runs left to right, y top to bottom). */
+export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className }: { ink?: string; paper?: string; fade?: { axis: "x" | "y"; from: number; to: number }; className?: string }) {
+  const fadeStart = fade?.from ?? 0, fadeEnd = fade?.to ?? 0, fadeAxis = fade?.axis === "y" ? 1 : 0
   const canvas = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className 
     const scalars = Object.fromEntries(scalarUniforms.map(name => [name, location(name)])) as Record<typeof scalarUniforms[number], WebGLUniformLocation | null>
     gl.uniform3fv(location("ink"), hex(ink))
     gl.uniform3fv(location("paper"), hex(paper))
-    gl.uniform2f(location("fade"), fadeStart, fadeEnd)
+    gl.uniform3f(location("fade"), fadeStart, fadeEnd, fadeAxis)
     const warp = location("warpAmount"), streak = location("streakAmount")
 
     // Dither cells are CSS pixels: render at the display's density, capped for battery.
@@ -97,7 +97,7 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className 
       document.removeEventListener("visibilitychange", visibility); media.removeEventListener("change", run)
       gl.deleteProgram(program); gl.deleteBuffer(quad)
     }
-  }, [ink, paper, fadeStart, fadeEnd])
+  }, [ink, paper, fadeStart, fadeEnd, fadeAxis])
 
   return <canvas ref={canvas} className={className} aria-hidden="true" />
 }

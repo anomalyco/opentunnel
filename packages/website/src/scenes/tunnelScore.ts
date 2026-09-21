@@ -1,10 +1,10 @@
-import { after, at, clip, compile, hold, parallel, scenePace } from "../graphics/sceneTiming"
+import { at, clip, compile, hold, parallel, scenePace, type Moment } from "../graphics/sceneTiming"
 import { pulseTiming } from "../graphics/pulseTiming"
 import { pulseLandingMs } from "../graphics/Pulse"
 
-// The hero's story, in seconds: a visitor's request leaves the browser, the relay
-// reads only the hostname off the handshake and passes the sealed bytes on, and
-// the matching local app is the first thing to open them. Three routes, one clock.
+// The hero's story, in seconds: a visitor's request leaves the browser, passes
+// through the relay (which scans it and sees only its shape) and lands on the
+// matching local app, the first thing to open it. Three routes, one clock.
 
 export const tunnelRoutes = [
   { id: "opencode", name: "opencode", target: "localhost:47365", icon: "terminal" },
@@ -22,14 +22,12 @@ const signal = (travel: number) => {
   })
 }
 
-const requestTravel = .9, hopTravel = .8
+const travel = 2.2
 
-function leg(start: number | ReturnType<typeof after>) {
-  const request = at(start, signal(requestTravel))
-  // The relay reads the hostname, then the sealed bytes leave its far socket.
-  const hop = at(after(request.moments.contact, scenePace.react), signal(hopTravel))
-  const read = at(hop.moments.contact, hold(scenePace.read + .2))
-  return { request, hop, read }
+function leg(start: number | Moment) {
+  const pulse = at(start, signal(travel))
+  const read = at(pulse.moments.contact, hold(scenePace.read + .3))
+  return { pulse, read }
 }
 
 const first = leg(.4)
@@ -38,17 +36,15 @@ const third = leg(second.read.moments.end)
 const rest = at(third.read.moments.end, hold(.6))
 
 export const tunnelScore = compile(parallel({
-  request0: first.request, hop0: first.hop, read0: first.read,
-  request1: second.request, hop1: second.hop, read1: second.read,
-  request2: third.request, hop2: third.hop, read2: third.read,
+  pulse0: first.pulse, read0: first.read,
+  pulse1: second.pulse, read1: second.read,
+  pulse2: third.pulse, read2: third.read,
   rest,
 }))
 
 const m = tunnelScore.moments
-export const tunnelLegs = [
-  { request: m.request0, hop: m.hop0 },
-  { request: m.request1, hop: m.hop1 },
-  { request: m.request2, hop: m.hop2 },
-] as const
+export const tunnelLegs = [m.pulse0, m.pulse1, m.pulse2] as const
+export const tunnelTravel = travel * 1000
 
-export const tunnelTravel = { request: requestTravel * 1000, hop: hopTravel * 1000 }
+/** Pulse flight is eased in and out (cubic); where along the flight a path fraction is reached. */
+export const flightTimeAt = (fraction: number) => fraction < .5 ? Math.cbrt(fraction / 4) : 1 - Math.cbrt(2 * (1 - fraction)) / 2
