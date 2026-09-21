@@ -115,7 +115,7 @@ pre { margin: 0; overflow-x: auto; color: #fff; font: clamp(14px, 2vw, 17px)/1.8
 .privacy-list dd { margin: 0; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; opacity: .55; }
 
 /* The diagram takes the old drawing's slot and may run a little wider than the column, centred on it. */
-.diagram-wrap { --bleed: min(940px, 100vw - 48px); width: var(--bleed); margin: var(--s4) 0 0 calc((100% - var(--bleed)) / 2); overflow-x: auto; }
+.diagram-wrap { --bleed: min(940px, 100vw - 48px); width: var(--bleed); margin: var(--s4) 0 0 calc((100% - var(--bleed)) / 2); }
 
 /* Dev: the red print above the page (`?hero=banner`). */
 .banner { margin-bottom: -4vh; }

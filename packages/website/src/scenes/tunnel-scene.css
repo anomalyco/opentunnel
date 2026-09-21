@@ -1,4 +1,4 @@
-.tunnel-scene { position: relative; container-type: inline-size; margin: 0; padding-top: 0; color: #aaa; font: 13px/1.5 var(--font-mono), monospace; font-variant-numeric: tabular-nums lining-nums; }
+.tunnel-scene { position: relative; container-type: inline-size; margin: 0; padding: 0 0 28px; color: #aaa; font: 13px/1.5 var(--font-mono), monospace; font-variant-numeric: tabular-nums lining-nums; }
 .tunnel-panels { position: relative; display: grid; grid-template-columns: 150px 180px minmax(0, 1fr); gap: 40px; align-items: center; padding-top: 0; }
 .tunnel-column { min-width: 0; }
 .tunnel-routes { display: grid; gap: 10px; padding: 16px; }
@@ -28,3 +28,9 @@
 /* The machine's name sits above its box, as the old drawing had it. */
 .tunnel-machine { position: relative; margin-top: 24px; }
 .tunnel-machine-label { position: absolute; bottom: 100%; left: 0; margin-bottom: 8px; color: #aaa; font: 400 12px/16px var(--font-text), monospace; }
+
+/* Sound: the whole diagram is the switch; a small speaker in its corner says which way it is. */
+.tunnel-panels { cursor: pointer; }
+.tunnel-sound { position: absolute; right: 0; bottom: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: #fff; opacity: .35; font: 400 11px/16px var(--font-text), monospace; cursor: pointer; transition: opacity .2s; }
+.tunnel-sound:hover, .tunnel-scene[data-sound] .tunnel-sound { opacity: .7; }
+.tunnel-sound:focus-visible { outline: 1px solid #fff; outline-offset: 4px; }

@@ -8,6 +8,9 @@ import { roundedWire } from "../graphics/roundedWire"
 import { useScenePlayback } from "../graphics/useScenePlayback"
 import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel, viscousFlight } from "./tunnelScore"
 import { RelayField, type RelayFront } from "./RelayField"
+import { useTunnelSounds } from "./tunnelSounds"
+import { toggleSounds, useSoundReady, useSounds } from "../sound/sounds"
+import { SpeakerHigh, SpeakerSlash } from "@phosphor-icons/react"
 import { BurstField } from "./BurstField"
 import { Globe } from "./Globe"
 import { ArrowsLeftRight, Stack, Terminal, WebhooksLogo } from "@phosphor-icons/react"
@@ -222,8 +225,15 @@ export function TunnelScene() {
     if (!import.meta.env.DEV) return
     ;(window as unknown as { __tunnel?: unknown }).__tunnel = { seek: player.seek, crossings, legs: tunnelLegs, duration: tunnelScore.duration }
   }, [player.seek, crossings])
-  return <figure ref={player.host} className="tunnel-scene" aria-label="A visitor's browser sends encrypted traffic through the relay, which scans it without being able to read it, to one of three apps on your machine. Only your machine decrypts it.">
-    <div ref={panels} className="tunnel-panels">
+  // Sound: a click on the diagram turns it on (visitors start muted); the track follows the same clock as the picture.
+  const sounds = useSounds(), ready = useSoundReady()
+  useTunnelSounds(player.clock, player.host, player.active && !player.reduced, crossings)
+  const sounding = sounds && ready
+  return <figure ref={player.host} className="tunnel-scene" data-sound={sounding || undefined} aria-label="A visitor's browser sends encrypted traffic through the relay, which scans it without being able to read it, to one of three apps on your machine. Only your machine decrypts it.">
+    <button type="button" className="tunnel-sound" onClick={toggleSounds} aria-pressed={sounding} aria-label={sounding ? "Turn the diagram's sound off" : "Turn the diagram's sound on"}>
+      {sounding ? <SpeakerHigh size={13} /> : <SpeakerSlash size={13} />}<span>{sounding ? "sound on" : "sound off"}</span>
+    </button>
+    <div ref={panels} className="tunnel-panels" onClick={event => { if (!(event.target as HTMLElement).closest("a, button")) toggleSounds() }}>
       <div className="tunnel-column tunnel-visitor"><Browser clock={player.clock} reduced={player.reduced} /></div>
       <div className="tunnel-column tunnel-relay"><Relay clock={player.clock} reduced={player.reduced} crossings={crossings} fronts={fronts} now={now} /></div>
       <DiagramFrame as="section" className="tunnel-machine" data-machine="" aria-label="Your machine">
