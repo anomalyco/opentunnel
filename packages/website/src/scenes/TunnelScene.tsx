@@ -3,7 +3,7 @@ import { useMotionValue, useMotionValueEvent, useTransform, type MotionValue } f
 import { DiagramFrame, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
 import { CardGlow, Pulse, pulseEase, pulseGatherMs } from "../graphics/Pulse"
-import { pluginActivity, usePluginActivity } from "../graphics/pluginActivity"
+import { pluginActivity, pluginActivityAt, usePluginActivity } from "../graphics/pluginActivity"
 import { roundedWire } from "../graphics/roundedWire"
 import { useScenePlayback } from "../graphics/useScenePlayback"
 import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel, viscousFlight } from "./tunnelScore"
@@ -75,8 +75,11 @@ function Relay({ clock, reduced, crossings, fronts, now }: { clock: MotionValue<
 
 function Route({ index, clock, reduced }: { index: number; clock: MotionValue<number>; reduced: boolean }) {
   const route = tunnelRoutes[index]!, leg = tunnelLegs[index]!
-  // The destination flashes as the bytes land and cools over the next second.
-  const inks = usePluginActivity(clock, { dispatches: [leg.contact], reduced })
+  // The destination flashes as the bytes land and cools over the next second; its icon flashes and decays with the name.
+  const activity = { dispatches: [leg.contact], reduced }
+  const inks = usePluginActivity(clock, activity)
+  const { rest, active } = pluginActivity.icon
+  inks.iconColor = useTransform(clock, time => { const n = Math.round(rest + pluginActivityAt(time, activity).flash * (active - rest)); return `rgb(${n} ${n} ${n})` })
   return <NodeCard name={route.name} icon={routeIcons[route.icon]} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
     {!reduced && <BurstField clock={clock} at={[leg.contact]} origin={[0, .5]} mode="strike" className="tunnel-card-field" />}
     <span className="node-card-detail">{route.target}</span>
@@ -147,7 +150,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
       const length = path.getTotalLength()
       const enter = stacked ? 0 : fractionAtX(path, length, relay.x), leave = stacked ? 0 : fractionAtX(path, length, relay.x + relay.width)
       // Through the relay the bytes move as through something thick: that stretch takes four times its share.
-      const ease = stacked ? pulseEase : viscousFlight(enter, leave, 4)
+      const ease = stacked ? pulseEase : viscousFlight(enter, leave, 5)
       return { d, path, length, enter, leave, ease }
     })
     return { stacked, browserOut, relayIn, relayOut, routeIn, legs, wires: { request: `M${browserOut.x} ${browserOut.y}L${relayIn.x} ${relayIn.y}`, hops: routes.map(box => `M${relayOut.x} ${relayOut.y}${hop(box)}`) } }

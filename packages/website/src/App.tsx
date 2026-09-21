@@ -3,6 +3,7 @@ import { Banner } from "./banner/Banner"
 import { PosterControls } from "./poster/PosterControls"
 import { TunnelScene } from "./scenes/TunnelScene"
 import { FitText } from "./poster/FitText"
+import { Mist } from "./Mist"
 import { monoTables, theme } from "./theme"
 
 const github = "https://github.com/anomalyco/opentunnel"
@@ -46,7 +47,12 @@ export function App() {
     {hero === "banner" && <Banner />}
 
     <main>
-      <FitText className="wordmark" capHeight={.71} aspect={5} weight={.028} fontWeight={800} stretch>OPENTUNNEL</FitText>
+      <div className="masthead">
+        {/* The O is a tunnel mouth: its top and bottom run out to the left edge of the screen, and mist drifts out of it. */}
+        <span className="rails" aria-hidden="true" />
+        <Mist className="mist" />
+        <FitText className="wordmark" aspect={4.6} weight={.004} stretch>OPENTUNNEL</FitText>
+      </div>
       <h1>public urls for anything</h1>
 
       <div className="diagram-wrap"><div className="diagram"><TunnelScene /></div></div>

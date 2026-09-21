@@ -47,15 +47,20 @@ export const tunnelLegs = [m.pulse0, m.pulse1, m.pulse2] as const
 export const tunnelTravel = travel * 1000
 
 /** A flight that hits something thick in one stretch of its path, like a round entering water: it arrives at
- * speed, decelerates hard over a short distance inside the wall, crawls, and gathers speed again over a longer
- * run to the far wall. Speed is a smooth profile over path distance, integrated into a table; no kinks. */
+ * speed, is checked hard just inside the wall (the check overshoots below the crawl and rebounds, a damped
+ * wobble), drifts, then gathers speed progressively over the longer run to the far wall and leaves fast.
+ * Speed is a smooth profile over path distance, integrated into a table; no kinks. */
 export function viscousFlight(from: number, to: number, drag: number): PulseEase {
   const N = 1024
-  const span = to - from
+  const span = to - from, crawl = 1 / drag
   const speed = (p: number) => {
-    const entering = smooth((p - from) / (span * .18)), leaving = smooth((p - (to - span * .55)) / (span * .55))
-    const dip = entering * (1 - leaving)
-    return 1 - (1 - 1 / drag) * dip
+    const u = (p - from) / span
+    const checked = smooth(u / .1)
+    const gathering = Math.pow(Math.max(0, Math.min(1, (u - .35) / .65)), 2.4)
+    const inside = checked * (1 - gathering)
+    const since = Math.max(0, u - .1)
+    const wobble = -crawl * .55 * Math.exp(-5 * since) * Math.cos(2 * Math.PI * 2.2 * since)
+    return Math.max(.06, 1 - (1 - crawl) * inside + wobble * inside)
   }
   // Cumulative time over distance, normalised to 1.
   const times = new Float64Array(N + 1)
