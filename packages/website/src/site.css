@@ -76,3 +76,10 @@ strong { font-weight: 600; color: #ecebe9; }
   .steps li { padding-left: 36px; }
   .install { font-size: 13px; }
 }
+
+/* Monotone: the page is a duotone of its own luminance (see theme.ts). The banner prints white
+   on black so the wordmark and the tunnel come out in the ink, not inverted. */
+html:has(.site[data-theme="mono"]) { background: #181617; }
+.site[data-theme="mono"] { filter: url(#monotone); background: #000; }
+.site[data-theme="mono"] .banner { --paper: #000; --ink: #fff; }
+.site[data-theme="mono"] .banner-canvas { image-rendering: auto; }

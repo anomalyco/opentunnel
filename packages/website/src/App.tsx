@@ -3,6 +3,7 @@ import { Poster } from "./poster/Poster"
 import { PosterControls } from "./poster/PosterControls"
 import { TunnelScene } from "./scenes/TunnelScene"
 import { Install } from "./Install"
+import { monoTables, theme } from "./theme"
 
 const github = "https://github.com/anomalyco/opentunnel"
 const docs = `${github}/tree/master/packages/cli`
@@ -16,7 +17,18 @@ const out = (text: string) => <><span className="tok-out">{text}</span>{"\n"}</>
 const hero = import.meta.env.DEV ? new URLSearchParams(location.search).get("hero") : null
 
 export function App() {
-  return <div className="site">
+  return <div className="site" data-theme={theme}>
+    {theme === "mono" && <svg width={0} height={0} style={{ position: "absolute" }} aria-hidden="true"><defs>
+      {/* Duotone: everything becomes its luminance, then luminance is printed as bg→ink. */}
+      <filter id="monotone" colorInterpolationFilters="sRGB">
+        <feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0 0 0 1 0" />
+        <feComponentTransfer>
+          <feFuncR type="table" tableValues={monoTables[0]} />
+          <feFuncG type="table" tableValues={monoTables[1]} />
+          <feFuncB type="table" tableValues={monoTables[2]} />
+        </feComponentTransfer>
+      </filter>
+    </defs></svg>}
     <header className="site-header">
       <a className="site-mark" href="/">OpenTunnel</a>
       <nav className="site-nav">

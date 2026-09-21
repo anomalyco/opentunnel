@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { FitText } from "../poster/FitText"
 import { TunnelArt } from "../poster/TunnelArt"
+import { theme } from "../theme"
 import "./banner.css"
 
 // Wide: paper on the left, the print dissolving in from under the wordmark's last letters.
@@ -35,7 +36,7 @@ export function Banner() {
     ? { axis: "x" as const, from: paperWidth - .14, to: paperWidth + .18 }
     : { axis: "y" as const, from: paperHeight - .12, to: paperHeight + .14 }
   return <div ref={banner} className="banner" role="img" aria-label="OpenTunnel">
-    <TunnelArt className="banner-canvas" fade={fade} />
+    <TunnelArt className="banner-canvas" fade={fade} {...theme === "mono" ? { ink: "#ffffff", paper: "#000000" } : {}} />
     <div ref={paper} className="banner-paper">
       <FitText className="banner-wordmark" aspect={3.6} weight={.03} stretch>OPENTUNNEL</FitText>
     </div>
