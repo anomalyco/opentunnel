@@ -16,11 +16,12 @@
 .tunnel-scene .node-card { min-height: 52px; padding: 10px 16px; }
 .tunnel-scene .node-card-name { font: 600 13px/18px var(--font-text), monospace; letter-spacing: .02em; text-transform: uppercase; gap: 10px; }
 /* The wordmark's face: Plex Mono at its heaviest, given weight by a same-colour stroke and condensed by a vertical stretch. */
-.tunnel-scene .node-card-label, .tunnel-machine-label > span { display: inline-block; -webkit-text-stroke: .5px currentColor; transform: scaleY(1.45); transform-origin: left center; }
+.tunnel-scene .node-card-label, .tunnel-scene .node-card-detail, .tunnel-machine-label > span { display: inline-block; -webkit-text-stroke: .5px currentColor; transform: scaleY(1.45); transform-origin: left center; }
 .tunnel-scene .node-card-icon { width: 16px; height: 16px; }
-.tunnel-scene .node-card-detail { font: 500 12px/18px var(--font-text), monospace; color: #6f6f6f; }
-.tunnel-scene .diagram-frame { border-color: #444; }
-.tunnel-scene .node-card-inset { border-color: #333; }
+.tunnel-scene .node-card-detail { font: 600 12px/18px var(--font-text), monospace; letter-spacing: .02em; color: #6f6f6f; }
+.tunnel-scene .diagram-frame { border-width: 2px; border-color: #444; }
+.tunnel-scene .node-card-inset { display: none; }
+.tunnel-relay-field { inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); }
 .tunnel-scene .node-card[data-node=relay] .node-card-name { position: relative; z-index: 1; text-shadow: 0 0 2px #000, 0 0 4px #000, 0 0 8px #000; }
 
 /* The machine's name is set into its top rule, as a code frame carries its filename. */
