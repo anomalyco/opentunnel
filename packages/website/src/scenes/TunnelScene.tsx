@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type RefObject } from "react"
-import { motion, useTransform, type MotionValue } from "motion/react"
+import { useTransform, type MotionValue } from "motion/react"
 import { DiagramFrame, DiagramHeader, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
 import { CardGlow, Pulse } from "../graphics/Pulse"
@@ -22,40 +22,21 @@ const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v$
 
 function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
   const inks = usePluginActivity(clock, { dispatches: tunnelLegs.map(leg => leg.request.start), reduced })
-  return <NodeCard name="browser" icon="globe" data-node="browser" aria-label="A visitor's browser" {...inks}>
-    <span className="node-card-detail">a visitor</span>
-  </NodeCard>
+  return <NodeCard name="browser" icon="globe" data-node="browser" aria-label="A visitor's browser" {...inks} />
 }
 
 function Relay({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
   const inks = usePluginActivity(clock, { dispatches: tunnelLegs.map(leg => leg.hop.start), running: tunnelLegs.map(leg => [leg.request.contact, leg.hop.send] as const), reduced })
-  return <NodeCard name="relay" icon="relay" data-node="relay" aria-label="The relay" {...inks}>
-    <span className="node-card-detail">cannot decrypt</span>
-  </NodeCard>
+  return <NodeCard name="relay" icon="relay" data-node="relay" aria-label="The relay, which cannot decrypt" {...inks} />
 }
 
 function Route({ index, clock, reduced }: { index: number; clock: MotionValue<number>; reduced: boolean }) {
   const route = tunnelRoutes[index]!, leg = tunnelLegs[index]!
-  const inks = usePluginActivity(clock, { dispatches: [], running: [[leg.hop.contact, leg.hop.contact + 1.1]], reduced })
+  // The relay's read shows on the destination: its name flashes as the hostname is read, and it works once the bytes land.
+  const inks = usePluginActivity(clock, { dispatches: [leg.request.contact], running: [[leg.hop.contact, leg.hop.contact + 1.1]], reduced })
   return <NodeCard name={route.name} icon={route.icon} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
     <span className="node-card-detail">{route.target}</span>
   </NodeCard>
-}
-
-/** The name the relay reads off the handshake, captioned under it: in at contact, out once the hop has left. */
-function RelayReading({ clock, x, y }: { clock: MotionValue<number>; x: number; y: number }) {
-  return <>{tunnelLegs.map((leg, index) => {
-    const opacity = useTransform(clock, seconds => {
-      const start = leg.request.contact, end = leg.hop.send + .4
-      if (seconds < start || seconds > end + .6) return 0
-      if (seconds < start + .15) return (seconds - start) / .15
-      if (seconds <= end) return 1
-      return 1 - (seconds - end) / .6
-    })
-    return <motion.text key={index} className="tunnel-label tunnel-reading" x={x} y={y} textAnchor="middle" style={{ opacity }}>
-      sni <tspan className="tunnel-reading-name">{tunnelRoutes[index]!.name}</tspan>
-    </motion.text>
-  })}</>
 }
 
 /** Wires, sockets, pulses and light over the measured frames. */
@@ -99,10 +80,14 @@ function TunnelSignals({ clock, reduced, panels }: { clock: MotionValue<number>;
   // Stacked: the hop runs down into the machine frame and along its inside edge to the route.
   const spine = (relayOut.x + machine.x) / 2
   const inside = machine.x + 16
+  // Shared segments coincide exactly (trunk, spine), so three routes read as one bus; each branch rounds only into its socket.
   const hopWire = (box: Box) => {
     const input = routeIn(box)
-    if (!stacked) return roundedWire([relayOut, { x: spine, y: relayOut.y }, { x: spine, y: input.y }, input], 18)
-    return roundedWire([relayOut, { x: relayOut.x, y: machine.y - 12 }, { x: inside, y: machine.y - 12 }, { x: inside, y: middle(box).y }, { x: box.x, y: middle(box).y }], 12)
+    if (stacked) return roundedWire([relayOut, { x: relayOut.x, y: machine.y - 12 }, { x: inside, y: machine.y - 12 }, { x: inside, y: middle(box).y }, { x: box.x, y: middle(box).y }], 12)
+    const dy = input.y - relayOut.y
+    if (Math.abs(dy) < 1) return `M${relayOut.x} ${relayOut.y}H${input.x}`
+    const r = Math.min(18, Math.abs(dy), (input.x - spine) / 2), dir = Math.sign(dy)
+    return `M${relayOut.x} ${relayOut.y}H${spine}V${input.y - dir * r}Q${spine} ${input.y} ${spine + r} ${input.y}H${input.x}`
   }
   const routeLanding = (box: Box) => stacked ? { x: box.x, y: middle(box).y } : routeIn(box)
   const reflection = { borders: [browser, relay, machine, ...routes].map(outlineOf).join("") }
@@ -110,11 +95,6 @@ function TunnelSignals({ clock, reduced, panels }: { clock: MotionValue<number>;
   return <svg className="tunnel-signals" viewBox={`0 0 ${bounds.width} ${bounds.height}`} aria-hidden="true">
     <GraphWire d={requestWire} />
     {routes.map((box, index) => <GraphWire key={index} d={hopWire(box)} />)}
-    {!stacked && <>
-      <text className="tunnel-label" x={(browserOut.x + relayIn.x) / 2} y={browserOut.y - 14} textAnchor="middle">encrypted tls</text>
-      <text className="tunnel-label" x={spine} y={relayOut.y - 14} textAnchor="middle">still encrypted</text>
-    </>}
-    <RelayReading clock={clock} x={relay.x + relay.width / 2} y={relay.y + relay.height + 22} />
     <GraphSignals ports={<>
       <GraphPort {...browserOut} />
       <GraphPort {...relayIn} />
@@ -127,7 +107,10 @@ function TunnelSignals({ clock, reduced, panels }: { clock: MotionValue<number>;
       {/* The relay is struck but nothing gets in: a thin front crosses its surface. */}
       <CardGlow id={`${id}-relay-strike`} {...relay} rx={0} cx={relayIn.x} cy={relayIn.y} clock={milliseconds} at={tunnelLegs.map(leg => leg.request.contact * 1000)} style="crack" strength={1} size={300} />
       {/* Contact: the destination floods from its socket. Only the local app ever opens the bytes. */}
-      {routes.map((box, index) => <CardGlow key={index} id={`${id}-route-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.hop.contact * 1000} style="flood" strength={1.2} />)}
+      {routes.map((box, index) => <g key={index}>
+        <CardGlow id={`${id}-route-strike-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.hop.contact * 1000} style="crack" strength={1} size={300} />
+        <CardGlow id={`${id}-route-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.hop.contact * 1000} style="flood" strength={1.2} />
+      </g>)}
     </>}>
       {!reduced && tunnelLegs.map((leg, index) => <g key={index}>
         <Pulse d={requestWire} clock={milliseconds} delay={leg.request.start * 1000} duration={tunnelTravel.request} trail={{ cooling: 240 }} reflection={reflection} />
@@ -149,7 +132,6 @@ export function TunnelScene() {
         <div className="tunnel-routes">
           {tunnelRoutes.map((route, index) => <Route key={route.id} index={index} clock={player.clock} reduced={player.reduced} />)}
         </div>
-        <DiagramHeader divider="above" className="tunnel-foot">TLS terminates here</DiagramHeader>
       </DiagramFrame>
       <TunnelSignals clock={player.clock} reduced={player.reduced} panels={panels} />
     </div>
