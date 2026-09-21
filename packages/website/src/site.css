@@ -1,23 +1,26 @@
 /* The page as it was: one 760px column of IBM Plex Mono on black, lowercase, nothing framed. The
    only new thing on it is the diagram. */
+/* One spacing scale, doubling: s1 inside a lockup, s2 between related lines, s3 between a heading and its
+   matter, s4 around a figure, s5 between sections. Every margin on the page is one of these. */
+:root { --s1: 8px; --s2: 16px; --s3: 32px; --s4: 64px; --s5: 128px; }
 * { box-sizing: border-box; }
 html { background: #000; color-scheme: dark; -webkit-font-smoothing: antialiased; }
 body { margin: 0; background: #000; color: #fff; font-family: var(--font-text), monospace; }
 ::selection { background: #fff; color: #000; }
 a { color: #fff; text-decoration: none; }
 
-main { width: min(100% - 48px, 760px); margin: 0 auto; padding: 9vh 0 14vh; }
+main { width: min(100% - 48px, 760px); margin: 0 auto; padding: var(--s4) 0 var(--s5); }
 
 /* The wordmark, edge to edge of the column; the old headline under it at text size. Mist rises from the O's counter. */
 /* A square the mark's height, then the mark: with the mark at 4.6:1 the square is 1/5.6 of the row less the gap. */
-.masthead { position: relative; display: grid; grid-template-columns: calc((100% - 16px) / 5.6) minmax(0, 1fr); gap: 0 16px; align-items: stretch; }
+.masthead { position: relative; container-type: inline-size; display: grid; grid-template-columns: calc((100% - 16px) / 5.6) minmax(0, 1fr); gap: 0 16px; align-items: stretch; }
 .masthead h1 { grid-column: 2; }
 .masthead-print { position: relative; aspect-ratio: 1; overflow: hidden; }
 .masthead-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .wordmark { display: block; width: 100%; aspect-ratio: 4.6; color: #fff; font-family: var(--font-wordmark), sans-serif; overflow: visible; }
 .mist { position: absolute; z-index: 1; display: block; pointer-events: none; }
 /* The headline, set on the mark's own column. Treatments to compare (dev: ← →). */
-h1 { margin: 16px 0 0; font: 400 clamp(15px, 2vw, 18px)/1.7 var(--font-text), monospace; letter-spacing: .02em; color: #fff; opacity: .7; }
+h1 { margin: var(--s2) 0 0; font: 400 clamp(15px, 2vw, 18px)/1.7 var(--font-text), monospace; letter-spacing: .02em; color: #fff; opacity: .7; }
 h1 > span { display: inline-block; }
 [data-subtitle="mono-right"] h1 { text-align: right; }
 [data-subtitle="mono-center"] h1 { text-align: center; }
@@ -41,8 +44,10 @@ h1 > span { display: inline-block; }
 [data-subtitle="caps-box"] h1 > span { padding: 5px 10px; border: 1px solid rgba(255, 255, 255, .3); }
 [data-subtitle="caps-numbered"] h1 > span::before { content: "01"; margin-right: 1.6em; opacity: .45; }
 [data-subtitle="caps-dim-large"] h1 { font-size: clamp(16px, 2.2vw, 22px); letter-spacing: .2em; opacity: .45; }
+[data-subtitle="caps-between"] h1 { padding-left: var(--ink-left, 0px); padding-right: var(--ink-right, 0px); }
 [data-subtitle="caps-between"] h1 > span { display: flex; justify-content: space-between; }
 [data-subtitle="caps-between"] h1 em { font-style: normal; }
+[data-subtitle="caps-between"] h1 em:last-child { margin-right: -.28em; }
 [data-subtitle="two-lines-right"] h1 { text-align: right; line-height: 1.35; }
 [data-subtitle="two-lines-square"] h1 { grid-column: 1; grid-row: 2; margin-top: 12px; font-size: clamp(11px, 1.3vw, 12px); letter-spacing: .2em; text-transform: uppercase; line-height: 1.6; }
 [data-subtitle="on-square"] .masthead-print { display: grid; align-content: end; }
@@ -60,44 +65,51 @@ h1 > span { display: inline-block; }
 [data-subtitle^="micro"] h1 > span { white-space: nowrap; }
 .micro-ruler { position: absolute; left: 0; right: 0; top: -22px; height: 10px; width: 100%; stroke: #fff; stroke-opacity: .3; fill: none; }
 .micro-crosshair { position: absolute; z-index: 1; left: calc((100% - 16px) / 5.6 - 7px); bottom: -7px; color: #ff2a2a; }
-.variant-badge { position: absolute; right: 0; top: -28px; font: 400 11px/16px var(--font-text), monospace; color: #fff; opacity: .4; }
-h2 { margin: 0 0 40px; font-size: clamp(20px, 3.2vw, 27px); font-weight: 500; letter-spacing: .02em; }
+/* Under the square, justified to its width: each line spread edge to edge, sized from the square. */
+[data-subtitle^="square-just"] h1 { grid-column: 1; grid-row: 2; margin-top: 12px; font-size: 1.5cqw; line-height: 1.75; letter-spacing: 0; text-transform: uppercase; opacity: .75; }
+[data-subtitle^="square-just"] h1 > span { display: block; }
+[data-subtitle^="square-just"] h1 b { display: block; font-weight: 400; text-align: justify; text-align-last: justify; }
+[data-subtitle="square-just-red"] h1 { color: #ff2a2a; opacity: 1; }
+[data-subtitle="square-just-rule"] h1 { padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, .3); }
+[data-subtitle="square-just-right"] h1 { grid-column: 2; margin-left: auto; width: calc((100% - 16px) / 4.6 * 0); min-width: 0; }
+[data-subtitle="square-just-right"] h1 { width: calc((100cqw - 16px) / 5.6); }
+.variant-badge { position: absolute; right: 0; top: -28px; font: 400 11px/16px var(--font-text), monospace; color: #fff; opacity: 0; transition: opacity .2s; }
+.masthead:hover .variant-badge { opacity: .4; }
+h2 { margin: 0 0 var(--s3); font-size: clamp(20px, 3.2vw, 27px); font-weight: 500; letter-spacing: .02em; }
 
-.description { margin: 40px 0 0; font-size: clamp(15px, 2vw, 18px); line-height: 1.7; }
+.description { margin: var(--s4) 0 0; font-size: clamp(15px, 2vw, 18px); line-height: 1.7; }
 
-.install { margin-top: 56px; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
-.tabs { display: flex; gap: 24px; margin-bottom: 16px; }
+.install { margin-top: var(--s3); font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
+.tabs { display: flex; gap: 24px; margin-bottom: var(--s1); }
 .tabs button { appearance: none; margin: 0; padding: 0; border: 0; background: none; color: #fff; font: inherit; cursor: pointer; opacity: .45; }
 .tabs a { opacity: .45; }
 .tabs button:hover, .tabs a:hover, .tabs button[data-current] { opacity: 1; }
 .command { overflow-x: auto; white-space: nowrap; }
 
-.usage, .sdk, .how, .privacy { margin-top: 112px; }
+.usage, .sdk, .how, .privacy { margin-top: var(--s5); }
 
 pre { margin: 0; overflow-x: auto; color: #fff; font: clamp(14px, 2vw, 17px)/1.8 var(--font-text), monospace; }
 .output { opacity: .55; }
 
-.steps { display: grid; margin: 0; padding: 0; gap: 28px; list-style: none; counter-reset: step; }
+.steps { display: grid; margin: 0; padding: 0; gap: var(--s3); list-style: none; counter-reset: step; }
 .steps li { display: grid; grid-template-columns: 44px 1fr; counter-increment: step; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
 .steps li::before { content: "0" counter(step); opacity: .45; }
 .steps p { margin: 0; }
 
-.privacy-list { display: grid; margin: 0; gap: 36px; }
-.privacy-list dt { margin-bottom: 6px; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
+.privacy-list { display: grid; margin: 0; gap: var(--s3); }
+.privacy-list dt { margin-bottom: var(--s1); font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
 .privacy-list dd { margin: 0; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; opacity: .55; }
 
 /* The diagram takes the old drawing's slot and may run a little wider than the column, centred on it. */
-.diagram-wrap { --bleed: min(940px, 100vw - 48px); width: var(--bleed); margin: 48px 0 0 calc((100% - var(--bleed)) / 2); overflow-x: auto; }
+.diagram-wrap { --bleed: min(940px, 100vw - 48px); width: var(--bleed); margin: var(--s4) 0 0 calc((100% - var(--bleed)) / 2); overflow-x: auto; }
 .diagram { min-width: 640px; }
 
 /* Dev: the red print above the page (`?hero=banner`). */
 .banner { margin-bottom: -4vh; }
 
 @media (max-width: 600px) {
-  main { width: min(100% - 32px, 760px); padding-top: 6vh; }
-  .install { margin-top: 44px; }
-  .usage, .sdk, .how, .privacy { margin-top: 80px; }
-  h2 { margin-bottom: 32px; }
+  :root { --s4: 48px; --s5: 80px; }
+  main { width: min(100% - 32px, 760px); }
 }
 
 /* Monotone (`?theme=mono`): the page as a duotone of its own luminance, see theme.ts. */

@@ -40,7 +40,7 @@ const subtitleVariants = [
   "mono-left", "mono-right", "mono-caps", "mono-red", "mono-rule", "mono-bracket", "anton-left", "anton-caps", "anton-right", "mono-center",
   "caps-rule", "caps-red", "caps-right", "caps-spread", "caps-underline", "caps-box", "caps-numbered",
   "two-lines-right", "two-lines-square", "on-square", "full-row-rule", "large-light", "caps-dim-large", "caps-between",
-  "micro-a", "micro-b", "micro-c",
+  "micro-a", "micro-b", "micro-c", "square-just", "square-just-red", "square-just-rule", "square-just-right",
 ] as const
 type SubtitleVariant = typeof subtitleVariants[number]
 function useSubtitleVariant(): SubtitleVariant {
@@ -77,6 +77,10 @@ function Masthead() {
       const first = context.measureText("O"), all = context.measureText(WORDMARK)
       const stretch = WIDTH / all.width
       const next = { top: height - first.actualBoundingBoxAscent, bottom: height + first.actualBoundingBoxDescent, centre: first.width / 2 * stretch }
+      // Where the ink really starts and ends, so a line under the mark can align with the O's and the L's edges.
+      const scaleX = root.getBoundingClientRect().width / WIDTH
+      element.style.setProperty("--ink-left", `${Math.max(0, -first.actualBoundingBoxLeft) * stretch * scaleX}px`)
+      element.style.setProperty("--ink-right", `${Math.max(0, WIDTH - all.actualBoundingBoxRight * stretch) * scaleX}px`)
       // The mist rises from the O's counter and may wander anywhere: the canvas spans the viewport, from well
       // above the mark to a little below it.
       const ctm = root.getScreenCTM(), box = element.getBoundingClientRect()
@@ -101,7 +105,7 @@ function Masthead() {
     <svg ref={svg} className="wordmark" viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <text ref={text} x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={fontSize} fill="currentColor">{WORDMARK}</text>
     </svg>
-    <h1><span>{variant.startsWith("two-lines") ? <>public urls<br />for anything</> : variant === "caps-between" ? <><em>public</em><em>urls</em><em>for</em><em>anything</em></> : "public urls for anything"}</span>
+    <h1><span>{variant.startsWith("two-lines") ? <>public urls<br />for anything</> : variant.startsWith("square-just") ? <><b>public urls</b><b>for anything</b></> : variant === "caps-between" ? <><em>public</em><em>urls</em><em>for</em><em>anything</em></> : "public urls for anything"}</span>
       {micro && <><span className="micro-leader" aria-hidden="true" /><span className="micro-meta">e2e · tls · v0.0.30</span></>}
       {variant === "micro-c" && <Barcode className="micro-barcode" text="OPENTUNNEL.XYZ" height={18} />}
     </h1>

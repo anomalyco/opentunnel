@@ -50,6 +50,14 @@ export const posterKnobs: Record<Exclude<keyof PosterSettings, "scene">, Knob> =
 
 /** Named prints. The first is the default; the panel can save more to this browser. */
 export const posterPresets: Record<string, PosterSettings> = {
+  /** The eye dead centre, the sea low: the print the square beside the wordmark carries. */
+  Hole: {
+    eyeX: 0, eyeY: 0, depth: .33, ringFrequency: 3.5, ringSpeed: 14, warp: 5, streak: 1.6,
+    wallInk: .51, bandInk: .57, distanceInk: 0, eyeGlow: .4,
+    sphereX: -.49, sphereY: .21, sphereRadius: 0, sphereHalo: .175,
+    seaLevel: -.77, seaInk: .8,
+    speed: .12, cell: 1, scene: "tunnel",
+  },
   Shore: {
     eyeX: -.34, eyeY: -.12, depth: .67, ringFrequency: 8.7, ringSpeed: 1.5, warp: 4.35, streak: 1.18,
     wallInk: .24, bandInk: .16, distanceInk: .42, eyeGlow: .295,
@@ -72,7 +80,7 @@ export const posterPresets: Record<string, PosterSettings> = {
     speed: .12, cell: 1, scene: "pipe",
   },
 }
-export const posterDefaults: PosterSettings = posterPresets.Shore!
+export const posterDefaults: PosterSettings = posterPresets.Hole!
 
 const saved = "opentunnel.poster.presets"
 const loadSaved = (): Record<string, PosterSettings> => { try { return JSON.parse(localStorage.getItem(saved) ?? "{}") } catch { return {} } }
