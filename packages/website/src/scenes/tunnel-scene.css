@@ -14,7 +14,9 @@
 /* White names, grey structure, and the red only for what carries the signal. */
 .tunnel-scene { --accent: #ff2a2a; font-family: var(--font-text), monospace; }
 .tunnel-scene .node-card { min-height: 52px; padding: 10px 16px; }
-.tunnel-scene .node-card-name { font: 600 13px/18px var(--font-text), monospace; letter-spacing: .08em; text-transform: uppercase; gap: 10px; }
+.tunnel-scene .node-card-name { font: 600 13px/18px var(--font-text), monospace; letter-spacing: .02em; text-transform: uppercase; gap: 10px; }
+/* The wordmark's face: Plex Mono at its heaviest, given weight by a same-colour stroke and condensed by a vertical stretch. */
+.tunnel-scene .node-card-label, .tunnel-machine-label > span { display: inline-block; -webkit-text-stroke: .5px currentColor; transform: scaleY(1.45); transform-origin: left center; }
 .tunnel-scene .node-card-icon { width: 16px; height: 16px; }
 .tunnel-scene .node-card-detail { font: 500 12px/18px var(--font-text), monospace; color: #6f6f6f; }
 .tunnel-scene .diagram-frame { border-color: #444; }
@@ -23,4 +25,4 @@
 
 /* The machine's name is set into its top rule, as a code frame carries its filename. */
 .tunnel-machine { position: relative; margin-top: 12px; }
-.tunnel-machine-label { position: absolute; top: 0; left: 14px; transform: translateY(-50%); padding: 0 6px; background: #000; color: #6f6f6f; font: 600 11px/14px var(--font-text), monospace; letter-spacing: .12em; text-transform: uppercase; }
+.tunnel-machine-label { position: absolute; top: 0; left: 14px; transform: translateY(-50%); padding: 0 6px; background: #000; color: #6f6f6f; font: 600 11px/14px var(--font-text), monospace; letter-spacing: .02em; text-transform: uppercase; }

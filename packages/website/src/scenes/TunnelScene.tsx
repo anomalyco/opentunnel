@@ -3,7 +3,7 @@ import { useMotionValue, useMotionValueEvent, useTransform, type MotionValue } f
 import { DiagramFrame, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
 import { CardGlow, Pulse, pulseEase, pulseGatherMs } from "../graphics/Pulse"
-import { pluginActivity, pluginActivityAt, type PluginActivity } from "../graphics/pluginActivity"
+import { pluginActivityAt, type PluginActivity } from "../graphics/pluginActivity"
 import { roundedWire } from "../graphics/roundedWire"
 import { useScenePlayback } from "../graphics/useScenePlayback"
 import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel, viscousFlight } from "./tunnelScore"
@@ -12,8 +12,8 @@ import "./tunnel-scene.css"
 
 /** The page's one colour: the paper red, for everything that carries the signal. */
 export const accent = "#ff2a2a"
-/** The signal itself, a shade hotter than the ink. */
-export const hot = "#ff6a52"
+/** The signal is the same red; nothing in the diagram is hotter than the paper. */
+export const hot = accent
 
 // browser ──▶ relay ──▶ opencode
 //                  ╲──▶ api          (your machine)
@@ -36,7 +36,7 @@ const mix = (from: string, to: string, t: number) => `rgb(${[1, 3, 5].map(i => M
 function useSignalInks(clock: MotionValue<number>, activity: PluginActivity) {
   const at = (time: number) => pluginActivityAt(time, activity)
   return {
-    color: useTransform(clock, time => mix("#c8c8c8", accent, at(time).flash)),
+    color: useTransform(clock, time => { const a = at(time); return mix("#c8c8c8", accent, Math.max(a.flash, a.running)) }),
     iconColor: useTransform(clock, time => mix("#777777", accent, Math.max(at(time).flash, at(time).running))),
     insetColor: useTransform(clock, time => mix("#292929", accent, at(time).frame * .35)),
     frameColor: useTransform(clock, time => mix("#383838", accent, at(time).outer * .3)),
@@ -60,14 +60,14 @@ function Relay({ clock, reduced, crossings, fronts, now }: { clock: MotionValue<
   // Working while the bytes are inside: the icon holds bright while the field is lit.
   const inks = useSignalInks(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
   return <NodeCard name="relay" icon="relay" data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
-    {!reduced && <RelayField fronts={fronts} now={now} ink="#ff5a48" className="tunnel-relay-field" />}
+    {!reduced && <RelayField fronts={fronts} now={now} ink={accent} className="tunnel-relay-field" />}
   </NodeCard>
 }
 
 function Route({ index, clock, reduced }: { index: number; clock: MotionValue<number>; reduced: boolean }) {
   const route = tunnelRoutes[index]!, leg = tunnelLegs[index]!
-  // The destination flashes as the bytes land, and works for a beat after.
-  const inks = useSignalInks(clock, { dispatches: [leg.contact], running: [[leg.contact, leg.contact + 1.1]], reduced })
+  // The destination flashes as the bytes land and cools over the next second.
+  const inks = useSignalInks(clock, { dispatches: [leg.contact], reduced })
   return <NodeCard name={route.name} icon={route.icon} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
     <span className="node-card-detail">{route.target}</span>
   </NodeCard>
@@ -207,10 +207,10 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
       <Port {...browserOut} clock={clock} activity={{ dispatches: tunnelLegs.map(leg => leg.start), reduced }} />
       <Port {...relayIn} clock={clock} activity={{ dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced }} />
       <Port {...relayOut} clock={clock} activity={{ dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced }} />
-      {routes.map((box, index) => <Port key={index} {...routeLanding(box)} clock={clock} activity={{ dispatches: [tunnelLegs[index]!.contact], running: [[tunnelLegs[index]!.contact, tunnelLegs[index]!.contact + 1.1]], reduced }} />)}
+      {routes.map((box, index) => <Port key={index} {...routeLanding(box)} clock={clock} activity={{ dispatches: [tunnelLegs[index]!.contact], reduced }} />)}
     </>} glows={!reduced && <>
       {/* Dispatch: an ember warms the socket the light leaves from. */}
-      <CardGlow id={`${id}-browser-leave`} {...browser} rx={0} cx={browserOut.x} cy={browserOut.y} clock={milliseconds} at={tunnelLegs.map(leg => leg.start * 1000)} role="leaving" tint={accent} {...pluginActivity.ember} />
+      <CardGlow id={`${id}-browser-leave`} {...browser} rx={0} cx={browserOut.x} cy={browserOut.y} clock={milliseconds} at={tunnelLegs.map(leg => leg.start * 1000)} role="leaving" tint={accent} size={260} strength={2.2} />
       {/* Contact: the destination is struck and floods from its socket. Only the local app ever opens the bytes. */}
       {routes.map((box, index) => <g key={index}>
         <CardGlow id={`${id}-route-strike-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.contact * 1000} style="crack" strength={1} size={300} tint={accent} />
@@ -239,7 +239,7 @@ export function TunnelScene() {
       <div className="tunnel-column tunnel-visitor"><Browser clock={player.clock} reduced={player.reduced} /></div>
       <div className="tunnel-column tunnel-relay"><Relay clock={player.clock} reduced={player.reduced} crossings={crossings} fronts={fronts} now={now} /></div>
       <DiagramFrame as="section" className="tunnel-machine" data-machine="" aria-label="Your machine">
-        <span className="tunnel-machine-label" aria-hidden="true">your machine</span>
+        <span className="tunnel-machine-label" aria-hidden="true"><span>your machine</span></span>
         <div className="tunnel-routes">
           {tunnelRoutes.map((route, index) => <Route key={route.id} index={index} clock={player.clock} reduced={player.reduced} />)}
         </div>

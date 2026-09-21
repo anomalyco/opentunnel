@@ -370,11 +370,8 @@ export type BloomStyleId = keyof typeof bloomStyles
 type RGB = readonly [number, number, number]
 const mix = (a: RGB, b: RGB, t: number) => `rgb(${a.map((c, i) => Math.round(c + (b[i]! - c) * t)).join(", ")})`
 
-/** One ink, lifted toward white by heat. */
-const tinted = (hex: string) => {
-  const base: RGB = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)) as unknown as RGB
-  return (h: number) => mix(base, [255, 255, 255], h * .45)
-}
+/** One ink at every heat; only the field's opacity carries the shape. */
+const tinted = (hex: string) => () => hex
 
 /** Locked palette: warm gray → white. The wave's colour is a function of heat (0 fringe → 1 crest). */
 export const palette = {
@@ -488,7 +485,8 @@ export function CardGlow({ id, x, y, width, height, rx, cx, cy, count = 0, clock
       for (let i = 0; i < SAMPLES; i++) {
         const stop = stops?.[i]
         if (!stop) continue
-        const ceiling = role === "landing" ? 0.18 : 0.3
+        // A single ink has no white to climb to, so it needs more coverage to read on black.
+        const ceiling = role === "landing" ? 0.18 * (tint ? 2 : 1) : 0.3 * (tint ? 3 : 1)
         const a = ceiling * (1 - Math.exp(-sum[i]! / ceiling))
         stop.setAttribute("stop-opacity", String(a))
         // Absolute energy, never normalised against the newest crest.
@@ -524,7 +522,7 @@ export function CardGlow({ id, x, y, width, height, rx, cx, cy, count = 0, clock
     }
     raf.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf.current)
-  }, [active, strength, role, kernel, clock, waveClock, hits, style, fieldColor])
+  }, [active, strength, role, kernel, clock, waveClock, hits, style, fieldColor, tint])
 
   return <>
     <defs>

@@ -65,10 +65,10 @@ export const posterPresets: Record<string, PosterSettings> = {
     speed: .12, cell: 1, scene: "tunnel",
   },
   Pipe: {
-    eyeX: .12, eyeY: -.02, depth: .5, ringFrequency: 3, ringSpeed: 6, warp: 0, streak: .5,
-    wallInk: .45, bandInk: .5, distanceInk: .3, eyeGlow: .1,
+    eyeX: .12, eyeY: -.02, depth: .5, ringFrequency: 3, ringSpeed: 6, warp: 0, streak: .7,
+    wallInk: .5, bandInk: .6, distanceInk: .3, eyeGlow: .15,
     sphereX: 0, sphereY: 0, sphereRadius: 0, sphereHalo: 0,
-    seaLevel: 0, seaInk: 0,
+    seaLevel: 0, seaInk: .6,
     speed: .12, cell: 1, scene: "pipe",
   },
 }
