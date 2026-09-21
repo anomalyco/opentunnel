@@ -1,0 +1,11 @@
+/* The share card: the masthead's lockup, at the page's own proportions, on a fixed 1200×630 black canvas. */
+.og-card { display: grid; align-content: center; width: 1200px; height: 630px; padding: 0 96px; background: #000; color: #fff; overflow: hidden; }
+.og-lockup { container-type: inline-size; display: grid; grid-template-columns: calc((100% - 16px) / 5.6) minmax(0, 1fr); gap: 0 16px; align-items: stretch; }
+.og-print { position: relative; aspect-ratio: 1; overflow: hidden; }
+.og-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.og-wordmark { display: block; width: 100%; aspect-ratio: 4.6; color: #fff; font-family: var(--font-wordmark), sans-serif; overflow: visible; }
+/* Under the square, justified to its width, in the red: word, dotted leader, word, a small icon. */
+.og-caption { grid-column: 1; grid-row: 2; margin: 12px 0 0; font: 400 1.5cqw/1.75 var(--font-text), monospace; letter-spacing: 0; text-transform: uppercase; color: #ff2a2a; }
+.og-caption b { display: flex; align-items: center; font-weight: 400; }
+.og-caption .fill { flex: 1; margin: 0 .7em; border-bottom: 1px dotted currentColor; opacity: .6; }
+.og-caption .tail { flex: none; margin-left: .6em; }

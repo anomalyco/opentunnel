@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 4190 --strictPort",
-    "build": "tsc -p tsconfig.json && vite build && wrangler deploy --dry-run",
+    "build": "tsc -p tsconfig.json && vite build && bun run scripts/build-og.ts && wrangler deploy --dry-run",
     "preview": "vite preview --host 127.0.0.1 --port 4190 --strictPort",
-    "deploy": "vite build && wrangler deploy",
-    "deploy:preview": "tsc -p tsconfig.json && vite build && wrangler deploy -c wrangler.preview.jsonc"
+    "deploy": "vite build && bun run scripts/build-og.ts && wrangler deploy",
+    "deploy:preview": "tsc -p tsconfig.json && vite build && bun run scripts/build-og.ts && wrangler deploy -c wrangler.preview.jsonc"
   },
   "dependencies": {
     "@phosphor-icons/react": "2.1.10",
@@ -20,6 +20,7 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",
+    "playwright-core": "1.62.1",
     "typescript": "catalog:",
     "vite": "8.1.3",
     "wrangler": "catalog:"
