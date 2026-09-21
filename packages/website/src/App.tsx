@@ -5,6 +5,7 @@ import { TunnelScene } from "./scenes/TunnelScene"
 import { Mist } from "./mist/Mist"
 import { TunnelArt } from "./poster/TunnelArt"
 import { Barcode, Crosshair, Ruler } from "./Micro"
+import { Globe, LockSimple, ArrowRight } from "@phosphor-icons/react"
 import { monoTables, theme } from "./theme"
 
 const github = "https://github.com/anomalyco/opentunnel"
@@ -41,6 +42,7 @@ const subtitleVariants = [
   "caps-rule", "caps-red", "caps-right", "caps-spread", "caps-underline", "caps-box", "caps-numbered",
   "two-lines-right", "two-lines-square", "on-square", "full-row-rule", "large-light", "caps-dim-large", "caps-between",
   "micro-a", "micro-b", "micro-c", "square-just", "square-just-red", "square-just-rule", "square-just-right",
+  "square-dots", "square-arrows", "square-icons", "square-icons-end",
 ] as const
 type SubtitleVariant = typeof subtitleVariants[number]
 function useSubtitleVariant(): SubtitleVariant {
@@ -105,7 +107,11 @@ function Masthead() {
     <svg ref={svg} className="wordmark" viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <text ref={text} x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={fontSize} fill="currentColor">{WORDMARK}</text>
     </svg>
-    <h1><span>{variant.startsWith("two-lines") ? <>public urls<br />for anything</> : variant.startsWith("square-just") ? <><b>public urls</b><b>for anything</b></> : variant === "caps-between" ? <><em>public</em><em>urls</em><em>for</em><em>anything</em></> : "public urls for anything"}</span>
+    <h1><span>{variant.startsWith("two-lines") ? <>public urls<br />for anything</> : variant.startsWith("square-just") ? <><b>public urls</b><b>for anything</b></> :
+      variant === "square-dots" ? <><b>public<i className="fill" />urls</b><b>for<i className="fill" />anything</b></> :
+      variant === "square-arrows" ? <><b>public<i className="fill"><ArrowRight size={10} weight="bold" /></i>urls</b><b>for<i className="fill"><ArrowRight size={10} weight="bold" /></i>anything</b></> :
+      variant === "square-icons" ? <><b>public<i className="fill"><Globe size={11} /></i>urls</b><b>for<i className="fill"><LockSimple size={11} /></i>anything</b></> :
+      variant === "square-icons-end" ? <><b>public<i className="fill" />urls<Globe size={11} className="tail" /></b><b>for<i className="fill" />anything<LockSimple size={11} className="tail" /></b></> : variant === "caps-between" ? <><em>public</em><em>urls</em><em>for</em><em>anything</em></> : "public urls for anything"}</span>
       {micro && <><span className="micro-leader" aria-hidden="true" /><span className="micro-meta">e2e · tls · v0.0.30</span></>}
       {variant === "micro-c" && <Barcode className="micro-barcode" text="OPENTUNNEL.XYZ" height={18} />}
     </h1>

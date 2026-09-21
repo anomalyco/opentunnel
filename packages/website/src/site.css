@@ -66,9 +66,16 @@ h1 > span { display: inline-block; }
 .micro-ruler { position: absolute; left: 0; right: 0; top: -22px; height: 10px; width: 100%; stroke: #fff; stroke-opacity: .3; fill: none; }
 .micro-crosshair { position: absolute; z-index: 1; left: calc((100% - 16px) / 5.6 - 7px); bottom: -7px; color: #ff2a2a; }
 /* Under the square, justified to its width: each line spread edge to edge, sized from the square. */
-[data-subtitle^="square-just"] h1 { grid-column: 1; grid-row: 2; margin-top: 12px; font-size: 1.5cqw; line-height: 1.75; letter-spacing: 0; text-transform: uppercase; opacity: .75; }
-[data-subtitle^="square-just"] h1 > span { display: block; }
-[data-subtitle^="square-just"] h1 b { display: block; font-weight: 400; text-align: justify; text-align-last: justify; }
+[data-subtitle^="square-"] h1 { grid-column: 1; grid-row: 2; margin-top: 12px; font-size: 1.5cqw; line-height: 1.75; letter-spacing: 0; text-transform: uppercase; opacity: .75; }
+[data-subtitle^="square-"] h1 > span { display: block; }
+[data-subtitle^="square-"] h1 b { display: block; font-weight: 400; text-align: justify; text-align-last: justify; }
+/* Something between the words: dotted leaders, an arrow, or a small icon, all in the red. */
+[data-subtitle^="square-"]:not([data-subtitle^="square-just"]) h1 { color: #ff2a2a; opacity: 1; }
+[data-subtitle^="square-"]:not([data-subtitle^="square-just"]) h1 b { display: flex; align-items: center; }
+[data-subtitle^="square-"] h1 .fill { flex: 1; display: flex; align-items: center; justify-content: center; margin: 0 .7em; font-style: normal; }
+[data-subtitle="square-dots"] h1 .fill { border-bottom: 1px dotted currentColor; transform: translateY(-.35em); opacity: .6; }
+[data-subtitle="square-icons-end"] h1 .fill { border-bottom: 1px dotted currentColor; transform: translateY(-.35em); opacity: .6; }
+[data-subtitle="square-icons-end"] h1 .tail { margin-left: .6em; }
 [data-subtitle="square-just-red"] h1 { color: #ff2a2a; opacity: 1; }
 [data-subtitle="square-just-rule"] h1 { padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, .3); }
 [data-subtitle="square-just-right"] h1 { grid-column: 2; margin-left: auto; width: calc((100% - 16px) / 4.6 * 0); min-width: 0; }
