@@ -30,7 +30,7 @@ a:hover { color: #fafaf9; }
 
 /* Article body */
 .prose { max-width: 740px; }
-.prose section + section { margin-top: 96px; }
+.prose > section + section { margin-top: 96px; }
 .prose h2 { margin: 0 0 24px; font-size: 34px; line-height: 1.2; letter-spacing: -.02em; font-weight: 400; color: #fafaf9; }
 .prose p { margin: 0; text-align: justify; hyphens: auto; hyphenate-limit-chars: 8 3 3; text-wrap: pretty; }
 .prose p + p, .prose p + .code, .prose .code + p { margin-top: 24px; }

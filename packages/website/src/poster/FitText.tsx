@@ -20,7 +20,9 @@ export function FitText({ children, capHeight = .72, weight = .03, aspect = 4.2,
   const height = WIDTH / aspect
   const fontSize = height / capHeight
   const strokeWidth = fontSize * weight
-  return <svg className={className} style={style} viewBox={`${-strokeWidth / 2} 0 ${WIDTH + strokeWidth} ${height}`} aria-hidden="true" focusable="false">
+  // Slack above the caps: the stroke and any face taller than `capHeight` must not be clipped.
+  const slack = strokeWidth + fontSize * .06
+  return <svg className={className} style={style} viewBox={`${-strokeWidth / 2} ${-slack} ${WIDTH + strokeWidth} ${height + slack + strokeWidth / 2}`} aria-hidden="true" focusable="false">
     <text x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={fontSize} fill="currentColor" stroke="currentColor" strokeWidth={strokeWidth} strokeLinejoin="round" style={{ paintOrder: "stroke fill" }}>{children}</text>
   </svg>
 }

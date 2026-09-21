@@ -1,6 +1,7 @@
 import { Poster } from "./poster/Poster"
 import { TunnelScene } from "./scenes/TunnelScene"
 import { Install } from "./Install"
+import { PosterControls } from "./poster/PosterControls"
 
 const github = "https://github.com/anomalyco/opentunnel"
 const npm = "https://www.npmjs.com/package/opentunnel"
@@ -87,6 +88,8 @@ api = "127.0.0.1:3000"`}</code></pre>
         </section>
       </article>
     </main>
+
+    {import.meta.env.DEV && <PosterControls />}
 
     <footer className="site-footer">
       <span>OpenTunnel is open source, by <a href="https://anomaly.co">Anomaly</a>.</span>

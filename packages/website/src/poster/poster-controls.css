@@ -1,0 +1,20 @@
+.poster-controls-toggle { position: fixed; right: 16px; bottom: 16px; z-index: 40; padding: 6px 10px; border: 1px solid #383838; background: #0c0c0cf2; color: #aaa; font: 10px/1.5 var(--font-mono), monospace; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; opacity: .6; }
+.poster-controls-toggle:hover { opacity: 1; color: #eee; }
+.poster-controls { position: fixed; right: 16px; top: 16px; z-index: 40; width: 280px; max-height: calc(100dvh - 32px); overflow-y: auto; padding: 0 14px 12px; border: 1px solid #383838; background: #0c0c0cf5; color: #aaa; font: 11px/1.5 var(--font-mono), monospace; font-variant-numeric: tabular-nums; scrollbar-width: thin; }
+.poster-controls header { position: sticky; top: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; padding: 10px 0 8px; background: #0c0c0c; border-bottom: 1px solid #292929; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.poster-controls kbd { margin-left: 6px; color: #666; font: inherit; }
+.poster-controls-actions { display: flex; gap: 4px; }
+.poster-controls button { appearance: none; padding: 3px 7px; border: 1px solid #383838; background: transparent; color: #aaa; font: 10px/1.4 var(--font-mono), monospace; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; }
+.poster-controls button:hover:not(:disabled) { color: #eee; border-color: #555; }
+.poster-controls button:disabled { color: #555; cursor: default; }
+.poster-controls h3 { margin: 12px 0 4px; color: #777; font: inherit; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.poster-controls label { display: grid; gap: 3px; padding: 4px 0; }
+.poster-controls label > span { display: flex; justify-content: space-between; gap: 12px; }
+.poster-controls label[data-changed] > span { color: #ddd; }
+.poster-controls output { color: #ccc; }
+.poster-controls input[type="range"] { appearance: none; width: 100%; height: 14px; margin: 0; background: transparent; cursor: pointer; }
+.poster-controls input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: #333; }
+.poster-controls input[type="range"]::-webkit-slider-thumb { appearance: none; width: 8px; height: 8px; margin-top: -3px; border-radius: 50%; background: #bbb; }
+.poster-controls input[type="range"]::-moz-range-track { height: 2px; background: #333; }
+.poster-controls input[type="range"]::-moz-range-thumb { width: 8px; height: 8px; border: 0; border-radius: 50%; background: #bbb; }
+.poster-controls input:focus-visible { outline: 1px solid #ffffff40; outline-offset: 3px; }

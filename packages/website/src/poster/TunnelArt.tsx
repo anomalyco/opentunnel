@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react"
 import { fragmentSource, vertexSource } from "./tunnelShader"
+import { posterSettings, type PosterSettings } from "./posterSettings"
 
 const hex = (value: string): [number, number, number] => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16) / 255) as [number, number, number]
+
+const scalarUniforms = ["depth", "ringFrequency", "ringSpeed", "wallInk", "bandInk", "distanceInk", "eyeGlow", "sphereRadius", "sphereHalo", "seaLevel", "seaInk"] as const satisfies readonly (keyof PosterSettings)[]
 
 /** The poster's printed image: a WebGL tunnel dithered to two inks. Pauses offscreen and in hidden tabs; reduced motion prints one still frame. */
 export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", className }: { ink?: string; paper?: string; className?: string }) {
@@ -31,20 +34,16 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", className }: { i
     const position = gl.getAttribLocation(program, "position")
     gl.enableVertexAttribArray(position)
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0)
-    const uniforms = {
-      resolution: gl.getUniformLocation(program, "resolution"),
-      time: gl.getUniformLocation(program, "time"),
-      ink: gl.getUniformLocation(program, "ink"),
-      paper: gl.getUniformLocation(program, "paper"),
-      cell: gl.getUniformLocation(program, "cell"),
-    }
-    gl.uniform3fv(uniforms.ink, hex(ink))
-    gl.uniform3fv(uniforms.paper, hex(paper))
+    const location = (name: string) => gl.getUniformLocation(program, name)
+    const uniforms = { resolution: location("resolution"), time: location("time"), cell: location("cell"), eye: location("eye"), sphereCenter: location("sphereCenter") }
+    const scalars = Object.fromEntries(scalarUniforms.map(name => [name, location(name)])) as Record<typeof scalarUniforms[number], WebGLUniformLocation | null>
+    gl.uniform3fv(location("ink"), hex(ink))
+    gl.uniform3fv(location("paper"), hex(paper))
+    gl.uniform1f(location("warpAmount"), 0); gl.uniform1f(location("streakAmount"), 0)
+    const warp = location("warpAmount"), streak = location("streakAmount")
 
-    // Dither cells are device pixels: render at the display's density, capped for battery.
+    // Dither cells are CSS pixels: render at the display's density, capped for battery.
     const scale = Math.min(window.devicePixelRatio || 1, 2)
-    // One dither cell per CSS pixel: the same grain on every display.
-    gl.uniform1f(uniforms.cell, scale)
     // Sized per program, not per canvas: a remount reuses the canvas but not the uniforms.
     let sized = ""
     const resize = () => {
@@ -56,29 +55,43 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", className }: { i
       gl.viewport(0, 0, width, height)
       gl.uniform2f(uniforms.resolution, width, height)
     }
+    const upload = (settings: PosterSettings) => {
+      gl.uniform1f(uniforms.cell, settings.cell * scale)
+      gl.uniform2f(uniforms.eye, settings.eyeX, settings.eyeY)
+      gl.uniform2f(uniforms.sphereCenter, settings.sphereX, settings.sphereY)
+      gl.uniform1f(warp, settings.warp); gl.uniform1f(streak, settings.streak)
+      for (const name of scalarUniforms) gl.uniform1f(scalars[name], settings[name])
+    }
     const media = matchMedia("(prefers-reduced-motion: reduce)")
-    let visible = false, hidden = document.hidden, raf = 0, start = performance.now()
+    // Scene time integrates speed, so turning a knob never jumps the picture.
+    let visible = false, hidden = document.hidden, raf = 0, previous = performance.now(), sceneTime = 7 * posterSettings.get().speed
     const draw = (now: number) => {
+      const settings = posterSettings.get()
+      sceneTime += Math.min(.1, (now - previous) / 1000) * settings.speed
+      previous = now
       resize()
-      gl.uniform1f(uniforms.time, (now - start) / 1000)
+      upload(settings)
+      gl.uniform1f(uniforms.time, sceneTime)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
     }
+    const still = () => { previous = performance.now(); draw(previous) }
     const tick = (now: number) => { draw(now); raf = requestAnimationFrame(tick) }
     const run = () => {
       cancelAnimationFrame(raf)
-      if (media.matches) { draw(start + 7000); return }
-      if (visible && !hidden) raf = requestAnimationFrame(tick)
+      if (media.matches) { still(); return }
+      if (visible && !hidden) { previous = performance.now(); raf = requestAnimationFrame(tick) }
     }
     const observer = new IntersectionObserver(([entry]) => { visible = entry!.isIntersecting; run() })
     observer.observe(element)
     const visibility = () => { hidden = document.hidden; run() }
     document.addEventListener("visibilitychange", visibility)
     media.addEventListener("change", run)
-    const sizing = new ResizeObserver(() => { if (media.matches) draw(start + 7000) })
+    const sizing = new ResizeObserver(() => { if (media.matches || !visible) still() })
     sizing.observe(element)
-    draw(start)
+    const unsubscribe = posterSettings.subscribe(() => { if (media.matches) still() })
+    still()
     return () => {
-      cancelAnimationFrame(raf); observer.disconnect(); sizing.disconnect()
+      cancelAnimationFrame(raf); observer.disconnect(); sizing.disconnect(); unsubscribe()
       document.removeEventListener("visibilitychange", visibility); media.removeEventListener("change", run)
       gl.deleteProgram(program); gl.deleteBuffer(quad)
     }
