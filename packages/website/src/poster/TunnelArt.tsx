@@ -6,8 +6,10 @@ const hex = (value: string): [number, number, number] => [1, 3, 5].map(i => pars
 
 const scalarUniforms = ["depth", "ringFrequency", "ringSpeed", "wallInk", "bandInk", "distanceInk", "eyeGlow", "sphereRadius", "sphereHalo", "seaLevel", "seaInk"] as const satisfies readonly (keyof PosterSettings)[]
 
-/** The poster's printed image: a WebGL tunnel dithered to two inks. Pauses offscreen and in hidden tabs; reduced motion prints one still frame. */
-export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", className }: { ink?: string; paper?: string; className?: string }) {
+/** The poster's printed image: a WebGL tunnel dithered to two inks. Pauses offscreen and in hidden tabs; reduced motion prints one still frame.
+ * `fade` dissolves the print into paper along x: no ink left of the first fraction, the full print right of the second. */
+export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className }: { ink?: string; paper?: string; fade?: readonly [number, number]; className?: string }) {
+  const [fadeStart, fadeEnd] = fade ?? [0, 0]
   const canvas = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", className }: { i
     const scalars = Object.fromEntries(scalarUniforms.map(name => [name, location(name)])) as Record<typeof scalarUniforms[number], WebGLUniformLocation | null>
     gl.uniform3fv(location("ink"), hex(ink))
     gl.uniform3fv(location("paper"), hex(paper))
-    gl.uniform1f(location("warpAmount"), 0); gl.uniform1f(location("streakAmount"), 0)
+    gl.uniform2f(location("fade"), fadeStart, fadeEnd)
     const warp = location("warpAmount"), streak = location("streakAmount")
 
     // Dither cells are CSS pixels: render at the display's density, capped for battery.
@@ -95,7 +97,7 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", className }: { i
       document.removeEventListener("visibilitychange", visibility); media.removeEventListener("change", run)
       gl.deleteProgram(program); gl.deleteBuffer(quad)
     }
-  }, [ink, paper])
+  }, [ink, paper, fadeStart, fadeEnd])
 
   return <canvas ref={canvas} className={className} aria-hidden="true" />
 }
