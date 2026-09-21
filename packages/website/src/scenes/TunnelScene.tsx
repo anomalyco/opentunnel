@@ -10,6 +10,9 @@ import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel, viscousFlight } fr
 import { RelayField } from "./RelayField"
 import "./tunnel-scene.css"
 
+/** The page's one colour: the paper red, for everything that carries the signal. */
+export const accent = "#ff2a2a"
+
 // browser ──▶ relay ──▶ opencode
 //                  ╲──▶ api          (your machine)
 //                   ╲─▶ webhooks
@@ -34,7 +37,7 @@ function Relay({ clock, reduced, crossings, front, age }: { clock: MotionValue<n
   // Working while the bytes are inside: the icon holds bright while the field is lit.
   const inks = usePluginActivity(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
   return <NodeCard name="relay" icon="relay" armored data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
-    {!reduced && <RelayField front={front} age={age} className="tunnel-relay-field" />}
+    {!reduced && <RelayField front={front} age={age} ink={accent} className="tunnel-relay-field" />}
   </NodeCard>
 }
 
@@ -183,15 +186,15 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, front, age }: { cl
       {routes.map((box, index) => <GraphPort key={index} {...routeLanding(box)} />)}
     </>} glows={!reduced && <>
       {/* Dispatch: an ember warms the socket the light leaves from. */}
-      <CardGlow id={`${id}-browser-leave`} {...browser} rx={0} cx={browserOut.x} cy={browserOut.y} clock={milliseconds} at={tunnelLegs.map(leg => leg.start * 1000)} role="leaving" {...pluginActivity.ember} />
+      <CardGlow id={`${id}-browser-leave`} {...browser} rx={0} cx={browserOut.x} cy={browserOut.y} clock={milliseconds} at={tunnelLegs.map(leg => leg.start * 1000)} role="leaving" tint={accent} {...pluginActivity.ember} />
       {/* Contact: the destination is struck and floods from its socket. Only the local app ever opens the bytes. */}
       {routes.map((box, index) => <g key={index}>
-        <CardGlow id={`${id}-route-strike-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.contact * 1000} style="crack" strength={1} size={300} />
-        <CardGlow id={`${id}-route-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.contact * 1000} style="flood" strength={1.2} />
+        <CardGlow id={`${id}-route-strike-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.contact * 1000} style="crack" strength={1} size={300} tint={accent} />
+        <CardGlow id={`${id}-route-${index}`} {...box} rx={0} cx={routeLanding(box).x} cy={routeLanding(box).y} clock={milliseconds} at={tunnelLegs[index]!.contact * 1000} style="flood" strength={1.2} tint={accent} />
       </g>)}
     </>}>
       {!reduced && <g mask={`url(#${id}-relay-cutout)`}>
-        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} trail={{ cooling: 300, segments: 256 }} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
+        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} color={accent} trail={{ cooling: 300, segments: 256 }} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
       </g>}
     </GraphSignals>
   </svg>

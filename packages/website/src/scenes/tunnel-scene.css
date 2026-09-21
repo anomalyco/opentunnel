@@ -11,3 +11,14 @@
 }
 .tunnel-relay-field { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); display: block; pointer-events: none; }
 .node-card[data-armored] .node-card-name { position: relative; z-index: 1; }
+
+/* Bold print: heavy white names, red for everything that carries the signal, grey for structure. */
+.tunnel-scene { --accent: #ff2a2a; font-family: var(--font-text), monospace; }
+.tunnel-scene .node-card-name { font: 600 12px/16px var(--font-text), monospace; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
+.tunnel-scene .node-card-icon { color: var(--accent); }
+.tunnel-scene .node-card-detail { font: 500 11px/16px var(--font-text), monospace; color: #6f6f6f; }
+.tunnel-scene .diagram-header { font: 600 11px/16px var(--font-text), monospace; letter-spacing: .12em; color: #fff; }
+.tunnel-scene .graph-dots circle { fill: var(--accent); }
+.tunnel-scene .node-card-armor { background: repeating-linear-gradient(-45deg, #7a1d1d 0 1.5px, transparent 1.5px 5px); }
+.tunnel-scene .diagram-frame { border-color: #444; }
+.tunnel-scene .node-card-inset { border-color: #333; }

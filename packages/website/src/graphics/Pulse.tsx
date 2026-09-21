@@ -368,6 +368,12 @@ export type BloomStyleId = keyof typeof bloomStyles
 type RGB = readonly [number, number, number]
 const mix = (a: RGB, b: RGB, t: number) => `rgb(${a.map((c, i) => Math.round(c + (b[i]! - c) * t)).join(", ")})`
 
+/** One ink, lifted toward white by heat. */
+const tinted = (hex: string) => {
+  const base: RGB = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)) as unknown as RGB
+  return (h: number) => mix(base, [255, 255, 255], h * .45)
+}
+
 /** Locked palette: warm gray → white. The wave's colour is a function of heat (0 fringe → 1 crest). */
 export const palette = {
   field: (h: number) => mix([140, 136, 130], [236, 233, 228], h),
@@ -417,9 +423,12 @@ export type CardGlowProps = {
   size?: number; strength?: number; style?: BloomStyleId
   /** Frost the same live field behind these panes, without blurring their text. */
   glass?: readonly GlassPane[]
+  /** Print the field in one ink instead of the warm grey→white ramp; heat lifts it toward white. */
+  tint?: string
 }
 
-export function CardGlow({ id, x, y, width, height, rx, cx, cy, count = 0, clock, waveClock, at = 0, role = "landing", size: sizeProp, strength: strengthProp, style: styleProp, glass }: CardGlowProps) {
+export function CardGlow({ id, x, y, width, height, rx, cx, cy, count = 0, clock, waveClock, at = 0, role = "landing", size: sizeProp, strength: strengthProp, style: styleProp, glass, tint }: CardGlowProps) {
+  const fieldColor = useMemo(() => tint ? tinted(tint) : palette.field, [tint])
   const style: BloomStyleId = styleProp ?? (role === "landing" ? "flood" : "ember")
   // Landing fields are sized to the card: large enough to cross it, but capped by the short axis so the
   // front stays visibly curved. On a thin card a near-flat band just reads as a sliding rectangle.
@@ -482,7 +491,7 @@ export function CardGlow({ id, x, y, width, height, rx, cx, cy, count = 0, clock
         stop.setAttribute("stop-opacity", String(a))
         // Absolute energy, never normalised against the newest crest.
         const heatValue = clamp01(sum[i]! / 0.22)
-        stop.setAttribute("stop-color", palette.field(heatValue))
+        stop.setAttribute("stop-color", fieldColor(heatValue))
         if (kernel) {
           pixels[i * 4] = Math.round(140 + 96 * heatValue) * a
           pixels[i * 4 + 1] = Math.round(136 + 97 * heatValue) * a
@@ -513,7 +522,7 @@ export function CardGlow({ id, x, y, width, height, rx, cx, cy, count = 0, clock
     }
     raf.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf.current)
-  }, [active, strength, role, kernel, clock, waveClock, hits, style])
+  }, [active, strength, role, kernel, clock, waveClock, hits, style, fieldColor])
 
   return <>
     <defs>

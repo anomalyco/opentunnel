@@ -3,7 +3,7 @@ import { motion, type MotionValue } from "motion/react"
 
 /** Both ends of a graph wire use the same socket. */
 export function GraphPort({ x, y, fill }: { x: number; y: number; fill?: string | MotionValue<string> }) {
-  return <g className="graph-dots"><motion.circle cx={x} cy={y} r={3.5} style={{ fill }} /></g>
+  return <g className="graph-dots"><motion.circle cx={x} cy={y} r={3.5} style={fill ? { fill } : undefined} /></g>
 }
 
 /** Wires share geometry/ink defaults; scenes may quiet long overlapping routes. */
