@@ -47,26 +47,28 @@ export const tunnelLegs = [m.pulse0, m.pulse1, m.pulse2] as const
 export const tunnelTravel = travel * 1000
 
 /** A flight that hits something thick in one stretch of its path, like a round entering water: it arrives at
- * speed, decelerates hard on impact, crawls through the middle and gathers speed again toward the far wall.
- * The stretch [from, to] takes `drag` times its share of the eased flight. The inverse is exact by bisection. */
+ * speed, decelerates hard over a short distance inside the wall, crawls, and gathers speed again over a longer
+ * run to the far wall. Speed is a smooth profile over path distance, integrated into a table; no kinks. */
 export function viscousFlight(from: number, to: number, drag: number): PulseEase {
-  const before = from, inside = (to - from) * drag, after = 1 - to
-  const total = before + inside + after
-  // Inside: distance over local time, fast at both walls and slowest midway, with a floor so it never stalls.
-  const plunge = (tau: number) => {
-    const shape = tau < .5 ? .5 * (1 - Math.pow(1 - 2 * tau, 3)) : .5 + .5 * Math.pow(2 * tau - 1, 3)
-    return .78 * shape + .22 * tau
+  const N = 1024
+  const span = to - from
+  const speed = (p: number) => {
+    const entering = smooth((p - from) / (span * .18)), leaving = smooth((p - (to - span * .55)) / (span * .55))
+    const dip = entering * (1 - leaving)
+    return 1 - (1 - 1 / drag) * dip
   }
-  const at = (time: number) => {
-    const v = pulseEase.at(time) * total
-    if (v <= before) return v
-    if (v <= before + inside) return from + (to - from) * plunge((v - before) / inside)
-    return to + (v - before - inside)
+  // Cumulative time over distance, normalised to 1.
+  const times = new Float64Array(N + 1)
+  for (let i = 1; i <= N; i++) times[i] = times[i - 1]! + 1 / speed((i - .5) / N) / N
+  const total = times[N]!
+  for (let i = 0; i <= N; i++) times[i]! /= total
+  const timeAt = (p: number) => { const x = Math.max(0, Math.min(1, p)) * N, i = Math.floor(x), f = x - i; return i >= N ? 1 : times[i]! + (times[i + 1]! - times[i]!) * f }
+  const distanceAt = (u: number) => {
+    let low = 0, high = N
+    while (high - low > 1) { const mid = (low + high) >> 1; if (times[mid]! < u) low = mid; else high = mid }
+    const f = (u - times[low]!) / Math.max(1e-9, times[high]! - times[low]!)
+    return (low + f) / N
   }
-  const inverse = (distance: number) => {
-    let low = 0, high = 1
-    for (let i = 0; i < 40; i++) { const mid = (low + high) / 2; if (at(mid) < distance) low = mid; else high = mid }
-    return (low + high) / 2
-  }
-  return { at, inverse }
+  return { at: time => distanceAt(pulseEase.at(time)), inverse: distance => pulseEase.inverse(timeAt(distance)) }
 }
+const smooth = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t) }

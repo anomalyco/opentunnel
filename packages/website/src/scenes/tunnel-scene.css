@@ -9,3 +9,5 @@
   .tunnel-panels { grid-template-columns: minmax(0, 1fr); gap: 36px; align-items: stretch; }
   .tunnel-column { max-width: 320px; }
 }
+.tunnel-relay-field { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); display: block; pointer-events: none; }
+.node-card[data-armored] .node-card-name { position: relative; z-index: 1; }

@@ -1,12 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react"
-import { motion, useTransform, type MotionValue } from "motion/react"
+import { useMotionValue, useMotionValueEvent, useTransform, type MotionValue } from "motion/react"
 import { DiagramFrame, DiagramHeader, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
-import { CardGlow, Pulse, pulseEase, pulseGatherMs, type PulseEase } from "../graphics/Pulse"
+import { CardGlow, Pulse, pulseEase, pulseGatherMs } from "../graphics/Pulse"
 import { pluginActivity, usePluginActivity } from "../graphics/pluginActivity"
 import { roundedWire } from "../graphics/roundedWire"
 import { useScenePlayback } from "../graphics/useScenePlayback"
 import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel, viscousFlight } from "./tunnelScore"
+import { RelayField } from "./RelayField"
 import "./tunnel-scene.css"
 
 // browser ──▶ relay ──▶ opencode
@@ -29,10 +30,12 @@ function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: bool
   return <NodeCard name="browser" icon="globe" data-node="browser" aria-label="A visitor's browser" {...inks} />
 }
 
-function Relay({ clock, reduced, crossings }: { clock: MotionValue<number>; reduced: boolean; crossings: readonly Crossing[] }) {
-  // Working while the bytes are inside: the icon holds bright for the scan.
+function Relay({ clock, reduced, crossings, front, age }: { clock: MotionValue<number>; reduced: boolean; crossings: readonly Crossing[]; front: MotionValue<number>; age: MotionValue<number> }) {
+  // Working while the bytes are inside: the icon holds bright while the field is lit.
   const inks = usePluginActivity(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
-  return <NodeCard name="relay" icon="relay" armored data-node="relay" aria-label="The relay, which cannot decrypt" {...inks} />
+  return <NodeCard name="relay" icon="relay" armored data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
+    {!reduced && <RelayField front={front} age={age} className="tunnel-relay-field" />}
+  </NodeCard>
 }
 
 function Route({ index, clock, reduced, crossing }: { index: number; clock: MotionValue<number>; reduced: boolean; crossing?: Crossing }) {
@@ -54,30 +57,8 @@ function fractionAtX(path: SVGPathElement, length: number, x: number) {
   return (low + high) / 2
 }
 
-/** The x-ray: a beam sweeps the relay's interior with the hidden dot, lighting hatching where it passes. Nothing legible. */
-function RelayScan({ clock, relay, path, length, leg, ease, id }: { clock: MotionValue<number>; relay: Box; path: SVGPathElement; length: number; leg: typeof tunnelLegs[number]; ease: PulseEase; id: string }) {
-  const inner = { x: relay.x + 4, y: relay.y + 4, width: relay.width - 8, height: relay.height - 8 }
-  const beamX = useTransform(clock, seconds => {
-    const t = seconds - leg.send
-    if (t < 0 || t > tunnelTravel / 1000) return -1e4
-    return path.getPointAtLength(ease.at(t / (tunnelTravel / 1000)) * length).x
-  })
-  const inside = useTransform(beamX, x => x > inner.x - 12 && x < inner.x + inner.width + 60 ? 1 : 0)
-  return <g clipPath={`url(#${id}-relay-clip)`} pointerEvents="none">
-    <motion.g style={{ opacity: inside }}>
-      {/* Only where the beam has just been: the sealed bytes as a fine hatch, nothing legible. */}
-      <motion.g style={{ x: beamX }}>
-        <rect x={-52} y={inner.y} width={52} height={inner.height} fill={`url(#${id}-scan-wake)`} />
-        <rect x={-52} y={inner.y} width={52} height={inner.height} fill={`url(#${id}-hatch)`} mask={`url(#${id}-scan-mask)`} />
-        <rect x={-.75} y={inner.y} width={1.5} height={inner.height} fill="#e8e4dc" opacity={.9} />
-        <rect x={-6} y={inner.y} width={12} height={inner.height} fill={`url(#${id}-scan-beam)`} />
-      </motion.g>
-    </motion.g>
-  </g>
-}
-
 /** Wires, sockets, pulses and light over the measured frames. */
-function TunnelSignals({ clock, reduced, panels, onCrossings }: { clock: MotionValue<number>; reduced: boolean; panels: RefObject<HTMLDivElement | null>; onCrossings: (crossings: Crossing[]) => void }) {
+function TunnelSignals({ clock, reduced, panels, onCrossings, front, age }: { clock: MotionValue<number>; reduced: boolean; panels: RefObject<HTMLDivElement | null>; onCrossings: (crossings: Crossing[]) => void; front: MotionValue<number>; age: MotionValue<number> }) {
   const id = useId().replace(/:/g, "")
   const milliseconds = useTransform(clock, seconds => seconds * 1000)
   const [bounds, setBounds] = useState<Bounds>()
@@ -136,6 +117,23 @@ function TunnelSignals({ clock, reduced, panels, onCrossings }: { clock: MotionV
     return { stacked, browserOut, relayIn, relayOut, routeIn, legs, wires: { request: `M${browserOut.x} ${browserOut.y}L${relayIn.x} ${relayIn.y}`, hops: routes.map(box => `M${relayOut.x} ${relayOut.y}${hop(box)}`) } }
   }, [bounds])
 
+  // The relay's field follows the hidden dot: its position across the card's interior, and the seconds since impact.
+  useMotionValueEvent(clock, "change", seconds => {
+    if (!geometry || !bounds) { front.set(-1); age.set(-1); return }
+    const flight = tunnelTravel / 1000
+    const inner = { x: bounds.relay.x + 1, width: bounds.relay.width - 2 }
+    for (const [index, leg] of geometry.legs.entries()) {
+      const { send } = tunnelLegs[index]!
+      const t = seconds - send
+      if (t < 0 || t > flight) continue
+      const x = leg.path.getPointAtLength(leg.ease.at(t / flight) * leg.length).x
+      const enter = send + leg.ease.inverse(leg.enter) * flight
+      front.set((x - inner.x) / inner.width); age.set(seconds - enter)
+      return
+    }
+    front.set(-1); age.set(-1)
+  })
+
   useEffect(() => {
     if (!geometry) return
     const flight = tunnelTravel / 1000
@@ -151,7 +149,6 @@ function TunnelSignals({ clock, reduced, panels, onCrossings }: { clock: MotionV
   const { stacked, browserOut, relayIn, relayOut, routeIn, legs, wires } = geometry
   const routeLanding = (box: Box) => stacked ? { x: box.x, y: box.y + box.height / 2 } : routeIn(box)
   const reflection = { borders: [browser, relay, machine, ...routes].map(outlineOf).join("") }
-  const relayInner = { x: relay.x + 4, y: relay.y + 4, width: relay.width - 8, height: relay.height - 8 }
 
   return <svg className="tunnel-signals" viewBox={`0 0 ${bounds.width} ${bounds.height}`} aria-hidden="true">
     <defs>
@@ -160,22 +157,6 @@ function TunnelSignals({ clock, reduced, panels, onCrossings }: { clock: MotionV
         <rect width={bounds.width} height={bounds.height} fill="white" />
         <rect x={relay.x + 1} y={relay.y + 1} width={relay.width - 2} height={relay.height - 2} fill="black" />
       </mask>
-      <clipPath id={`${id}-relay-clip`}><rect {...relayInner} /></clipPath>
-      <linearGradient id={`${id}-scan-beam`} x1="0" x2="1" y1="0" y2="0">
-        <stop offset="0" stopColor="#e8e4dc" stopOpacity="0" /><stop offset=".5" stopColor="#e8e4dc" stopOpacity=".35" /><stop offset="1" stopColor="#e8e4dc" stopOpacity="0" />
-      </linearGradient>
-      <linearGradient id={`${id}-scan-wake`} x1="0" x2="1" y1="0" y2="0">
-        <stop offset="0" stopColor="#e8e4dc" stopOpacity="0" /><stop offset="1" stopColor="#e8e4dc" stopOpacity=".08" />
-      </linearGradient>
-      <linearGradient id={`${id}-scan-fade`} x1="0" x2="1" y1="0" y2="0">
-        <stop offset="0" stopColor="white" stopOpacity="0" /><stop offset="1" stopColor="white" stopOpacity="1" />
-      </linearGradient>
-      <mask id={`${id}-scan-mask`} maskUnits="userSpaceOnUse" x={-52} y={relayInner.y} width={52} height={relayInner.height}>
-        <rect x={-52} y={relayInner.y} width={52} height={relayInner.height} fill={`url(#${id}-scan-fade)`} />
-      </mask>
-      <pattern id={`${id}-hatch`} width={5} height={5} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-        <rect width={1} height={5} fill="#e8e4dc" opacity=".55" />
-      </pattern>
       {/* The frame's border opens softly where a wire enters. */}
       <linearGradient id={`${id}-opening`} x1="0" x2="0" y1="0" y2="1">
         <stop offset="0" stopColor="#000" stopOpacity="0" /><stop offset=".5" stopColor="#000" stopOpacity="1" /><stop offset="1" stopColor="#000" stopOpacity="0" />
@@ -195,8 +176,6 @@ function TunnelSignals({ clock, reduced, panels, onCrossings }: { clock: MotionV
     <GraphWire d={wires.request} />
     {wires.hops.map((d, index) => <GraphWire key={index} d={d} />)}
 
-    {!reduced && legs.map((leg, index) => <RelayScan key={index} clock={clock} relay={relay} path={leg.path} length={leg.length} leg={tunnelLegs[index]!} ease={leg.ease} id={id} />)}
-
     <GraphSignals ports={<>
       <GraphPort {...browserOut} />
       <GraphPort {...relayIn} />
@@ -212,7 +191,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings }: { clock: MotionV
       </g>)}
     </>}>
       {!reduced && <g mask={`url(#${id}-relay-cutout)`}>
-        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} trail={{ cooling: 240 }} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
+        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} trail={{ cooling: 300, segments: 256 }} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
       </g>}
     </GraphSignals>
   </svg>
@@ -222,6 +201,7 @@ export function TunnelScene() {
   const player = useScenePlayback(tunnelScore.duration, { repeat: true, autoplay: true, after: 0 })
   const panels = useRef<HTMLDivElement>(null)
   const [crossings, setCrossings] = useState<Crossing[]>([])
+  const front = useMotionValue(-1), age = useMotionValue(-1)
   // Development: headless checks pose the scene through `window.__tunnel.seek(seconds)`.
   useEffect(() => {
     if (!import.meta.env.DEV) return
@@ -230,14 +210,14 @@ export function TunnelScene() {
   return <figure ref={player.host} className="tunnel-scene" aria-label="A visitor's browser sends encrypted traffic through the relay, which scans it without being able to read it, to one of three apps on your machine. Only your machine decrypts it.">
     <div ref={panels} className="tunnel-panels">
       <div className="tunnel-column tunnel-visitor"><Browser clock={player.clock} reduced={player.reduced} /></div>
-      <div className="tunnel-column tunnel-relay"><Relay clock={player.clock} reduced={player.reduced} crossings={crossings} /></div>
+      <div className="tunnel-column tunnel-relay"><Relay clock={player.clock} reduced={player.reduced} crossings={crossings} front={front} age={age} /></div>
       <DiagramFrame as="section" className="tunnel-machine" data-machine="" aria-label="Your machine">
         <DiagramHeader>Your machine</DiagramHeader>
         <div className="tunnel-routes">
           {tunnelRoutes.map((route, index) => <Route key={route.id} index={index} clock={player.clock} reduced={player.reduced} crossing={crossings[index]} />)}
         </div>
       </DiagramFrame>
-      <TunnelSignals clock={player.clock} reduced={player.reduced} panels={panels} onCrossings={setCrossings} />
+      <TunnelSignals clock={player.clock} reduced={player.reduced} panels={panels} onCrossings={setCrossings} front={front} age={age} />
     </div>
   </figure>
 }

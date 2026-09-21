@@ -2,54 +2,57 @@
    gutters, one set of hairlines (#383838 frames, #292929 rules, #131313 headers). */
 * { box-sizing: border-box; }
 html { background: #000; color-scheme: dark; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-body { margin: 0; background: #000; color: #c9c9c9; font: 600 14px/1.65 var(--font-mono), monospace; font-variant-numeric: tabular-nums lining-nums; }
+body { margin: 0; background: #000; color: #fff; font: 400 clamp(15px, 2vw, 18px)/1.7 var(--font-text), monospace; }
 ::selection { background: #e7e5e4; color: #000; }
 a { color: inherit; text-decoration: none; }
 a:hover { color: #fff; }
 p { margin: 0; }
-code { font-family: var(--font-mono); color: #e7e5e4; }
+code { font-family: inherit; color: #fff; }
 
 .site { --gutter: 24px; max-width: 1200px; margin: 0 auto; padding: 0 40px 40px; }
-.site-header { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 26px 0 24px; font-size: 12px; font-weight: 700; color: #a8a8a8; }
-.site-mark { color: #e7e5e4; }
-.site-nav { display: flex; align-items: center; gap: 24px; }
+.site-header { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; padding: 28px 0 24px; font-size: clamp(14px, 2vw, 17px); color: #fff; }
+.site-tagline { color: #fff; margin-right: 8px; }
+.site-mark { color: #fff; }
+.site-nav { display: flex; align-items: baseline; gap: 24px; }
+.site-nav a { opacity: .45; }
+.site-nav a:hover { opacity: 1; }
 
 /* The grid: twelve columns, one gutter, generous rows. Alignment is the only structure. */
 .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 64px var(--gutter); }
 .cell { min-width: 0; }
-.cell-label { margin: 0 0 14px; font-size: 12px; font-weight: 700; color: #6f6f6f; }
-.steps { margin: 0; padding: 0; list-style: none; max-width: 44em; color: #bdbdbd; font-size: 13px; line-height: 1.6; }
-.steps li + li { margin-top: 12px; }
-.cell > p strong { color: #ecebe9; font-weight: 700; }
-.cell > p { color: #bdbdbd; font-size: 13px; line-height: 1.6; max-width: 34em; }
-.cell > p code { color: #e7e5e4; }
+.cell-label { margin: 0 0 16px; font-size: inherit; font-weight: 500; letter-spacing: .02em; color: #fff; }
+.steps { margin: 0; padding: 0; list-style: none; max-width: 44em; }
+.steps li + li { margin-top: 16px; }
+.cell > p strong { color: #fff; font-weight: 500; }
+.cell > p { color: #fff; opacity: .55; max-width: 34em; }
+.cell > p strong, .cell > p code { opacity: 1; }
 
-.cell-lede h1 { margin: 0; font-size: 18px; line-height: 1.6; font-weight: 700; color: #ecebe9; text-wrap: pretty; max-width: 40em; }
+.cell-lede h1 { margin: 0; font-size: inherit; line-height: inherit; font-weight: 400; color: #fff; text-wrap: pretty; max-width: 40em; }
 .cell-install { display: flex; align-items: flex-start; }
 .cell-install .install { flex: 1; }
 
-.install { display: flex; align-items: stretch; border: 1px solid #383838; font-size: 13px; line-height: 1.5; }
-.install-command { flex: 1; display: flex; align-items: center; padding: 14px 18px; color: #e7e5e4; white-space: nowrap; overflow-x: auto; }
-.install-command > span { color: #6f6f6f; margin-right: .6em; }
-.install-copy { appearance: none; padding: 0 18px; border: 0; border-left: 1px solid #383838; background: transparent; color: #a8a8a8; font: 700 12px/1 var(--font-mono), monospace; cursor: pointer; }
-.install-copy:hover { color: #fff; background: #111; }
+.install { display: flex; align-items: stretch; border: 1px solid #383838; font-size: clamp(14px, 2vw, 17px); line-height: 1.5; }
+.install-command { flex: 1; display: flex; align-items: center; padding: 14px 18px; color: #fff; white-space: nowrap; overflow-x: auto; }
+.install-command > span { opacity: .45; margin-right: .6em; }
+.install-copy { appearance: none; padding: 0 18px; border: 0; border-left: 1px solid #383838; background: transparent; color: #fff; opacity: .45; font: inherit; cursor: pointer; }
+.install-copy:hover { opacity: 1; background: #111; }
 .install-copy:focus-visible { outline: 1px solid #d4ad88; outline-offset: -1px; }
 
 .cell-diagram .diagram { margin-top: 8px; }
 
 /* Code sits in the blog's frame: one hairline, the filename set into the top rule. */
-.code { position: relative; margin: 0; padding: 20px 20px 22px; border: 1px solid #383838; border-top-color: transparent; color: #d6d6d6; font: 500 13px/1.7 var(--font-mono), monospace; tab-size: 2; }
+.code { position: relative; margin: 0; padding: 20px 20px 22px; border: 1px solid #383838; border-top-color: transparent; color: #fff; font: 400 clamp(14px, 2vw, 17px)/1.8 var(--font-text), monospace; tab-size: 2; }
 .code code { display: block; overflow-x: auto; font: inherit; color: inherit; }
-.code[data-filename]::before { content: attr(data-filename); position: absolute; top: -.5px; left: 14px; transform: translateY(-50%); padding: 0 6px; background: #000; color: #858585; font: 600 12px/1.5 var(--font-mono), monospace; z-index: 1; }
+.code[data-filename]::before { content: attr(data-filename); position: absolute; top: -.5px; left: 14px; transform: translateY(-50%); padding: 0 6px; background: #000; color: #fff; opacity: .55; font: 400 clamp(13px, 1.6vw, 15px)/1.5 var(--font-text), monospace; z-index: 1; }
 .code[data-filename]::after { content: ""; position: absolute; top: -.5px; left: 0; right: 0; border-top: 1px solid #383838; }
 /* Highlighting by dimness, not colour: what you typed is bright, what came back is dim, punctuation dimmer. */
-.tok-cmd { color: #ecebe9; font-weight: 700; }
-.tok-out { color: #8a8a8a; }
-.tok-dim { color: #5c5c5c; }
-.cell-code .note { margin-top: 18px; color: #8a8a8a; font-size: 12px; line-height: 1.6; max-width: 34em; }
+.tok-cmd { color: #fff; }
+.tok-out { color: #fff; opacity: .55; }
+.tok-dim { color: #fff; opacity: .35; }
+.cell-code .note { margin-top: 18px; color: #fff; opacity: .55; max-width: 34em; }
 .cell-code { padding-top: 6px; }
 
-.site-footer { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-top: 96px; padding: 20px 0 0; border-top: 1px solid #292929; font-size: 12px; font-weight: 700; color: #6f6f6f; }
+.site-footer { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-top: 96px; padding: 20px 0 0; border-top: 1px solid #292929; color: #fff; opacity: .45; }
 .site-footer a:hover { color: #fff; }
 
 .hero-poster { max-width: 400px; }

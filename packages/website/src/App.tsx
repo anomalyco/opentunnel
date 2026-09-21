@@ -41,6 +41,7 @@ export function App() {
     <header className="site-header">
       <a className="site-mark" href="/">opentunnel</a>
       <nav className="site-nav">
+        <span className="site-tagline">public urls for anything</span>
         <a href={docs}>docs</a>
         <a href={github}>github</a>
         <a href={npm}>npm</a>
@@ -59,7 +60,7 @@ export function App() {
         <Install />
       </Cell>
 
-      <Cell span={12} title="public urls for anything" className="cell-diagram">
+      <Cell span={12} className="cell-diagram">
         <div className="diagram"><TunnelScene /></div>
       </Cell>
 
