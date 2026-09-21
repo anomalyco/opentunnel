@@ -45,10 +45,11 @@ const subtitleVariants = [
   "two-lines-right", "two-lines-square", "on-square", "full-row-rule", "large-light", "caps-dim-large", "caps-between",
   "micro-a", "micro-b", "micro-c", "square-just", "square-just-red", "square-just-rule", "square-just-right",
   "square-dots", "square-arrows", "square-icons", "square-icons-end",
+  "square-end-plain", "square-end-white", "square-end-lead", "square-end-rule", "square-end-tight",
 ] as const
 type SubtitleVariant = typeof subtitleVariants[number]
 function useSubtitleVariant(): SubtitleVariant {
-  const [variant, setVariant] = useState<SubtitleVariant>(() => (import.meta.env.DEV && localStorage.getItem("subtitle") as SubtitleVariant) || "mono-left")
+  const [variant, setVariant] = useState<SubtitleVariant>(() => (import.meta.env.DEV && localStorage.getItem("subtitle") as SubtitleVariant) || "square-icons-end")
   useEffect(() => {
     if (!import.meta.env.DEV) return
     const onKey = (event: KeyboardEvent) => {
@@ -114,7 +115,7 @@ function Masthead() {
       variant === "square-dots" ? <><b>public<i className="fill" />urls</b><b>for<i className="fill" />anything</b></> :
       variant === "square-arrows" ? <><b>public<i className="fill"><ArrowRight size={10} weight="bold" /></i>urls</b><b>for<i className="fill"><ArrowRight size={10} weight="bold" /></i>anything</b></> :
       variant === "square-icons" ? <><b>public<i className="fill"><GlobeIcon size={11} /></i>urls</b><b>for<i className="fill"><LockSimple size={11} /></i>anything</b></> :
-      variant === "square-icons-end" ? <><b>public<i className="fill" />urls<Globe clock={seconds} size={11} className="tail" /></b><b>for<i className="fill" />anything<LockSimple size={11} className="tail" /></b></> : variant === "caps-between" ? <><em>public</em><em>urls</em><em>for</em><em>anything</em></> : "public urls for anything"}</span>
+      variant.startsWith("square-end") || variant === "square-icons-end" ? <><b><span>public</span><i className="fill" /><span>urls</span><Globe clock={seconds} size={11} className="tail" /></b><b><span>for</span><i className="fill" /><span>anything</span><LockSimple size={11} className="tail" /></b></> : variant === "caps-between" ? <><em>public</em><em>urls</em><em>for</em><em>anything</em></> : "public urls for anything"}</span>
       {micro && <><span className="micro-leader" aria-hidden="true" /><span className="micro-meta">e2e · tls · v0.0.30</span></>}
       {variant === "micro-c" && <Barcode className="micro-barcode" text="OPENTUNNEL.XYZ" height={18} />}
     </h1>

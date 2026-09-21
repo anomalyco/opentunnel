@@ -9,7 +9,7 @@ body { margin: 0; background: #000; color: #fff; font-family: var(--font-text), 
 ::selection { background: #fff; color: #000; }
 a { color: #fff; text-decoration: none; }
 
-main { width: min(100% - 48px, 760px); margin: 0 auto; padding: var(--s4) 0 var(--s5); }
+main { width: min(100% - 48px, 760px); margin: 0 auto; padding: var(--s5) 0 var(--s5); }
 
 /* The wordmark, edge to edge of the column; the old headline under it at text size. Mist rises from the O's counter. */
 /* A square the mark's height, then the mark: with the mark at 4.6:1 the square is 1/5.6 of the row less the gap. */
@@ -74,7 +74,15 @@ h1 > span { display: inline-block; }
 [data-subtitle^="square-"]:not([data-subtitle^="square-just"]) h1 b { display: flex; align-items: center; }
 [data-subtitle^="square-"] h1 .fill { flex: 1; display: flex; align-items: center; justify-content: center; margin: 0 .7em; font-style: normal; }
 [data-subtitle="square-dots"] h1 .fill, [data-subtitle="square-icons-end"] h1 .fill { border-bottom: 1px dotted currentColor; opacity: .6; }
-[data-subtitle="square-icons-end"] h1 .tail { margin-left: .6em; }
+[data-subtitle="square-icons-end"] h1 .tail, [data-subtitle^="square-end"] h1 .tail { margin-left: .6em; }
+/* The same block without leaders: plain gaps; white words with red icons; the icon leading the line;
+   a hairline above; and the words closed up with the icon carrying the line to the edge. */
+[data-subtitle="square-end-white"]:not([data-subtitle^="square-just"]) h1 { color: rgba(255, 255, 255, .75); }
+[data-subtitle="square-end-white"] h1 .tail { color: #ff2a2a; }
+[data-subtitle="square-end-lead"] h1 .tail { order: -1; margin: 0 .6em 0 0; }
+[data-subtitle="square-end-rule"] h1 { padding-top: 8px; border-top: 1px solid rgba(255, 42, 42, .45); }
+[data-subtitle="square-end-tight"] h1 .fill { flex: 0 0 .6em; margin: 0; }
+[data-subtitle="square-end-tight"] h1 .tail { margin-left: auto; }
 [data-subtitle="square-just-red"] h1 { color: #ff2a2a; opacity: 1; }
 [data-subtitle="square-just-rule"] h1 { padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, .3); }
 [data-subtitle="square-just-right"] h1 { grid-column: 2; margin-left: auto; width: calc((100% - 16px) / 4.6 * 0); min-width: 0; }
@@ -108,7 +116,6 @@ pre { margin: 0; overflow-x: auto; color: #fff; font: clamp(14px, 2vw, 17px)/1.8
 
 /* The diagram takes the old drawing's slot and may run a little wider than the column, centred on it. */
 .diagram-wrap { --bleed: min(940px, 100vw - 48px); width: var(--bleed); margin: var(--s4) 0 0 calc((100% - var(--bleed)) / 2); overflow-x: auto; }
-.diagram { min-width: 640px; }
 
 /* Dev: the red print above the page (`?hero=banner`). */
 .banner { margin-bottom: -4vh; }
@@ -116,6 +123,8 @@ pre { margin: 0; overflow-x: auto; color: #fff; font: clamp(14px, 2vw, 17px)/1.8
 @media (max-width: 600px) {
   :root { --s4: 48px; --s5: 80px; }
   main { width: min(100% - 32px, 760px); }
+  /* The subtitle spans the whole row under the lockup, still justified, at a size that reads. */
+  [data-subtitle^="square-"] h1 { grid-column: 1 / -1; font-size: 11px; }
 }
 
 /* Monotone (`?theme=mono`): the page as a duotone of its own luminance, see theme.ts. */
