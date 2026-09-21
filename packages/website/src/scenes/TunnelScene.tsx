@@ -7,31 +7,13 @@ import { pluginActivity, usePluginActivity } from "../graphics/pluginActivity"
 import { roundedWire } from "../graphics/roundedWire"
 import { useScenePlayback } from "../graphics/useScenePlayback"
 import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel, viscousFlight } from "./tunnelScore"
-import { RelayField } from "./RelayField"
+import { RelayField, type RelayFront } from "./RelayField"
 import "./tunnel-scene.css"
 
 /** The page's one colour: the paper red, for everything that carries the signal. */
 export const accent = "#ff2a2a"
 /** The signal itself, hotter than the ink: red gone nearly white. */
 export const hot = "#ffc4b8"
-
-/** pluginActivity's inks are grey ramps (rgb(n n n)); print them as the red at that strength instead. */
-function useRedInks(clock: MotionValue<number>, activity: Parameters<typeof usePluginActivity>[1]) {
-  const inks = usePluginActivity(clock, activity)
-  // Each ink rests at a known grey (pluginActivity): map rest→its red level, and the lift above rest→toward full red.
-  const red = (grey: string, rest: number, restLevel: number, peak: number, peakLevel: number) => {
-    const n = parseInt(grey.slice(4), 10)
-    const t = Math.max(0, Math.min(1, (n - rest) / (peak - rest)))
-    const k = restLevel + (peakLevel - restLevel) * t
-    return `rgb(${Math.round(255 * k)} ${Math.round(42 * k)} ${Math.round(42 * k)})`
-  }
-  return {
-    color: useTransform(inks.color, grey => red(grey, 170, 1, 255, 1.2)),
-    iconColor: useTransform(inks.iconColor, grey => red(grey, 119, .65, 238, 1.2)),
-    insetColor: useTransform(inks.insetColor, grey => red(grey, 41, .18, 55, .8)),
-    frameColor: useTransform(inks.frameColor, grey => red(grey, 56, .29, 64, .9)),
-  }
-}
 
 // browser ──▶ relay ──▶ opencode
 //                  ╲──▶ api          (your machine)
@@ -46,26 +28,26 @@ type Box = { x: number; y: number; width: number; height: number }
 type Bounds = { width: number; height: number; browser: Box; relay: Box; machine: Box; routes: Box[] }
 /** Scene seconds at which each leg's pulse enters the relay, leaves it, and is read (its midpoint). */
 export type Crossing = { enter: number; leave: number; read: number }
-/** The frame's 2px border, traced along its centre. */
-const outlineOf = (box: Box) => `M${box.x + 1} ${box.y + 1}h${box.width - 2}v${box.height - 2}h${2 - box.width}Z`
+/** The frame's 1px border, traced along its centre. */
+const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
 
 function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
-  const inks = useRedInks(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
+  const inks = usePluginActivity(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
   return <NodeCard name="browser" icon="globe" data-node="browser" aria-label="A visitor's browser" {...inks} />
 }
 
-function Relay({ clock, reduced, crossings, front, age }: { clock: MotionValue<number>; reduced: boolean; crossings: readonly Crossing[]; front: MotionValue<number>; age: MotionValue<number> }) {
+function Relay({ clock, reduced, crossings, fronts, now }: { clock: MotionValue<number>; reduced: boolean; crossings: readonly Crossing[]; fronts: MotionValue<readonly RelayFront[]>; now: MotionValue<number> }) {
   // Working while the bytes are inside: the icon holds bright while the field is lit.
-  const inks = useRedInks(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
-  return <NodeCard name="relay" icon="relay" armored data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
-    {!reduced && <RelayField front={front} age={age} ink="#ff5a48" className="tunnel-relay-field" />}
+  const inks = usePluginActivity(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
+  return <NodeCard name="relay" icon="relay" data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
+    {!reduced && <RelayField fronts={fronts} now={now} ink="#ff5a48" className="tunnel-relay-field" />}
   </NodeCard>
 }
 
 function Route({ index, clock, reduced }: { index: number; clock: MotionValue<number>; reduced: boolean }) {
   const route = tunnelRoutes[index]!, leg = tunnelLegs[index]!
   // The destination flashes as the bytes land, and works for a beat after.
-  const inks = useRedInks(clock, { dispatches: [leg.contact], running: [[leg.contact, leg.contact + 1.1]], reduced })
+  const inks = usePluginActivity(clock, { dispatches: [leg.contact], running: [[leg.contact, leg.contact + 1.1]], reduced })
   return <NodeCard name={route.name} icon={route.icon} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
     <span className="node-card-detail">{route.target}</span>
   </NodeCard>
@@ -82,7 +64,7 @@ function fractionAtX(path: SVGPathElement, length: number, x: number) {
 }
 
 /** Wires, sockets, pulses and light over the measured frames. */
-function TunnelSignals({ clock, reduced, panels, onCrossings, front, age }: { clock: MotionValue<number>; reduced: boolean; panels: RefObject<HTMLDivElement | null>; onCrossings: (crossings: Crossing[]) => void; front: MotionValue<number>; age: MotionValue<number> }) {
+function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { clock: MotionValue<number>; reduced: boolean; panels: RefObject<HTMLDivElement | null>; onCrossings: (crossings: Crossing[]) => void; fronts: MotionValue<readonly RelayFront[]>; now: MotionValue<number> }) {
   const id = useId().replace(/:/g, "")
   const milliseconds = useTransform(clock, seconds => seconds * 1000)
   const [bounds, setBounds] = useState<Bounds>()
@@ -141,22 +123,21 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, front, age }: { cl
     return { stacked, browserOut, relayIn, relayOut, routeIn, legs, wires: { request: `M${browserOut.x} ${browserOut.y}L${relayIn.x} ${relayIn.y}`, hops: routes.map(box => `M${relayOut.x} ${relayOut.y}${hop(box)}`) } }
   }, [bounds])
 
-  // The relay's field follows the hidden dot: its position across the card's interior, and the seconds since impact.
+  // The relay's field follows every dot in flight: each one's position across the card's interior, and scene time.
   useMotionValueEvent(clock, "change", seconds => {
-    if (!geometry || !bounds) { front.set(-1); age.set(-1); return }
+    now.set(seconds)
+    if (!geometry || !bounds) { fronts.set([]); return }
     const flight = tunnelTravel / 1000
     const inner = { x: bounds.relay.x + 1, width: bounds.relay.width - 2 }
+    const active: RelayFront[] = []
     for (const [index, leg] of geometry.legs.entries()) {
       const { send } = tunnelLegs[index]!
       const t = seconds - send
-      if (t < 0 || t > flight + 4) continue
-      const enter = send + leg.ease.inverse(leg.enter) * flight
-      // After the flight the dot is gone; the burn keeps cooling in place.
-      const x = t <= flight ? leg.path.getPointAtLength(leg.ease.at(t / flight) * leg.length).x : inner.x + inner.width * 3
-      front.set((x - inner.x) / inner.width); age.set(seconds - enter)
-      return
+      if (t < 0 || t > flight) continue
+      const x = leg.path.getPointAtLength(leg.ease.at(t / flight) * leg.length).x
+      active.push({ leg: index, x: (x - inner.x) / inner.width })
     }
-    front.set(-1); age.set(-1)
+    fronts.set(active)
   })
 
   useEffect(() => {
@@ -173,7 +154,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, front, age }: { cl
   const { browser, relay, machine, routes } = bounds
   const { stacked, browserOut, relayIn, relayOut, routeIn, legs, wires } = geometry
   const routeLanding = (box: Box) => stacked ? { x: box.x, y: box.y + box.height / 2 } : routeIn(box)
-  const reflection = { borders: [browser, relay, machine, ...routes].map(outlineOf).join(""), width: 2, strength: .9, radius: 110 }
+  const reflection = { borders: [browser, relay, machine, ...routes].map(outlineOf).join(""), strength: .9, radius: 110 }
 
   return <svg className="tunnel-signals" viewBox={`0 0 ${bounds.width} ${bounds.height}`} aria-hidden="true">
     <defs>
@@ -226,7 +207,7 @@ export function TunnelScene() {
   const player = useScenePlayback(tunnelScore.duration, { repeat: true, autoplay: true, after: 0 })
   const panels = useRef<HTMLDivElement>(null)
   const [crossings, setCrossings] = useState<Crossing[]>([])
-  const front = useMotionValue(-1), age = useMotionValue(-1)
+  const fronts = useMotionValue<readonly RelayFront[]>([]), now = useMotionValue(0)
   // Development: headless checks pose the scene through `window.__tunnel.seek(seconds)`.
   useEffect(() => {
     if (!import.meta.env.DEV) return
@@ -235,14 +216,14 @@ export function TunnelScene() {
   return <figure ref={player.host} className="tunnel-scene" aria-label="A visitor's browser sends encrypted traffic through the relay, which scans it without being able to read it, to one of three apps on your machine. Only your machine decrypts it.">
     <div ref={panels} className="tunnel-panels">
       <div className="tunnel-column tunnel-visitor"><Browser clock={player.clock} reduced={player.reduced} /></div>
-      <div className="tunnel-column tunnel-relay"><Relay clock={player.clock} reduced={player.reduced} crossings={crossings} front={front} age={age} /></div>
+      <div className="tunnel-column tunnel-relay"><Relay clock={player.clock} reduced={player.reduced} crossings={crossings} fronts={fronts} now={now} /></div>
       <DiagramFrame as="section" className="tunnel-machine" data-machine="" aria-label="Your machine">
         <span className="tunnel-machine-label" aria-hidden="true">your machine</span>
         <div className="tunnel-routes">
           {tunnelRoutes.map((route, index) => <Route key={route.id} index={index} clock={player.clock} reduced={player.reduced} />)}
         </div>
       </DiagramFrame>
-      <TunnelSignals clock={player.clock} reduced={player.reduced} panels={panels} onCrossings={setCrossings} front={front} age={age} />
+      <TunnelSignals clock={player.clock} reduced={player.reduced} panels={panels} onCrossings={setCrossings} fronts={fronts} now={now} />
     </div>
   </figure>
 }

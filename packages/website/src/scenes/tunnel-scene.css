@@ -1,7 +1,7 @@
 .tunnel-scene { position: relative; margin: 0; padding-top: 12px; color: #aaa; font: 13px/1.5 var(--font-mono), monospace; font-variant-numeric: tabular-nums lining-nums; }
-.tunnel-panels { position: relative; display: grid; grid-template-columns: 220px 260px minmax(0, 1fr); gap: 120px; align-items: center; padding-top: 12px; }
+.tunnel-panels { position: relative; display: grid; grid-template-columns: 170px 190px minmax(0, 1fr); gap: 120px; align-items: center; padding-top: 12px; }
 .tunnel-column { min-width: 0; }
-.tunnel-routes { display: grid; gap: 14px; padding: 20px; }
+.tunnel-routes { display: grid; gap: 8px; padding: 14px; }
 .tunnel-signals { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .graph-pulses { display: none; } }
 @media (max-width: 900px) { .tunnel-panels { grid-template-columns: 170px 200px minmax(0, 1fr); gap: 48px; } }
@@ -10,37 +10,17 @@
   .tunnel-column { max-width: 320px; }
 }
 .tunnel-relay-field { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); display: block; pointer-events: none; }
-.node-card[data-armored] .node-card-name { position: relative; z-index: 1; }
 
-/* One ink. Every mark in the diagram is the red at some strength: full for names and signals,
-   dim for structure, faint for rules. Nothing white, nothing grey. */
-.tunnel-scene { --accent: #ff2a2a; --ink-dim: #a11c1c; --ink-faint: #4a1010; --ink-rule: #2e0a0a; --ink-header: #150404; font-family: var(--font-text), monospace; color: var(--accent); }
-.tunnel-scene .node-card-name { font: 600 12px/16px var(--font-text), monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+/* White names, grey structure, and the red only for what carries the signal. */
+.tunnel-scene { --accent: #ff2a2a; font-family: var(--font-text), monospace; }
+.tunnel-scene .node-card-name { font: 600 12px/16px var(--font-text), monospace; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
 .tunnel-scene .node-card-icon { color: var(--accent); }
-.tunnel-scene .node-card-detail { font: 500 11px/16px var(--font-text), monospace; color: var(--ink-dim); }
-.tunnel-scene .diagram-header { font: 600 11px/16px var(--font-text), monospace; letter-spacing: .12em; color: var(--accent); background: var(--ink-header); box-shadow: inset 0 -1px var(--ink-rule); }
+.tunnel-scene .node-card-detail { font: 500 11px/16px var(--font-text), monospace; color: #6f6f6f; }
 .tunnel-scene .graph-dots circle { fill: var(--accent); }
-.tunnel-scene .node-card-armor { background: repeating-linear-gradient(-45deg, var(--ink-dim) 0 1.5px, transparent 1.5px 5px); }
-.tunnel-scene .diagram-frame { border-color: var(--ink-faint); background: transparent; }
-.tunnel-scene .node-card-inset { border-color: var(--ink-rule); }
-.tunnel-scene .node-card[data-armored] .node-card-inset { border-color: var(--ink-faint); }
-.tunnel-scene .tunnel-signals path { stroke: var(--ink-faint); }
-
-/* Chunky: taller cards, bigger type, 2px frames, fatter sockets and wires. */
-.tunnel-scene .node-card { min-height: 64px; padding: 12px 20px; }
-.tunnel-scene .node-card[data-armored] { min-height: 76px; padding-inline: 26px; }
-.tunnel-scene .node-card[data-armored] .node-card-inset { inset: 11px; }
-.tunnel-scene .node-card-armor { padding: 11px; background: repeating-linear-gradient(-45deg, var(--ink-dim) 0 2px, transparent 2px 7px); }
-.tunnel-scene .node-card-name { font-size: 15px; line-height: 20px; gap: 12px; }
-.tunnel-scene .node-card-icon { width: 18px; height: 18px; }
-.tunnel-scene .node-card-detail { font-size: 13px; line-height: 20px; }
-.tunnel-scene .diagram-frame { border-width: 2px; }
-.tunnel-scene .node-card-inset { inset: 4px; }
-.tunnel-scene .diagram-header { height: 52px; font-size: 13px; padding-inline: 20px; }
-.tunnel-scene .graph-dots circle { r: 5px; }
-.tunnel-scene .tunnel-signals > path { stroke-width: 2px; }
-.tunnel-scene .pulse-trail { stroke-width: 2.4px; }
+.tunnel-scene .diagram-frame { border-color: #444; }
+.tunnel-scene .node-card-inset { border-color: #333; }
+.tunnel-scene .node-card[data-node=relay] .node-card-name { position: relative; z-index: 1; text-shadow: 0 0 2px #000, 0 0 4px #000, 0 0 8px #000; }
 
 /* The machine's name is set into its top rule, as a code frame carries its filename. */
 .tunnel-machine { position: relative; margin-top: 12px; }
-.tunnel-machine-label { position: absolute; top: -1px; left: 18px; transform: translateY(-50%); padding: 0 8px; background: #000; color: var(--accent); font: 600 13px/16px var(--font-text), monospace; letter-spacing: .12em; text-transform: uppercase; }
+.tunnel-machine-label { position: absolute; top: 0; left: 14px; transform: translateY(-50%); padding: 0 6px; background: #000; color: #fff; font: 600 11px/14px var(--font-text), monospace; letter-spacing: .12em; text-transform: uppercase; }
