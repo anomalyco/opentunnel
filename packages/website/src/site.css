@@ -78,7 +78,7 @@ h1 > span { display: inline-block; }
 [data-subtitle^="square-"]:not([data-subtitle^="square-just"]) h1 b { display: flex; align-items: center; }
 [data-subtitle^="square-"] h1 .fill { flex: 1; display: flex; align-items: center; justify-content: center; margin: 0 .7em; font-style: normal; }
 [data-subtitle="square-dots"] h1 .fill, [data-subtitle="square-icons-end"] h1 .fill { border-bottom: 1px dotted currentColor; opacity: .6; }
-[data-subtitle="square-icons-end"] h1 .tail, [data-subtitle^="square-end"] h1 .tail { margin-left: .6em; }
+[data-subtitle="square-icons-end"] h1 .tail, [data-subtitle^="square-end"] h1 .tail { margin-left: .6em; position: relative; top: .5px; }
 /* The same block without leaders: plain gaps; white words with red icons; the icon leading the line;
    a hairline above; and the words closed up with the icon carrying the line to the edge. */
 [data-subtitle="square-end-white"]:not([data-subtitle^="square-just"]) h1 { color: rgba(255, 255, 255, .75); }

@@ -7,5 +7,5 @@
 /* Under the square, justified to its width, in the red: word, dotted leader, word, a small icon. */
 .og-caption { grid-column: 1; grid-row: 2; margin: 12px 0 0; font: 400 1.5cqw/1.75 var(--font-text), monospace; letter-spacing: 0; text-transform: uppercase; color: #ff2a2a; }
 .og-caption b { display: flex; align-items: center; font-weight: 400; }
-.og-caption .fill { flex: 0 0 .6em; }
-.og-caption .tail { flex: none; margin-left: auto; }
+.og-caption .fill { flex: 1; margin: 0 .7em; border-bottom: 1px dotted currentColor; opacity: .6; }
+.og-caption .tail { flex: none; margin-left: .6em; position: relative; top: .5px; }

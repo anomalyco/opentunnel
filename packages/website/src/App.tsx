@@ -49,7 +49,7 @@ const subtitleVariants = [
 ] as const
 type SubtitleVariant = typeof subtitleVariants[number]
 function useSubtitleVariant(): SubtitleVariant {
-  const [variant, setVariant] = useState<SubtitleVariant>(() => (import.meta.env.DEV && localStorage.getItem("subtitle") as SubtitleVariant) || "square-end-tight")
+  const [variant, setVariant] = useState<SubtitleVariant>(() => (import.meta.env.DEV && localStorage.getItem("subtitle") as SubtitleVariant) || "square-icons-end")
   useEffect(() => {
     if (!import.meta.env.DEV) return
     const onKey = (event: KeyboardEvent) => {
