@@ -10,12 +10,27 @@ main { width: min(100% - 48px, 760px); margin: 0 auto; padding: 9vh 0 14vh; }
 
 /* The wordmark, edge to edge of the column; the old headline under it at text size. Mist rises from the O's counter. */
 /* A square the mark's height, then the mark: with the mark at 4.6:1 the square is 1/5.6 of the row less the gap. */
-.masthead { position: relative; display: grid; grid-template-columns: calc((100% - 16px) / 5.6) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.masthead { position: relative; display: grid; grid-template-columns: calc((100% - 16px) / 5.6) minmax(0, 1fr); gap: 0 16px; align-items: stretch; }
+.masthead h1 { grid-column: 2; }
 .masthead-print { position: relative; aspect-ratio: 1; overflow: hidden; }
 .masthead-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .wordmark { display: block; width: 100%; aspect-ratio: 4.6; color: #fff; font-family: var(--font-wordmark), sans-serif; overflow: visible; }
 .mist { position: absolute; z-index: 1; display: block; pointer-events: none; }
-h1 { margin: 20px 0 0; font-size: clamp(15px, 2vw, 18px); font-weight: 400; letter-spacing: .02em; line-height: 1.7; text-align: center; color: #fff; opacity: .7; }
+/* The headline, set on the mark's own column. Treatments to compare (dev: ← →). */
+h1 { margin: 16px 0 0; font: 400 clamp(15px, 2vw, 18px)/1.7 var(--font-text), monospace; letter-spacing: .02em; color: #fff; opacity: .7; }
+h1 > span { display: inline-block; }
+[data-subtitle="mono-right"] h1 { text-align: right; }
+[data-subtitle="mono-center"] h1 { text-align: center; }
+[data-subtitle="mono-caps"] h1 { font-size: clamp(12px, 1.5vw, 14px); letter-spacing: .28em; text-transform: uppercase; }
+[data-subtitle="mono-red"] h1 { color: #ff2a2a; opacity: 1; }
+[data-subtitle="mono-rule"] h1 { display: flex; align-items: center; gap: 16px; }
+[data-subtitle="mono-rule"] h1::after { content: ""; flex: 1; height: 1px; background: #fff; opacity: .3; }
+[data-subtitle="mono-bracket"] h1 > span::before { content: "[ "; opacity: .45; }
+[data-subtitle="mono-bracket"] h1 > span::after { content: " ]"; opacity: .45; }
+[data-subtitle^="anton"] h1 { margin-top: 12px; font: 400 clamp(17px, 2.4vw, 24px)/1.2 var(--font-wordmark), sans-serif; letter-spacing: .06em; }
+[data-subtitle="anton-caps"] h1 { font-size: clamp(13px, 1.7vw, 16px); letter-spacing: .32em; text-transform: uppercase; }
+[data-subtitle="anton-right"] h1 { text-align: right; }
+.variant-badge { position: absolute; right: 0; top: -28px; font: 400 11px/16px var(--font-text), monospace; color: #fff; opacity: .4; }
 h2 { margin: 0 0 40px; font-size: clamp(20px, 3.2vw, 27px); font-weight: 500; letter-spacing: .02em; }
 
 .description { margin: 40px 0 0; font-size: clamp(15px, 2vw, 18px); line-height: 1.7; }

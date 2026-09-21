@@ -33,7 +33,32 @@ function Install() {
 /** The wordmark as a tunnel mouth. Set like FitText (glyphs stretched to the box), drawn here so mist can be hung
  * from the O's counter, which is measured with a canvas in the same resolved font. */
 const WORDMARK = "OPENTUNNEL", WIDTH = 1000, ASPECT = 4.6, CAP = .867
+
+/** Dev: subtitle treatments to compare on the page; ← and → cycle them, the choice persists. */
+const subtitleVariants = ["mono-left", "mono-right", "mono-caps", "mono-red", "mono-rule", "mono-bracket", "anton-left", "anton-caps", "anton-right", "mono-center"] as const
+type SubtitleVariant = typeof subtitleVariants[number]
+function useSubtitleVariant(): SubtitleVariant {
+  const [variant, setVariant] = useState<SubtitleVariant>(() => (import.meta.env.DEV && localStorage.getItem("subtitle") as SubtitleVariant) || "mono-left")
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+      if ((event.target as HTMLElement)?.closest("input, textarea, button, [contenteditable]")) return
+      setVariant(current => {
+        const index = subtitleVariants.indexOf(current), step = event.key === "ArrowRight" ? 1 : -1
+        const next = subtitleVariants[(index + step + subtitleVariants.length) % subtitleVariants.length]!
+        localStorage.setItem("subtitle", next)
+        return next
+      })
+    }
+    addEventListener("keydown", onKey)
+    return () => removeEventListener("keydown", onKey)
+  }, [])
+  return variant
+}
+
 function Masthead() {
+  const variant = useSubtitleVariant()
   const host = useRef<HTMLDivElement>(null), svg = useRef<SVGSVGElement>(null), text = useRef<SVGTextElement>(null)
   const height = WIDTH / ASPECT, fontSize = height / CAP
   const [mist, setMist] = useState<{ left: number; top: number; width: number; height: number; source: [number, number] } | null>(null)
@@ -59,7 +84,8 @@ function Masthead() {
     observer.observe(element)
     return () => observer.disconnect()
   }, [fontSize, height])
-  return <div ref={host} className="masthead">
+  return <div ref={host} className="masthead" data-subtitle={variant}>
+    {import.meta.env.DEV && <span className="variant-badge" aria-hidden="true">← {variant} →</span>}
     {/* Mist from the O's counter: parked until the smoke reads right. */}
     {mist && showMist && <Mist className="mist" style={{ left: mist.left, top: mist.top, width: mist.width, height: mist.height }} source={mist.source} />}
     {/* The tunnel print, as a square the height of the mark, beside it. */}
@@ -67,6 +93,7 @@ function Masthead() {
     <svg ref={svg} className="wordmark" viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <text ref={text} x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={fontSize} fill="currentColor">{WORDMARK}</text>
     </svg>
+    <h1><span>public urls for anything</span></h1>
   </div>
 }
 
@@ -89,7 +116,6 @@ export function App() {
 
     <main>
       <Masthead />
-      <h1>public urls for anything</h1>
 
       <div className="diagram-wrap"><div className="diagram"><TunnelScene /></div></div>
 
