@@ -20,19 +20,6 @@ type Box = { x: number; y: number; width: number; height: number }
 type Bounds = { width: number; height: number; browser: Box; relay: Box; machine: Box; routes: Box[] }
 const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
 
-/** The name the relay reads off the handshake: bright at contact, fading over the hop. */
-function RelayReading({ clock }: { clock: MotionValue<number> }) {
-  const inks = tunnelLegs.map(leg => useTransform(clock, seconds => {
-    const age = seconds - leg.request.contact
-    return age < 0 ? 0 : Math.max(0, 1 - age / 2.2) ** 1.6
-  }))
-  const resting = useTransform(inks, values => 1 - Math.max(...(values as number[])))
-  return <span className="node-card-detail tunnel-reading">
-    <motion.span style={{ opacity: resting }}>cannot decrypt</motion.span>
-    {tunnelRoutes.map((route, index) => <motion.span key={route.id} className="tunnel-sni" style={{ opacity: inks[index] }}>sni <span>{route.name}</span></motion.span>)}
-  </span>
-}
-
 function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
   const inks = usePluginActivity(clock, { dispatches: tunnelLegs.map(leg => leg.request.start), reduced })
   return <NodeCard name="browser" icon="globe" data-node="browser" aria-label="A visitor's browser" {...inks}>
@@ -43,7 +30,7 @@ function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: bool
 function Relay({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
   const inks = usePluginActivity(clock, { dispatches: tunnelLegs.map(leg => leg.hop.start), running: tunnelLegs.map(leg => [leg.request.contact, leg.hop.send] as const), reduced })
   return <NodeCard name="relay" icon="relay" data-node="relay" aria-label="The relay" {...inks}>
-    <RelayReading clock={clock} />
+    <span className="node-card-detail">cannot decrypt</span>
   </NodeCard>
 }
 
@@ -53,6 +40,22 @@ function Route({ index, clock, reduced }: { index: number; clock: MotionValue<nu
   return <NodeCard name={route.name} icon={route.icon} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
     <span className="node-card-detail">{route.target}</span>
   </NodeCard>
+}
+
+/** The name the relay reads off the handshake, captioned under it: in at contact, out once the hop has left. */
+function RelayReading({ clock, x, y }: { clock: MotionValue<number>; x: number; y: number }) {
+  return <>{tunnelLegs.map((leg, index) => {
+    const opacity = useTransform(clock, seconds => {
+      const start = leg.request.contact, end = leg.hop.send + .4
+      if (seconds < start || seconds > end + .6) return 0
+      if (seconds < start + .15) return (seconds - start) / .15
+      if (seconds <= end) return 1
+      return 1 - (seconds - end) / .6
+    })
+    return <motion.text key={index} className="tunnel-label tunnel-reading" x={x} y={y} textAnchor="middle" style={{ opacity }}>
+      sni <tspan className="tunnel-reading-name">{tunnelRoutes[index]!.name}</tspan>
+    </motion.text>
+  })}</>
 }
 
 /** Wires, sockets, pulses and light over the measured frames. */
@@ -107,6 +110,11 @@ function TunnelSignals({ clock, reduced, panels }: { clock: MotionValue<number>;
   return <svg className="tunnel-signals" viewBox={`0 0 ${bounds.width} ${bounds.height}`} aria-hidden="true">
     <GraphWire d={requestWire} />
     {routes.map((box, index) => <GraphWire key={index} d={hopWire(box)} />)}
+    {!stacked && <>
+      <text className="tunnel-label" x={(browserOut.x + relayIn.x) / 2} y={browserOut.y - 14} textAnchor="middle">encrypted tls</text>
+      <text className="tunnel-label" x={spine} y={relayOut.y - 14} textAnchor="middle">still encrypted</text>
+    </>}
+    <RelayReading clock={clock} x={relay.x + relay.width / 2} y={relay.y + relay.height + 22} />
     <GraphSignals ports={<>
       <GraphPort {...browserOut} />
       <GraphPort {...relayIn} />

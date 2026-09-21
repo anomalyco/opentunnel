@@ -1,15 +1,14 @@
 .tunnel-scene { position: relative; margin: 0; padding-top: 24px; color: #aaa; font: 13px/1.5 var(--font-mono), monospace; font-variant-numeric: tabular-nums lining-nums; }
-.tunnel-panels { position: relative; display: grid; grid-template-columns: 190px 230px minmax(0, 1fr); gap: 72px; align-items: center; }
+.tunnel-panels { position: relative; display: grid; grid-template-columns: 190px 230px minmax(0, 1fr); gap: 108px; align-items: center; }
 .tunnel-column { min-width: 0; }
 .tunnel-routes { display: grid; gap: 8px; padding: 14px; }
 .tunnel-foot { color: #858585; }
 .tunnel-signals { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.tunnel-reading { position: relative; display: inline-grid; }
-.tunnel-reading > span { grid-area: 1 / 1; text-align: right; white-space: nowrap; }
-.tunnel-sni { color: #bdbdbd; }
-.tunnel-sni > span { color: #e8e8e8; }
+.tunnel-label { fill: #858585; font: 11px var(--font-mono), monospace; }
+.tunnel-reading { fill: #bdbdbd; }
+.tunnel-reading-name { fill: #e8e8e8; }
 @media (prefers-reduced-motion: reduce) { .graph-pulses { display: none; } }
-@media (max-width: 900px) { .tunnel-panels { grid-template-columns: 170px 200px minmax(0, 1fr); gap: 48px; } }
+@media (max-width: 900px) { .tunnel-panels { grid-template-columns: 170px 200px minmax(0, 1fr); gap: 48px; } .tunnel-label:not(.tunnel-reading) { display: none; } }
 @media (max-width: 640px) {
   .tunnel-panels { grid-template-columns: minmax(0, 1fr); gap: 36px; align-items: stretch; }
   .tunnel-column { max-width: 320px; }
