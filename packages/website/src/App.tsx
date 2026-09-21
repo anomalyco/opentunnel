@@ -1,9 +1,8 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Banner } from "./banner/Banner"
 import { PosterControls } from "./poster/PosterControls"
 import { TunnelScene } from "./scenes/TunnelScene"
-import { FitText } from "./poster/FitText"
-import { Mist } from "./Mist"
+import { Mist } from "./mist/Mist"
 import { monoTables, theme } from "./theme"
 
 const github = "https://github.com/anomalyco/opentunnel"
@@ -29,6 +28,49 @@ function Install() {
   </div>
 }
 
+/** The wordmark as a tunnel mouth. Set like FitText (glyphs stretched to the box), but drawn here so the O's top and
+ * bottom tangents can run on as rails in the same coordinates as the letters, out past the left edge of the screen,
+ * and so mist can be hung from the O's counter. The O is measured with a canvas in the same resolved font. */
+const WORDMARK = "OPENTUNNEL", WIDTH = 1000, ASPECT = 4.6, CAP = .867
+function Masthead() {
+  const host = useRef<HTMLDivElement>(null), svg = useRef<SVGSVGElement>(null), text = useRef<SVGTextElement>(null)
+  const height = WIDTH / ASPECT, fontSize = height / CAP
+  const [o, setO] = useState({ top: 0, bottom: height, centre: WIDTH * .049 })
+  const [mist, setMist] = useState<{ left: number; top: number; width: number; height: number; source: [number, number] } | null>(null)
+  useEffect(() => {
+    const element = host.current, root = svg.current, glyphs = text.current
+    if (!element || !root || !glyphs) return
+    const context = document.createElement("canvas").getContext("2d")!
+    const measure = () => {
+      context.font = `400 ${fontSize}px ${getComputedStyle(glyphs).fontFamily}`
+      const first = context.measureText("O"), all = context.measureText(WORDMARK)
+      const stretch = WIDTH / all.width
+      const next = { top: height - first.actualBoundingBoxAscent, bottom: height + first.actualBoundingBoxDescent, centre: first.width / 2 * stretch }
+      setO(next)
+      // The mist rises from the O's counter and may wander anywhere: the canvas spans the viewport, from well
+      // above the mark to a little below it.
+      const ctm = root.getScreenCTM(), box = element.getBoundingClientRect()
+      if (!ctm) return
+      const mouth = new DOMPoint(next.centre, (next.top + next.bottom) / 2).matrixTransform(ctm)
+      const left = -box.left, width = document.documentElement.clientWidth, top = -box.height * 1.6, span = box.height * 3
+      setMist({ left, top, width, height: span, source: [(mouth.x - box.left - left) / width, 1 - (mouth.y - box.top - top) / span] })
+    }
+    document.fonts.ready.then(measure)
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [fontSize, height])
+  return <div ref={host} className="masthead">
+    {mist && <Mist className="mist" style={{ left: mist.left, top: mist.top, width: mist.width, height: mist.height }} source={mist.source} />}
+    <svg ref={svg} className="wordmark" viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      <text ref={text} x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={fontSize} fill="currentColor">{WORDMARK}</text>
+      {/* Rails: the O's tangents, run out to the left, well past the viewport. */}
+      <line className="rail" x1={-20000} x2={o.centre} y1={o.top + 1} y2={o.top + 1} />
+      <line className="rail" x1={-20000} x2={o.centre} y1={o.bottom - 1} y2={o.bottom - 1} />
+    </svg>
+  </div>
+}
+
 const out = (text: string) => <span className="output">{text}</span>
 
 export function App() {
@@ -47,12 +89,7 @@ export function App() {
     {hero === "banner" && <Banner />}
 
     <main>
-      <div className="masthead">
-        {/* The O is a tunnel mouth: its top and bottom run out to the left edge of the screen, and mist drifts out of it. */}
-        <span className="rails" aria-hidden="true" />
-        <Mist className="mist" />
-        <FitText className="wordmark" aspect={4.6} weight={.004} stretch>OPENTUNNEL</FitText>
-      </div>
+      <Masthead />
       <h1>public urls for anything</h1>
 
       <div className="diagram-wrap"><div className="diagram"><TunnelScene /></div></div>

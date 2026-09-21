@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, type CSSProperties } from "react"
 
-// Mist drifting out of the O along the rails: slow fog, brightest at the mouth and thinning leftward,
-// screened into the print's dither so it stays a texture, not a glow. Ambient: it runs on its own
-// frame loop while visible, like the banner's print.
+// Mist leaking from the O's counter onto the page: a thin plume that falls away down and to the right on
+// a slow wind, gusting a little, screened into the print's dither so it stays a texture. Ambient: it runs
+// on its own frame loop while visible, like the banner's print.
 
 const vertex = `#version 300 es
 in vec2 position; out vec2 uv;
@@ -11,7 +11,7 @@ void main() { uv = position * 0.5 + 0.5; gl_Position = vec4(position, 0.0, 1.0);
 const fragment = `#version 300 es
 precision highp float;
 in vec2 uv; out vec4 color;
-uniform vec2 resolution; uniform float time, cell;
+uniform vec2 resolution, source; uniform float time, cell;
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y); }
@@ -21,18 +21,26 @@ float ign(vec2 px) { return fract(52.9829189 * fract(0.06711056 * px.x + 0.00583
 void main() {
   float aspect = resolution.x / resolution.y;
   vec2 p = vec2(uv.x * aspect, uv.y);
-  // Fog flows leftward (away from the mouth at the right edge) and rises a little.
-  float fog = fbm(vec2(p.x * 1.6 + time * 0.22, p.y * 2.2 - time * 0.05));
-  fog = smoothstep(0.42, 0.75, fog);
-  float mouth = smoothstep(0.0, 1.0, uv.x);                 // thins away from the O
-  float lane = smoothstep(0.0, 0.18, uv.y) * smoothstep(1.0, 0.82, uv.y); // stays between the rails
-  float alpha = fog * pow(mouth, 2.4) * lane * 0.3;
+  vec2 s = vec2(source.x * aspect, source.y);
+  // The wind: down and to the right, veering slowly.
+  float veer = (fbm(vec2(time * 0.03, 3.0)) - 0.5) * 0.6;
+  vec2 wind = normalize(vec2(0.45 + veer, -0.9));
+  vec2 side = vec2(-wind.y, wind.x);
+  vec2 q = p - s;
+  float along = dot(q, wind), across = dot(q, side);
+  // Gusts push the plume sideways more the farther it has travelled.
+  across += (fbm(vec2(along * 1.5 - time * 0.07, time * 0.04)) - 0.5) * 0.4 * along;
+  float width = 0.03 + 0.26 * along;
+  float plume = smoothstep(0.0, 0.06, along) * exp(-along * 0.9) * exp(-across * across / (2.0 * width * width));
+  float fog = fbm(vec2(p.x * 3.4, p.y * 3.4) - wind * time * 0.05);
+  float density = smoothstep(0.5, 0.8, fog) * plume;
+  float alpha = density * 0.11;
   float printed = step(ign(floor(gl_FragCoord.xy / cell)), alpha);
   color = vec4(vec3(printed), printed);
 }
 `
 
-export function Mist({ className }: { className?: string }) {
+export function Mist({ className, style, source }: { className?: string; style?: CSSProperties; source: readonly [number, number] }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const element = canvas.current
@@ -55,6 +63,7 @@ export function Mist({ className }: { className?: string }) {
     const resolution = gl.getUniformLocation(program, "resolution"), time = gl.getUniformLocation(program, "time")
     const scale = Math.min(window.devicePixelRatio || 1, 2)
     gl.uniform1f(gl.getUniformLocation(program, "cell"), 1.5 * scale)
+    gl.uniform2f(gl.getUniformLocation(program, "source"), source[0], source[1])
     gl.clearColor(0, 0, 0, 0)
     let sized = ""
     const resize = () => {
@@ -85,6 +94,6 @@ export function Mist({ className }: { className?: string }) {
       observer.disconnect(); resized.disconnect(); document.removeEventListener("visibilitychange", request)
       gl.deleteProgram(program); gl.deleteBuffer(quad)
     }
-  }, [])
-  return <canvas ref={canvas} className={className} aria-hidden="true" />
+  }, [source[0], source[1]])
+  return <canvas ref={canvas} className={className} style={style} aria-hidden="true" />
 }

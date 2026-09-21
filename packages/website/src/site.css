@@ -8,14 +8,13 @@ a { color: #fff; text-decoration: none; }
 
 main { width: min(100% - 48px, 760px); margin: 0 auto; padding: 9vh 0 14vh; }
 
-/* The wordmark, edge to edge of the column; the old headline under it at text size. The O's top and bottom
-   tangents run on as rails to the left edge of the screen, with mist drifting out of the mouth along them. */
+/* The wordmark, edge to edge of the column; the old headline under it at text size. The O's tangents run on as
+   rails (drawn in the mark's own SVG) to the left edge of the screen; mist leaks from the O's counter onto the page. */
 .masthead { position: relative; }
-.wordmark { position: relative; display: block; width: 100%; aspect-ratio: 4.6; color: #fff; font-family: var(--font-wordmark), sans-serif; overflow: visible; }
-.rails, .mist { position: absolute; top: 0; bottom: 0; right: 96.5%; width: calc((100vw - 100%) / 2 + 3.5%); pointer-events: none; }
-.rails { border-top: 2px solid #fff; border-bottom: 2px solid #fff; }
-.mist { display: block; }
-h1 { margin: 20px 0 0; font-size: clamp(15px, 2vw, 18px); font-weight: 400; letter-spacing: .02em; line-height: 1.7; color: #fff; opacity: .7; }
+.wordmark { display: block; width: 100%; aspect-ratio: 4.6; color: #fff; font-family: var(--font-wordmark), sans-serif; overflow: visible; }
+.wordmark .rail { stroke: currentColor; stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.mist { position: absolute; z-index: 1; display: block; pointer-events: none; }
+h1 { margin: 20px 0 0; font-size: clamp(15px, 2vw, 18px); font-weight: 400; letter-spacing: .02em; line-height: 1.7; text-align: center; color: #fff; opacity: .7; }
 h2 { margin: 0 0 40px; font-size: clamp(20px, 3.2vw, 27px); font-weight: 500; letter-spacing: .02em; }
 
 .description { margin: 40px 0 0; font-size: clamp(15px, 2vw, 18px); line-height: 1.7; }
