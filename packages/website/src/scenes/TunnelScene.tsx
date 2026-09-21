@@ -12,8 +12,8 @@ import "./tunnel-scene.css"
 
 /** The page's one colour: the paper red, for everything that carries the signal. */
 export const accent = "#ff2a2a"
-/** The signal itself, hotter than the ink: red gone nearly white. */
-export const hot = "#ffc4b8"
+/** The signal itself, a shade hotter than the ink. */
+export const hot = "#ff6a52"
 
 // browser ──▶ relay ──▶ opencode
 //                  ╲──▶ api          (your machine)
