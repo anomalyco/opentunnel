@@ -68,6 +68,24 @@ function useSubtitleVariant(): SubtitleVariant {
   return variant
 }
 
+/** Development: R cycles the mark's ink (white, the red, red with a white caption); remembered. */
+const markInks = ["white", "red", "red-white-caption"] as const
+type MarkInk = typeof markInks[number]
+function useMarkInk(): MarkInk {
+  const [ink, setInk] = useState<MarkInk>(() => (import.meta.env.DEV && localStorage.getItem("mark") as MarkInk) || "white")
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "r" || event.metaKey || event.ctrlKey || event.altKey) return
+      if ((event.target as HTMLElement)?.closest("input, textarea, button, [contenteditable]")) return
+      setInk(current => { const next = markInks[(markInks.indexOf(current) + 1) % markInks.length]!; localStorage.setItem("mark", next); return next })
+    }
+    addEventListener("keydown", onKey)
+    return () => removeEventListener("keydown", onKey)
+  }, [])
+  return ink
+}
+
 function Masthead() {
   const variant = useSubtitleVariant()
   const seconds = useTransform(useTime(), ms => ms / 1000)
@@ -101,8 +119,9 @@ function Masthead() {
     return () => observer.disconnect()
   }, [fontSize, height])
   const micro = variant.startsWith("micro")
-  return <div ref={host} className="masthead" data-subtitle={variant}>
-    {import.meta.env.DEV && <span className="variant-badge" aria-hidden="true">← {variant} →</span>}
+  const ink = useMarkInk()
+  return <div ref={host} className="masthead" data-subtitle={variant} data-mark={ink}>
+    {import.meta.env.DEV && <span className="variant-badge" aria-hidden="true">← {variant} → · R {ink}</span>}
     {(variant === "micro-b" || variant === "micro-c") && <><Ruler className="micro-ruler" /><Crosshair className="micro-crosshair" /></>}
     {/* Mist from the O's counter: parked until the smoke reads right. */}
     {mist && showMist && <Mist className="mist" style={{ left: mist.left, top: mist.top, width: mist.width, height: mist.height }} source={mist.source} />}
