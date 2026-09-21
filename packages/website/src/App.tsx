@@ -2,7 +2,6 @@ import { Banner } from "./banner/Banner"
 import { Poster } from "./poster/Poster"
 import { PosterControls } from "./poster/PosterControls"
 import { TunnelScene } from "./scenes/TunnelScene"
-import { DiagramHeader } from "./graphics/Diagram"
 import { Install } from "./Install"
 import { monoTables, theme } from "./theme"
 
@@ -17,10 +16,10 @@ const out = (text: string) => <><span className="tok-out">{text}</span>{"\n"}</>
 /** Dev only: `?hero=poster` shows the earlier portrait print in place of the banner. */
 const hero = import.meta.env.DEV ? new URLSearchParams(location.search).get("hero") : null
 
-/** One framed cell of the grid: a header set into the frame, then its matter. */
+/** One cell of the grid: a small label above its matter. The grid aligns; nothing is boxed. */
 function Cell({ span, title, className = "", children }: { span: number; title?: string; className?: string; children: React.ReactNode }) {
   return <section className={`cell ${className}`} style={{ gridColumn: `span ${span}` }}>
-    {title && <DiagramHeader as="h3">{title}</DiagramHeader>}
+    {title && <h3 className="cell-label">{title}</h3>}
     {children}
   </section>
 }

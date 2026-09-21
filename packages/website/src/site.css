@@ -9,52 +9,49 @@ a:hover { color: #fff; }
 p { margin: 0; }
 code { font-family: var(--font-mono); color: #e7e5e4; }
 
-.site { --gutter: 12px; max-width: 1200px; margin: 0 auto; padding: 0 40px 40px; }
-.site-header { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 26px 0 20px; font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: #a8a8a8; }
+.site { --gutter: 24px; max-width: 1200px; margin: 0 auto; padding: 0 40px 40px; }
+.site-header { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 26px 0 24px; font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: #a8a8a8; }
 .site-mark { color: #e7e5e4; }
 .site-nav { display: flex; align-items: center; gap: 24px; }
 
-/* The grid: twelve columns, framed cells, one gutter everywhere. */
-.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gutter); }
-.cell { position: relative; min-width: 0; border: 1px solid #383838; background: #ffffff02; }
-.cell > .diagram-header { text-transform: uppercase; }
-.cell > p { padding: 18px 18px 20px; color: #bdbdbd; font-size: 13px; line-height: 1.6; }
+/* The grid: twelve columns, one gutter, generous rows. Alignment is the only structure. */
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 64px var(--gutter); }
+.cell { min-width: 0; }
+.cell-label { margin: 0 0 14px; font-size: 10px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: #6f6f6f; }
+.cell > p { color: #bdbdbd; font-size: 13px; line-height: 1.6; max-width: 34em; }
 .cell > p code { color: #e7e5e4; }
-.cell-hero { border: 0; background: none; }
 
-.cell-lede { display: flex; align-items: center; }
-.cell-lede h1 { margin: 0; padding: 22px 22px; font-size: 17px; line-height: 1.6; font-weight: 700; color: #ecebe9; text-wrap: pretty; }
-.cell-install { display: flex; align-items: center; }
-.cell-install .install { flex: 1; margin: 0; border: 0; background: none; height: 100%; }
+.cell-lede h1 { margin: 0; font-size: 18px; line-height: 1.6; font-weight: 700; color: #ecebe9; text-wrap: pretty; max-width: 40em; }
+.cell-install { display: flex; align-items: flex-start; }
+.cell-install .install { flex: 1; }
 
-.install { display: flex; align-items: stretch; font-size: 13px; line-height: 1.5; }
+.install { display: flex; align-items: stretch; border: 1px solid #383838; font-size: 13px; line-height: 1.5; }
 .install-command { flex: 1; display: flex; align-items: center; padding: 14px 18px; color: #e7e5e4; white-space: nowrap; overflow-x: auto; }
 .install-command > span { color: #6f6f6f; margin-right: .6em; }
 .install-copy { appearance: none; padding: 0 18px; border: 0; border-left: 1px solid #383838; background: transparent; color: #a8a8a8; font: 700 11px/1 var(--font-mono), monospace; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
 .install-copy:hover { color: #fff; background: #111; }
 .install-copy:focus-visible { outline: 1px solid #d4ad88; outline-offset: -1px; }
 
-.cell-diagram .diagram { padding: 24px 24px 28px; }
+.cell-diagram .diagram { margin-top: 8px; }
 
-.cell-code .code { margin: 0; padding: 18px 18px 20px; border: 0; }
-.code { position: relative; color: #d6d6d6; font: 500 13px/1.7 var(--font-mono), monospace; tab-size: 2; }
+.code { position: relative; margin: 0; color: #d6d6d6; font: 500 13px/1.7 var(--font-mono), monospace; tab-size: 2; }
 .code code { display: block; overflow-x: auto; font: inherit; color: inherit; }
 /* Highlighting by dimness, not colour: what you typed is bright, what came back is dim, punctuation dimmer. */
 .tok-cmd { color: #ecebe9; font-weight: 700; }
 .tok-out { color: #8a8a8a; }
 .tok-dim { color: #5c5c5c; }
-.cell-code .note { padding: 0 18px 20px; color: #8a8a8a; font-size: 12px; line-height: 1.6; }
+.cell-code .note { margin-top: 20px; color: #8a8a8a; font-size: 12px; line-height: 1.6; max-width: 34em; }
 
-.site-footer { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-top: var(--gutter); padding: 20px 0 0; border-top: 1px solid #292929; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #6f6f6f; }
+.site-footer { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-top: 96px; padding: 20px 0 0; border-top: 1px solid #292929; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #6f6f6f; }
 .site-footer a:hover { color: #fff; }
 
 .hero-poster { max-width: 400px; }
 .poster { container-type: inline-size; }
 
 @media (max-width: 900px) {
-  .site { padding: 0 16px 32px; --gutter: 10px; }
+  .site { padding: 0 16px 32px; --gutter: 16px; }
+  .grid { gap: 40px var(--gutter); }
   .grid > * { grid-column: span 12 !important; }
-  .cell-diagram .diagram { padding: 16px; }
 }
 
 /* Monotone: the page is a duotone of its own luminance (see theme.ts). The banner prints white
