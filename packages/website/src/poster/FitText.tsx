@@ -7,7 +7,7 @@ const WIDTH = 1000
 
 type Props = {
   children: string
-  /** Cap height as a fraction of the box height: Anton caps sit near .72em. */
+  /** Cap height of the face in em: Anton's caps measure .867em (canvas actualBoundingBoxAscent). */
   capHeight?: number
   /** Extra weight, as a fraction of the font size. */
   weight?: number
@@ -18,13 +18,13 @@ type Props = {
   style?: CSSProperties
 }
 
-export function FitText({ children, capHeight = .72, weight = .03, aspect = 4.2, stretch = false, className, style }: Props) {
+export function FitText({ children, capHeight = .867, weight = .03, aspect = 4.2, stretch = false, className, style }: Props) {
   const height = WIDTH / aspect
   const fontSize = height / capHeight
   const strokeWidth = fontSize * weight
-  // Slack above the caps: the stroke and any face taller than `capHeight` must not be clipped.
-  const slack = strokeWidth + fontSize * .06
-  return <svg className={className} style={style} viewBox={`${-strokeWidth / 2} ${-slack} ${WIDTH + strokeWidth} ${height + slack + strokeWidth / 2}`} preserveAspectRatio={stretch ? "none" : "xMidYMid meet"} aria-hidden="true" focusable="false">
+  // The box is the caps' ink plus the stroke's half-width on every side, so the letters sit centred in it.
+  const slack = strokeWidth / 2
+  return <svg className={className} style={style} viewBox={`${-slack} ${-slack} ${WIDTH + strokeWidth} ${height + strokeWidth}`} preserveAspectRatio={stretch ? "none" : "xMidYMid meet"} aria-hidden="true" focusable="false">
     <text x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={fontSize} fill="currentColor" stroke="currentColor" strokeWidth={strokeWidth} strokeLinejoin="round" style={{ paintOrder: "stroke fill" }}>{children}</text>
   </svg>
 }
