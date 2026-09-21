@@ -13,14 +13,11 @@ p { margin: 0; }
 .site-header { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 28px 0 24px; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: #a8a8a8; }
 .site-mark { color: #e7e5e4; }
 .site-nav { display: flex; align-items: center; gap: 24px; }
-.site-nav-rule { width: 1px; height: 18px; background: #383838; }
-.site-nav-note { color: #6f6f6f; }
 
-/* The pitch: headline left, the sentence and the install line right. */
-.pitch { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: start; padding: 56px 0 72px; }
-.pitch h1 { margin: 0; font-family: var(--font-headline), sans-serif; font-size: clamp(34px, 3.6vw, 52px); line-height: 1.02; letter-spacing: -.01em; text-transform: uppercase; color: #ecebe9; }
-.pitch-side { padding-top: 6px; }
-.pitch-lede { color: #b3b3b3; }
+/* The pitch: one sentence and the install line, on the same 44% column as the paper. */
+.pitch { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: start; padding: 48px 0 72px; }
+.pitch-lede { margin: 0; font-size: 17px; line-height: 1.65; font-weight: 400; color: #d6d6d6; }
+.pitch .install { margin-top: 0; align-self: center; }
 
 .install { display: flex; align-items: stretch; margin-top: 24px; border: 1px solid #383838; background: #0a0a0a; font-size: 14px; line-height: 1.5; }
 .install-command { flex: 1; padding: 14px 18px; color: #e7e5e4; white-space: nowrap; overflow-x: auto; }
@@ -61,7 +58,6 @@ strong { font-weight: 600; color: #ecebe9; }
 
 .site-footer { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-top: 112px; padding-top: 22px; border-top: 1px solid #292929; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #6f6f6f; }
 .site-footer a:hover { color: #fff; }
-.site-footer-sep { margin: 0 .6em; color: #383838; }
 
 .hero-poster { max-width: 400px; }
 .poster { container-type: inline-size; }
@@ -71,7 +67,6 @@ strong { font-weight: 600; color: #ecebe9; }
   .pitch { grid-template-columns: 1fr; gap: 28px; padding: 40px 0 56px; }
   .columns, .limits { grid-template-columns: 1fr; }
   .chapter + .chapter { margin-top: 64px; }
-  .site-nav-rule, .site-nav-note { display: none; }
 }
 @media (max-width: 600px) {
   body { font-size: 14px; }

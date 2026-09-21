@@ -19,8 +19,6 @@ export function App() {
         <a href={docs}>Docs</a>
         <a href={github}>GitHub</a>
         <a href={npm}>npm</a>
-        <span className="site-nav-rule" aria-hidden="true" />
-        <span className="site-nav-note">a more open internet</span>
       </nav>
     </header>
 
@@ -28,11 +26,8 @@ export function App() {
       {hero === "poster" ? <div className="hero-poster"><Poster /></div> : <Banner />}
 
       <section className="pitch">
-        <h1>The internet,<br />without the middle.</h1>
-        <div className="pitch-side">
-          <p className="pitch-lede">OpenTunnel gives anything on your machine a public HTTPS URL, end-to-end encrypted, with a relay that cannot read your traffic.</p>
-          <Install />
-        </div>
+        <h1 className="pitch-lede">OpenTunnel gives anything on your machine a public HTTPS URL, end-to-end encrypted, with a relay that cannot read your traffic.</h1>
+        <Install />
       </section>
 
       <section className="chapter">
@@ -105,9 +100,8 @@ api = "127.0.0.1:3000"`}</code></pre>
     {import.meta.env.DEV && <PosterControls />}
 
     <footer className="site-footer">
-      <span>OpenTunnel <span className="site-footer-sep">/</span> public urls for anything</span>
       <a href={github}>github.com/anomalyco/opentunnel</a>
-      <span>built by <a href="https://anomaly.co">Anomaly</a></span>
+      <a href="https://anomaly.co">Anomaly</a>
     </footer>
   </div>
 }

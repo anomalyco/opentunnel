@@ -7,21 +7,13 @@
   overflow: hidden;
   user-select: none;
 }
-.banner-paper { display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; padding: 5% 4% 3.4%; background: var(--paper); color: var(--ink); }
+.banner-paper { display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: 5% 4%; background: var(--paper); color: var(--ink); }
 /* A box 1.55× taller than Anton's natural line condenses the letterforms a little; the SVG fills it. */
 .banner-wordmark { display: block; width: 100%; aspect-ratio: 2.3; font-family: var(--font-display), sans-serif; color: var(--ink); overflow: visible; }
-.banner-tagline { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 18px; margin-top: 5%; font: 600 9.5px/1.4 var(--font-mono), monospace; letter-spacing: .18em; text-transform: uppercase; }
-.banner-tagline-lead { letter-spacing: .28em; white-space: nowrap; }
-.banner-tagline-rule { flex: 0 0 28px; height: 1px; margin-top: 6px; background: var(--ink); }
-.banner-tagline-notes { letter-spacing: .08em; }
 .banner-art { position: relative; min-width: 0; }
 .banner-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
-.banner-labels { position: absolute; right: 4%; margin: 0; padding: 0; list-style: none; color: var(--paper); font: 500 10px/1.7 var(--font-mono), monospace; letter-spacing: .2em; text-transform: uppercase; }
-.banner-labels[data-corner="top"] { top: 8%; }
-.banner-labels[data-corner="bottom"] { bottom: 8%; }
 @media (max-width: 900px) {
   .banner { grid-template-columns: 1fr; height: auto; }
   .banner-paper { padding: 20px 20px 16px; }
-  .banner-tagline { gap: 8px 20px; }
-  .banner-art { aspect-ratio: 16 / 9; }
+    .banner-art { aspect-ratio: 16 / 9; }
 }
