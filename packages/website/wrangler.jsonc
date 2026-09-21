@@ -10,6 +10,6 @@
     }
   ],
   "assets": {
-    "directory": "./public"
+    "directory": "./dist"
   }
 }
