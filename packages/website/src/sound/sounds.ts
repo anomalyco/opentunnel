@@ -17,7 +17,11 @@ export const soundPalette = {
   send: [{ sound: signal.send, volume: .899 }],
   travel: [{ sound: signal.flight, volume: 3.421 }],
   scan: [{ sound: "scan", volume: .516 }],
+  plunge: [{ sound: "droplet", volume: .9 }],
+  read: [{ sound: "tick", volume: .895 }],
+  leave: [{ sound: "flick", volume: 1.12 }],
   contact: [{ sound: signal.contact, volume: 1.513 }],
+  open: [{ sound: "complete", volume: .881 }],
 } as const satisfies Record<string, readonly Layer[]>
 export type SceneSoundEvent = keyof typeof soundPalette
 export type SceneSoundCue = { at: number; event: SceneSoundEvent }

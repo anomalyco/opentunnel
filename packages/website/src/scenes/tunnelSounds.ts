@@ -6,16 +6,27 @@ import { pulseGatherMs } from "../graphics/pulseTiming"
 import { tunnelLegs, tunnelScore } from "./tunnelScore"
 import type { Crossing } from "./TunnelScene"
 
-// The tunnel's track: the browser presses and sends, the dot's voice travels, the relay scans as the
-// bytes enter it, and the destination sounds the contact. One cue list, derived from the score.
+// The tunnel's track: the browser presses and sends; the dot's voice travels; it plunges into the relay
+// (a droplet, and the scan begins), the relay ticks as it reads the hostname, and the dot flicks out as
+// it gathers speed; the destination sounds the contact and, a beat later, opens the bytes. One cue
+// list, derived from the score.
 
 export const tunnelSoundCues = (crossings: readonly Crossing[]): readonly SceneSoundCue[] => [
-  ...tunnelLegs.flatMap((leg, index) => [
-    { at: leg.send - .045, event: "sendPress" as const },
-    { at: leg.send, event: "send" as const },
-    ...(crossings[index] ? [{ at: crossings[index]!.enter, event: "scan" as const }] : []),
-    { at: leg.contact, event: "contact" as const },
-  ]),
+  ...tunnelLegs.flatMap((leg, index) => {
+    const crossing = crossings[index]
+    return [
+      { at: leg.send - .045, event: "sendPress" as const },
+      { at: leg.send, event: "send" as const },
+      ...(crossing ? [
+        { at: crossing.enter, event: "plunge" as const },
+        { at: crossing.enter + .05, event: "scan" as const },
+        { at: crossing.read, event: "read" as const },
+        { at: crossing.leave - .08, event: "leave" as const },
+      ] : []),
+      { at: leg.contact, event: "contact" as const },
+      { at: leg.contact + .3, event: "open" as const },
+    ]
+  }),
 ].sort((a, b) => a.at - b.at)
 
 export function tunnelTravelingAt(elapsed: number) {

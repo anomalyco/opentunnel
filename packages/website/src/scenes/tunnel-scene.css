@@ -31,6 +31,6 @@
 
 /* Sound: the whole diagram is the switch; a small speaker in its corner says which way it is. */
 .tunnel-panels { cursor: pointer; }
-.tunnel-sound { position: absolute; right: 0; bottom: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: #fff; opacity: .35; font: 400 11px/16px var(--font-text), monospace; cursor: pointer; transition: opacity .2s; }
-.tunnel-sound:hover, .tunnel-scene[data-sound] .tunnel-sound { opacity: .7; }
+.tunnel-sound { position: absolute; right: 0; bottom: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: #fff; opacity: 0; font: 400 11px/16px var(--font-text), monospace; cursor: pointer; transition: opacity .2s; }
+.tunnel-scene:hover .tunnel-sound, .tunnel-sound:focus-visible { opacity: .5; }
 .tunnel-sound:focus-visible { outline: 1px solid #fff; outline-offset: 4px; }
