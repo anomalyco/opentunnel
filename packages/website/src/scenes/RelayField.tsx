@@ -36,6 +36,27 @@ export function RelayField({ front, age, ink = "#e8e4dc", className }: { front: 
     gl.uniform3fv(u("ink"), hex(ink))
     gl.clearColor(0, 0, 0, 0)
 
+    // One texel per column across the card: the age at which the front passed it, -1 if it has not.
+    const COLUMNS = 256
+    const stamps = new Float32Array(COLUMNS).fill(-1)
+    const texture = gl.createTexture()
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, texture)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, COLUMNS, 1, 0, gl.RED, gl.FLOAT, stamps)
+    gl.uniform1i(u("passed"), 0)
+    let lastAge = -1
+    const stamp = (f: number, a: number) => {
+      // A new pass (age reset) clears the burn; otherwise stamp every column the front has crossed since last frame.
+      if (a < lastAge || a < 0) stamps.fill(-1)
+      lastAge = a
+      if (a >= 0) for (let i = 0; i < COLUMNS; i++) if (stamps[i]! < 0 && (i + .5) / COLUMNS <= f) stamps[i] = a
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, COLUMNS, 1, gl.RED, gl.FLOAT, stamps)
+    }
+
     const scale = Math.min(window.devicePixelRatio || 1, 2)
     let sized = ""
     const resize = () => {
@@ -54,7 +75,8 @@ export function RelayField({ front, age, ink = "#e8e4dc", className }: { front: 
       raf = 0
       resize()
       const f = front.get(), a = age.get()
-      const alive = a >= 0 && f < 1.4
+      stamp(f, a)
+      const alive = a >= 0 && f < 3
       gl.clear(gl.COLOR_BUFFER_BIT)
       if (alive) {
         gl.uniform1f(uniforms.front, f); gl.uniform1f(uniforms.age, a); gl.uniform1f(uniforms.time, (performance.now() - start) / 1000)
@@ -71,7 +93,7 @@ export function RelayField({ front, age, ink = "#e8e4dc", className }: { front: 
       if (raf) cancelAnimationFrame(raf)
       for (const stop of unsubscribe) stop()
       observer.disconnect()
-      gl.deleteProgram(program); gl.deleteBuffer(quad)
+      gl.deleteProgram(program); gl.deleteBuffer(quad); gl.deleteTexture(texture)
       void dirty
     }
   }, [front, age, ink])

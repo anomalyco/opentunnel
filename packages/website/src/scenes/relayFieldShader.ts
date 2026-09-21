@@ -1,7 +1,8 @@
 // The relay's interior while the sealed bytes pass through it. `front` is the dot's position across
-// the card (0 at the entry wall, 1 at the exit wall); `age` is seconds since impact. A bright front
-// with a turbulent wake, ripples spreading from the entry point, and the contents showing only as
-// a fine hatch behind the front: the relay sees shape, never text. Premultiplied alpha over the card.
+// the card (0 at the entry wall, 1 at the exit wall); `age` is seconds since impact. A bright,
+// distorted front, and behind it an afterburn: each column remembers when the front passed
+// (`passed`, a 1D texture) and cools from that moment. The contents show only as hatching in the
+// burn: the relay sees shape, never text. Premultiplied alpha over the card.
 
 export const relayVertexSource = `#version 300 es
 in vec2 position;
@@ -16,6 +17,7 @@ out vec4 color;
 uniform vec2 resolution;
 uniform float front, age, time;
 uniform vec3 ink;
+uniform sampler2D passed;   // per column: age at which the front passed, or -1
 
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) {
@@ -34,34 +36,32 @@ void main() {
   float aspect = resolution.x / resolution.y;
   vec2 p = vec2(uv.x * aspect, uv.y);            // card space, 1 unit = card height
   float entered = smoothstep(0.0, 0.04, age);
-  float gone = 1.0 - smoothstep(1.0, 1.35, front); // the field drains once the dot has left
+  float gone = 1.0 - smoothstep(1.2, 3.0, front); // the burn keeps cooling after the dot has left
   float envelope = entered * gone;
 
-  // The front: a thin bright line with a soft glow, its shape rippled by the medium.
-  float x = uv.x * aspect, fx = front * aspect;
-  float wobble = (fbm(vec2(p.y * 6.0, time * 2.0)) - 0.5) * 0.06;
-  float dx = x - fx + wobble;
-  float line = exp(-dx * dx * 900.0);
-  float glow = exp(-abs(dx) * 7.0) * 0.45;
+  // The medium bends the light: the front and everything behind it is displaced by slow turbulence.
+  float warp = (fbm(vec2(p.y * 5.0 + time * 0.8, p.x * 2.0 - time * 0.4)) - 0.5) * 0.09;
+  float x = uv.x * aspect + warp, fx = front * aspect;
+  float dx = x - fx;
+  float line = exp(-dx * dx * 700.0);
+  float glow = exp(-abs(dx) * 6.0) * 0.3;
 
-  // The wake: turbulent light trailing the front, brightest just behind it.
-  float behind = max(0.0, fx - x);
-  float turbulence = fbm(vec2(p.x * 5.0 - time * 1.5, p.y * 5.0 + time * 0.7));
-  float wake = exp(-behind * 2.2) * step(0.0, fx - x) * (0.25 + 0.75 * turbulence) * 0.5;
+  // Afterburn: how long ago the front passed this column, from the stamped texture.
+  float stamp = texture(passed, vec2(clamp(uv.x + warp / aspect, 0.0, 1.0), 0.5)).r;
+  float since = stamp >= 0.0 ? max(0.0, age - stamp) : 1e3;
+  float burn = exp(-since * 2.6);
+  float turbulence = fbm(vec2(p.x * 6.0 - time * 1.2, p.y * 6.0 + since * 3.0));
+  float wake = burn * (0.35 + 0.65 * turbulence) * 0.32;
+  // Hot core just behind the front, cooling into the wake.
+  float ember = exp(-since * 9.0) * 0.25;
 
-  // Ripples from the entry point: rings spreading and fading, as from a round entering water.
-  vec2 entry = vec2(0.0, 0.5);
-  float d = length(p - entry);
-  float rings = pow(0.5 + 0.5 * cos(d * 26.0 - age * 16.0), 5.0);
-  float ripple = rings * exp(-d * 1.8) * exp(-age * 1.5) * 0.6;
-
-  // The contents, seen only in the wake: a hatch, nothing legible.
-  float hatch = step(0.55, fract((p.x + p.y) * 22.0)) * exp(-behind * 3.0) * step(0.0, fx - x) * 0.28;
+  // The contents, seen only in the burn: a hatch, nothing legible, shimmering as it cools.
+  float hatch = step(0.55, fract((p.x + p.y + warp * 4.0) * 22.0)) * burn * 0.22;
 
   // Light pools along the middle where the bytes travel.
-  float lane = 1.0 - 0.55 * pow(abs(uv.y - 0.5) * 2.0, 2.0);
+  float lane = 1.0 - 0.5 * pow(abs(uv.y - 0.5) * 2.0, 2.0);
 
-  float alpha = clamp((line + glow + wake + hatch) * lane + ripple, 0.0, 1.0) * envelope;
+  float alpha = clamp((line + glow + wake + ember + hatch) * lane, 0.0, 1.0) * envelope;
   color = vec4(ink * alpha, alpha);
 }
 `
