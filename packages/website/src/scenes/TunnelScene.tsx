@@ -2,11 +2,11 @@ import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "rea
 import { motion, useTransform, type MotionValue } from "motion/react"
 import { DiagramFrame, DiagramHeader, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
-import { CardGlow, Pulse, pulseGatherMs } from "../graphics/Pulse"
+import { CardGlow, Pulse, pulseEase, pulseGatherMs, type PulseEase } from "../graphics/Pulse"
 import { pluginActivity, usePluginActivity } from "../graphics/pluginActivity"
 import { roundedWire } from "../graphics/roundedWire"
 import { useScenePlayback } from "../graphics/useScenePlayback"
-import { flightTimeAt, tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel } from "./tunnelScore"
+import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel, viscousFlight } from "./tunnelScore"
 import "./tunnel-scene.css"
 
 // browser ──▶ relay ──▶ opencode
@@ -23,7 +23,6 @@ type Bounds = { width: number; height: number; browser: Box; relay: Box; machine
 /** Scene seconds at which each leg's pulse enters the relay, leaves it, and is read (its midpoint). */
 export type Crossing = { enter: number; leave: number; read: number }
 const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
-const easeInOutCubic = (p: number) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2)
 
 function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
   const inks = usePluginActivity(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
@@ -56,12 +55,12 @@ function fractionAtX(path: SVGPathElement, length: number, x: number) {
 }
 
 /** The x-ray: a beam sweeps the relay's interior with the hidden dot, lighting hatching where it passes. Nothing legible. */
-function RelayScan({ clock, relay, path, length, leg, id }: { clock: MotionValue<number>; relay: Box; path: SVGPathElement; length: number; leg: typeof tunnelLegs[number]; id: string }) {
+function RelayScan({ clock, relay, path, length, leg, ease, id }: { clock: MotionValue<number>; relay: Box; path: SVGPathElement; length: number; leg: typeof tunnelLegs[number]; ease: PulseEase; id: string }) {
   const inner = { x: relay.x + 4, y: relay.y + 4, width: relay.width - 8, height: relay.height - 8 }
   const beamX = useTransform(clock, seconds => {
     const t = seconds - leg.send
     if (t < 0 || t > tunnelTravel / 1000) return -1e4
-    return path.getPointAtLength(easeInOutCubic(t / (tunnelTravel / 1000)) * length).x
+    return path.getPointAtLength(ease.at(t / (tunnelTravel / 1000)) * length).x
   })
   const inside = useTransform(beamX, x => x > inner.x - 12 && x < inner.x + inner.width + 60 ? 1 : 0)
   return <g clipPath={`url(#${id}-relay-clip)`} pointerEvents="none">
@@ -130,7 +129,9 @@ function TunnelSignals({ clock, reduced, panels, onCrossings }: { clock: MotionV
       path.setAttribute("d", d)
       const length = path.getTotalLength()
       const enter = stacked ? 0 : fractionAtX(path, length, relay.x), leave = stacked ? 0 : fractionAtX(path, length, relay.x + relay.width)
-      return { d, path, length, enter, leave }
+      // Through the relay the bytes move as through something thick: that stretch takes four times its share.
+      const ease = stacked ? pulseEase : viscousFlight(enter, leave, 4)
+      return { d, path, length, enter, leave, ease }
     })
     return { stacked, browserOut, relayIn, relayOut, routeIn, legs, wires: { request: `M${browserOut.x} ${browserOut.y}L${relayIn.x} ${relayIn.y}`, hops: routes.map(box => `M${relayOut.x} ${relayOut.y}${hop(box)}`) } }
   }, [bounds])
@@ -140,7 +141,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings }: { clock: MotionV
     const flight = tunnelTravel / 1000
     onCrossings(geometry.legs.map((leg, index) => {
       const { send } = tunnelLegs[index]!
-      const enter = send + flightTimeAt(leg.enter) * flight, leave = send + flightTimeAt(leg.leave) * flight
+      const enter = send + leg.ease.inverse(leg.enter) * flight, leave = send + leg.ease.inverse(leg.leave) * flight
       return { enter, leave, read: (enter + leave) / 2 }
     }))
   }, [geometry, onCrossings])
@@ -194,7 +195,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings }: { clock: MotionV
     <GraphWire d={wires.request} />
     {wires.hops.map((d, index) => <GraphWire key={index} d={d} />)}
 
-    {!reduced && legs.map((leg, index) => <RelayScan key={index} clock={clock} relay={relay} path={leg.path} length={leg.length} leg={tunnelLegs[index]!} id={id} />)}
+    {!reduced && legs.map((leg, index) => <RelayScan key={index} clock={clock} relay={relay} path={leg.path} length={leg.length} leg={tunnelLegs[index]!} ease={leg.ease} id={id} />)}
 
     <GraphSignals ports={<>
       <GraphPort {...browserOut} />
@@ -211,7 +212,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings }: { clock: MotionV
       </g>)}
     </>}>
       {!reduced && <g mask={`url(#${id}-relay-cutout)`}>
-        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} trail={{ cooling: 240 }} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
+        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} trail={{ cooling: 240 }} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
       </g>}
     </GraphSignals>
   </svg>

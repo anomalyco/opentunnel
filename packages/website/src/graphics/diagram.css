@@ -11,9 +11,10 @@
 .node-card { position: relative; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px; min-height: 44px; padding: 8px 14px; }
 .node-card-inset { position: absolute; inset: 3px; border: 1px solid #292929; pointer-events: none; }
 /* Armored: the inset rule sits deeper and the band between it and the border is hatched. */
-.node-card[data-armored] { padding-inline: 18px; }
-.node-card[data-armored] .node-card-inset { inset: 6px; }
-.node-card-armor { position: absolute; inset: 1px; padding: 4px; background: repeating-linear-gradient(-45deg, #2c2c2c 0 1px, transparent 1px 4px); mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; pointer-events: none; }
+.node-card[data-armored] { min-height: 56px; padding-inline: 22px; }
+.node-card[data-armored] .node-card-inset { inset: 9px; border-color: #383838; }
+/* The band runs from the border's inner edge to the inset rule, its hatching touching both. */
+.node-card-armor { position: absolute; inset: 0; padding: 9px; background: repeating-linear-gradient(-45deg, #333 0 1.5px, transparent 1.5px 5px); mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; pointer-events: none; }
 .node-card-name { display: flex; align-items: center; gap: 7px; min-width: 0; color: #aaa; font-size: 11px; }
 .node-card-icon { flex-shrink: 0; color: #777; }
 .node-card-label { min-width: 0; overflow-wrap: anywhere; }

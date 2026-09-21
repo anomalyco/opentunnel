@@ -22,6 +22,13 @@ const heat = (age: number, cooling: number) => 0.7 * Math.pow(1 - clamp01(age / 
 const easeInOutCubic = (p: number) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2)
 const easeOutCubic = (p: number) => 1 - Math.pow(1 - p, 3)
 
+/** Flight curve: time (0..1) → distance along the path (0..1), and its inverse for the trail's stamps. */
+export type PulseEase = { at: (time: number) => number; inverse: (distance: number) => number }
+export const pulseEase: PulseEase = {
+  at: easeInOutCubic,
+  inverse: distance => distance < 0.5 ? Math.cbrt(distance / 4) : 1 - Math.cbrt((1 - distance) / 4),
+}
+
 type PulseProps = {
   d: string
   /** Optional scene clock in milliseconds; owns playback and allows exact scrubbing. */
@@ -38,6 +45,8 @@ type PulseProps = {
   color?: string
   /** Keep trails/reflections off opaque scene details; the bright orb stays above. */
   underlayMask?: string
+  /** How the flight spends its time along the path; scenes can slow a stretch of it. */
+  ease?: PulseEase
   /** Repeat on a fixed timeline, waiting `gap` ms after the landing between runs. */
   loop?: boolean
   gap?: number
@@ -46,7 +55,7 @@ type PulseProps = {
   onComplete?: () => void
 }
 
-export function Pulse({ d, clock, reverse = false, duration = 900, delay = 0, trail: trailOptions, reflection, underlayMask, color = palette.dot, loop = false, gap = 1400, onArrive, onDepart, onComplete }: PulseProps) {
+export function Pulse({ d, clock, reverse = false, duration = 900, delay = 0, trail: trailOptions, reflection, underlayMask, color = palette.dot, ease = pulseEase, loop = false, gap = 1400, onArrive, onDepart, onComplete }: PulseProps) {
   const cooling = trailOptions?.cooling ?? COOL_MS, segments = trailOptions?.segments ?? BANDS
   const path = useRef<SVGPathElement>(null)
   const dot = useRef<SVGCircleElement>(null)
@@ -100,7 +109,7 @@ export function Pulse({ d, clock, reverse = false, duration = 900, delay = 0, tr
     const heatedAt = new Float64Array(segments).fill(-Infinity)
     const passedAt = Array.from({ length: segments }, (_, i) => {
       const progress = (i + 0.5) / segments
-      const time = progress < 0.5 ? Math.cbrt(progress / 4) : 1 - Math.cbrt((1 - progress) / 4)
+      const time = ease.inverse(progress)
       const from = length * (reverse ? 1 - (i + 1) / segments : i / segments)
       bands.current[i]?.setAttribute("stroke-dasharray", `${length / segments} ${length + 1}`)
       bands.current[i]?.setAttribute("stroke-dashoffset", String(-from))
@@ -159,7 +168,7 @@ export function Pulse({ d, clock, reverse = false, duration = 900, delay = 0, tr
       }
 
       if (t < traveling) {
-        const progress = easeInOutCubic(t / traveling)
+        const progress = ease.at(t / traveling)
         const point = at(progress)
         reflect(point, 1)
         c.setAttribute("cx", String(point.x)); c.setAttribute("cy", String(point.y))
@@ -199,7 +208,7 @@ export function Pulse({ d, clock, reverse = false, duration = 900, delay = 0, tr
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [d, clock, reverse, duration, delay, cooling, segments, loop, gap, bloom, color, reflection?.borders, reflectionStrength])
+  }, [d, clock, reverse, duration, delay, cooling, segments, loop, gap, bloom, color, ease, reflection?.borders, reflectionStrength])
 
   return <g className="pulse">
     <defs>
