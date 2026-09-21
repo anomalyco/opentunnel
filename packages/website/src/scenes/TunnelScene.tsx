@@ -48,8 +48,8 @@ function Port({ x, y, clock, activity }: { x: number; y: number; clock: MotionVa
   const fill = useTransform(clock, time => { const a = pluginActivityAt(time, activity); return mix("#555555", accent, Math.max(a.flash, a.running)) })
   return <GraphPort x={x} y={y} fill={fill} />
 }
-/** The frame's 2px border, traced along its centre. */
-const outlineOf = (box: Box) => `M${box.x + 1} ${box.y + 1}h${box.width - 2}v${box.height - 2}h${2 - box.width}Z`
+/** The frame's 1px border, traced along its centre. */
+const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
 
 function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
   const inks = useSignalInks(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
@@ -148,7 +148,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
     now.set(seconds)
     if (!geometry || !bounds) { fronts.set([]); return }
     const flight = tunnelTravel / 1000
-    const inner = { x: bounds.relay.x + 2, width: bounds.relay.width - 4 }
+    const inner = { x: bounds.relay.x + 1, width: bounds.relay.width - 2 }
     const active: RelayFront[] = []
     for (const [index, leg] of geometry.legs.entries()) {
       const { send } = tunnelLegs[index]!
@@ -175,14 +175,14 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
   const { browser, relay, machine, routes } = bounds
   const { stacked, browserOut, relayIn, relayOut, routeIn, legs, wires } = geometry
   const routeLanding = (box: Box) => stacked ? { x: box.x, y: box.y + box.height / 2 } : routeIn(box)
-  const reflection = { borders: [browser, relay, machine, ...routes].map(outlineOf).join(""), width: 2, strength: .9, radius: 110 }
+  const reflection = { borders: [browser, relay, machine, ...routes].map(outlineOf).join(""), strength: .9, radius: 110 }
 
   return <svg className="tunnel-signals" viewBox={`0 0 ${bounds.width} ${bounds.height}`} aria-hidden="true">
     <defs>
       {/* The dot travels behind the relay: everything inside its border is cut from the pulse layer. */}
       <mask id={`${id}-relay-cutout`} maskUnits="userSpaceOnUse" x={0} y={0} width={bounds.width} height={bounds.height}>
         <rect width={bounds.width} height={bounds.height} fill="white" />
-        <rect x={relay.x + 2} y={relay.y + 2} width={relay.width - 4} height={relay.height - 4} fill="black" />
+        <rect x={relay.x + 1} y={relay.y + 1} width={relay.width - 2} height={relay.height - 2} fill="black" />
       </mask>
       {/* The frame's border opens softly where a wire enters. */}
       <linearGradient id={`${id}-opening`} x1="0" x2="0" y1="0" y2="1">
@@ -194,12 +194,12 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
       </linearGradient>
       <mask id={`${id}-openings`} maskUnits="userSpaceOnUse" x={0} y={0} width={bounds.width} height={bounds.height}>
         <rect width={bounds.width} height={bounds.height} fill="white" />
-        {!stacked && routes.map((box, index) => <rect key={index} x={machine.x - 2} y={routeIn(box).y - 18} width={6} height={36} fill={`url(#${id}-opening-dim)`} />)}
+        {!stacked && routes.map((box, index) => <rect key={index} x={machine.x - 2} y={routeIn(box).y - 18} width={5} height={36} fill={`url(#${id}-opening-dim)`} />)}
       </mask>
     </defs>
 
     {/* The frame's border opens softly where each wire enters; the wire runs over the gap. */}
-    {!stacked && routes.map((box, index) => <rect key={index} x={machine.x - 1} y={routeIn(box).y - 18} width={4} height={36} fill={`url(#${id}-opening)`} />)}
+    {!stacked && routes.map((box, index) => <rect key={index} x={machine.x - 1} y={routeIn(box).y - 18} width={3} height={36} fill={`url(#${id}-opening)`} />)}
     <GraphWire d={wires.request} />
     {wires.hops.map((d, index) => <GraphWire key={index} d={d} />)}
 
