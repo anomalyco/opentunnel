@@ -1,11 +1,31 @@
-/* The share card: the masthead's lockup, at the page's own proportions, on a fixed 1200×630 black canvas. */
-.og-card { display: grid; align-content: center; width: 1200px; height: 630px; padding: 0 96px; background: #000; color: #fff; overflow: hidden; }
-.og-lockup { container-type: inline-size; display: grid; grid-template-columns: calc((100% - 16px) / 5.6) minmax(0, 1fr); gap: 0 16px; align-items: stretch; }
-.og-print { position: relative; aspect-ratio: 1; overflow: hidden; }
+/* The share card: a printed sheet in one ink, the red, on a fixed 1200×630 black canvas. */
+.og-card { --ink: #ff2a2a; --ink-dim: rgba(255, 42, 42, .55); position: relative; display: grid; grid-template-columns: 380px minmax(0, 1fr); grid-template-rows: 518px; gap: 0 32px; align-content: start; width: 1200px; height: 630px; padding: 56px 56px 0; background: #000; color: var(--ink); font: 400 12px/1.6 var(--font-text), monospace; text-transform: lowercase; overflow: hidden; }
+
+/* The frame, its registration marks, the tick ruler along the top, the running edge text on the right. */
+.og-frame { position: absolute; inset: 24px; border: 1px solid var(--ink-dim); pointer-events: none; }
+.og-reg { position: absolute; width: 14px; height: 14px; color: var(--ink); }
+.og-reg-tl { left: -7.5px; top: -7.5px; } .og-reg-tr { right: -7.5px; top: -7.5px; } .og-reg-bl { left: -7.5px; bottom: -7.5px; } .og-reg-br { right: -7.5px; bottom: -7.5px; }
+.og-ruler { position: absolute; left: 12px; right: 12px; top: 0; width: calc(100% - 24px); height: 10px; stroke: var(--ink); stroke-opacity: .5; fill: none; }
+.og-edge { position: absolute; right: 8px; top: 0; transform-origin: right top; transform: rotate(90deg) translateX(100%); white-space: nowrap; font-size: 10px; letter-spacing: .08em; color: var(--ink-dim); text-transform: uppercase; }
+
+/* Left: the print, framed; the caption justified to its width; a barcode that encodes the address. */
+.og-left { display: grid; align-content: start; }
+.og-print { position: relative; aspect-ratio: 1; overflow: hidden; outline: 1px solid var(--ink-dim); outline-offset: 5px; }
 .og-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
-.og-wordmark { display: block; width: 100%; aspect-ratio: 4.6; color: #ff2a2a; font-family: var(--font-wordmark), sans-serif; overflow: visible; }
-/* Under the square, justified to its width, in the red: word, dotted leader, word, a small icon. */
-.og-caption { grid-column: 1; grid-row: 2; margin: 12px 0 0; font: 400 1.5cqw/1.75 var(--font-text), monospace; letter-spacing: 0; text-transform: uppercase; color: #ff2a2a; }
+.og-caption { margin: 22px 0 0; font-size: 15px; line-height: 1.75; text-transform: uppercase; }
 .og-caption b { display: flex; align-items: center; font-weight: 400; }
 .og-caption .fill { flex: 1; margin: 0 .7em; border-bottom: 1px dotted currentColor; opacity: .6; }
 .og-caption .tail { flex: none; margin-left: .6em; position: relative; top: .5px; }
+.og-code { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--ink-dim); font-size: 10px; letter-spacing: .12em; }
+.og-barcode { height: 20px; width: 220px; color: var(--ink); }
+
+/* Right: the wordmark, the schematic, and a row of marks with the small print. */
+.og-right { display: grid; grid-template-rows: auto 1fr auto; gap: 18px; }
+.og-mark { padding-bottom: 18px; border-bottom: 1px solid var(--ink-dim); }
+.og-wordmark { display: block; width: 100%; aspect-ratio: 4.6; color: var(--ink); font-family: var(--font-wordmark), sans-serif; text-transform: none; overflow: visible; }
+.og-schematic { display: block; width: 100%; height: auto; align-self: center; color: var(--ink); }
+.og-labels text { fill: currentColor; font: 400 11px var(--font-text), monospace; }
+.og-marks { display: grid; grid-template-columns: 64px 216px minmax(0, 1fr); gap: 0 24px; align-items: center; padding-top: 14px; border-top: 1px solid var(--ink-dim); }
+.og-ramp { display: block; color: var(--ink); }
+.og-spec { display: grid; grid-template-columns: max-content 1fr; gap: 0 14px; font-size: 10px; line-height: 1.6; letter-spacing: .04em; }
+.og-spec span:nth-child(odd) { color: var(--ink-dim); text-transform: uppercase; }
