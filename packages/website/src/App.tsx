@@ -3,12 +3,14 @@ import { Banner } from "./banner/Banner"
 import { PosterControls } from "./poster/PosterControls"
 import { TunnelScene } from "./scenes/TunnelScene"
 import { Mist } from "./mist/Mist"
+import { TunnelArt } from "./poster/TunnelArt"
 import { monoTables, theme } from "./theme"
 
 const github = "https://github.com/anomalyco/opentunnel"
 
-/** Dev only: `?hero=banner` puts the red print above the page. */
+/** Dev only: `?hero=banner` puts the red print above the page; `?mist` shows the mist from the O. */
 const hero = import.meta.env.DEV ? new URLSearchParams(location.search).get("hero") : null
+const showMist = import.meta.env.DEV && new URLSearchParams(location.search).has("mist")
 
 const installs = {
   npm: "npm i -g opentunnel",
@@ -58,7 +60,10 @@ function Masthead() {
     return () => observer.disconnect()
   }, [fontSize, height])
   return <div ref={host} className="masthead">
-    {mist && <Mist className="mist" style={{ left: mist.left, top: mist.top, width: mist.width, height: mist.height }} source={mist.source} />}
+    {/* Mist from the O's counter: parked until the smoke reads right. */}
+    {mist && showMist && <Mist className="mist" style={{ left: mist.left, top: mist.top, width: mist.width, height: mist.height }} source={mist.source} />}
+    {/* The tunnel print, as a square the height of the mark, beside it. */}
+    <div className="masthead-print" role="img" aria-label="A tunnel"><TunnelArt className="masthead-canvas" /></div>
     <svg ref={svg} className="wordmark" viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <text ref={text} x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={fontSize} fill="currentColor">{WORDMARK}</text>
     </svg>
@@ -151,6 +156,6 @@ console.log(connection.routes[0].hostname)
       </section>
     </main>
 
-    {import.meta.env.DEV && hero === "banner" && <PosterControls />}
+    {import.meta.env.DEV && <PosterControls />}
   </div>
 }
