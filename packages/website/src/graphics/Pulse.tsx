@@ -40,9 +40,11 @@ type PulseProps = {
   /** Tune long routes without changing the shared cooling-trail behavior. */
   trail?: { cooling?: number; segments?: number }
   /** Nearby border outlines, in this SVG's coordinates, catch the traveling light. */
-  reflection?: { borders: string; radius?: number; strength?: number }
+  reflection?: { borders: string; radius?: number; strength?: number; width?: number }
   /** Orb and trail ink; notifications use a distinct colour so they read apart from ordinary signals. */
   color?: string
+  /** A hotter ink for the orb, its landing ring and the light it throws on borders; the trail keeps `color`. */
+  dotColor?: string
   /** Keep trails/reflections off opaque scene details; the bright orb stays above. */
   underlayMask?: string
   /** How the flight spends its time along the path; scenes can slow a stretch of it. */
@@ -55,7 +57,7 @@ type PulseProps = {
   onComplete?: () => void
 }
 
-export function Pulse({ d, clock, reverse = false, duration = 900, delay = 0, trail: trailOptions, reflection, underlayMask, color = palette.dot, ease = pulseEase, loop = false, gap = 1400, onArrive, onDepart, onComplete }: PulseProps) {
+export function Pulse({ d, clock, reverse = false, duration = 900, delay = 0, trail: trailOptions, reflection, underlayMask, color = palette.dot, dotColor = color, ease = pulseEase, loop = false, gap = 1400, onArrive, onDepart, onComplete }: PulseProps) {
   const cooling = trailOptions?.cooling ?? COOL_MS, segments = trailOptions?.segments ?? BANDS
   const path = useRef<SVGPathElement>(null)
   const dot = useRef<SVGCircleElement>(null)
@@ -155,7 +157,7 @@ export function Pulse({ d, clock, reverse = false, duration = 900, delay = 0, tr
         const start = at(0)
         reflect(start, Math.pow(g, 1.5))
         c.setAttribute("cx", String(start.x)); c.setAttribute("cy", String(start.y))
-        c.setAttribute("fill", color); c.setAttribute("stroke", "none"); c.removeAttribute("filter")
+        c.setAttribute("fill", dotColor); c.setAttribute("stroke", "none"); c.removeAttribute("filter")
         c.setAttribute("r", String(RADIUS * g))
         c.setAttribute("opacity", String(Math.pow(g, 1.5)))
         r.setAttribute("cx", String(start.x)); r.setAttribute("cy", String(start.y))
@@ -173,7 +175,7 @@ export function Pulse({ d, clock, reverse = false, duration = 900, delay = 0, tr
         reflect(point, 1)
         c.setAttribute("cx", String(point.x)); c.setAttribute("cy", String(point.y))
         c.setAttribute("r", String(RADIUS))
-        c.setAttribute("fill", color); c.setAttribute("stroke", "none"); c.removeAttribute("filter")
+        c.setAttribute("fill", dotColor); c.setAttribute("stroke", "none"); c.removeAttribute("filter")
         c.setAttribute("opacity", "1")
         r.setAttribute("opacity", "0")
       } else if (t < traveling + ARRIVE_MS) {
@@ -187,7 +189,7 @@ export function Pulse({ d, clock, reverse = false, duration = 900, delay = 0, tr
         // the same solid radius-4 dot; its centre opens as the stroke thins.
         const opening = smoothstep(spread / 0.24)
         c.setAttribute("fill", "none")
-        c.setAttribute("stroke", color)
+        c.setAttribute("stroke", dotColor)
         c.setAttribute("stroke-width", String(RADIUS + (1.5 - RADIUS) * opening))
         c.setAttribute("r", String(RADIUS / 2 + RADIUS / 2 * opening + pop.grow * pop.ease(spread)))
         c.setAttribute("opacity", String((1 + (pop.peak - 1) * opening) * Math.pow(1 - release, pop.fade)))
@@ -208,30 +210,30 @@ export function Pulse({ d, clock, reverse = false, duration = 900, delay = 0, tr
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [d, clock, reverse, duration, delay, cooling, segments, loop, gap, bloom, color, ease, reflection?.borders, reflectionStrength])
+  }, [d, clock, reverse, duration, delay, cooling, segments, loop, gap, bloom, color, dotColor, ease, reflection?.borders, reflectionStrength])
 
   return <g className="pulse">
     <defs>
       <radialGradient id={bloom}>
-        <stop offset="0" stopColor={palette.pop[0]} stopOpacity="0.55" />
-        <stop offset="0.5" stopColor={palette.pop[1]} stopOpacity="0.22" />
-        <stop offset="1" stopColor={palette.pop[1]} stopOpacity="0" />
+        <stop offset="0" stopColor={dotColor === palette.dot ? palette.pop[0] : dotColor} stopOpacity="0.55" />
+        <stop offset="0.5" stopColor={dotColor === palette.dot ? palette.pop[1] : color} stopOpacity="0.22" />
+        <stop offset="1" stopColor={dotColor === palette.dot ? palette.pop[1] : color} stopOpacity="0" />
       </radialGradient>
       {reflection && <radialGradient ref={reflectedLight} id={`${bloom}-reflection`} gradientUnits="userSpaceOnUse" cx={0} cy={0} r={reflection.radius ?? 80}>
-        <stop offset="0" stopColor={color} />
-        <stop offset=".3" stopColor={color} stopOpacity=".65" />
-        <stop offset=".7" stopColor={color} stopOpacity=".16" />
-        <stop offset="1" stopColor={color} stopOpacity="0" />
+        <stop offset="0" stopColor={dotColor} />
+        <stop offset=".3" stopColor={dotColor} stopOpacity=".65" />
+        <stop offset=".7" stopColor={dotColor} stopOpacity=".16" />
+        <stop offset="1" stopColor={dotColor} stopOpacity="0" />
       </radialGradient>}
     </defs>
     <path ref={path} d={d} fill="none" stroke="none" />
     <g mask={underlayMask}>
-      {reflection && <path ref={reflectedBorder} data-pulse-reflection="" d={reflection.borders} fill="none" stroke={`url(#${bloom}-reflection)`} strokeWidth={1} opacity={0} />}
+      {reflection && <path ref={reflectedBorder} data-pulse-reflection="" d={reflection.borders} fill="none" stroke={`url(#${bloom}-reflection)`} strokeWidth={reflection.width ?? 1} opacity={0} />}
       {Array.from({ length: segments }, (_, i) => <path key={i} ref={(el) => { bands.current[i] = el }} className="pulse-trail" d={d} fill="none" stroke={color} strokeWidth={1.6} strokeOpacity={0} strokeLinecap="butt" strokeDasharray="0 99999" />)}
       <circle ref={ring} className="pulse-ring" fill={`url(#${bloom})`} r={0} opacity={0} />
       <circle ref={ring2} className="pulse-ring" fill={`url(#${bloom})`} r={0} opacity={0} />
     </g>
-    <circle ref={dot} className="pulse-dot" r={0} fill={color} />
+    <circle ref={dot} className="pulse-dot" r={0} fill={dotColor} />
   </g>
 }
 

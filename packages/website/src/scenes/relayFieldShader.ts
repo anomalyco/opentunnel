@@ -35,9 +35,8 @@ float fbm(vec2 p) {
 void main() {
   float aspect = resolution.x / resolution.y;
   vec2 p = vec2(uv.x * aspect, uv.y);            // card space, 1 unit = card height
-  float entered = smoothstep(0.0, 0.04, age);
-  float gone = 1.0 - smoothstep(1.2, 3.0, front); // the burn keeps cooling after the dot has left
-  float envelope = entered * gone;
+  // The field lives from impact until the burn has cooled; nothing switches it off.
+  float envelope = smoothstep(0.0, 0.04, age);
 
   // The medium bends the light: the front and everything behind it is displaced by slow turbulence.
   float warp = (fbm(vec2(p.y * 5.0 + time * 0.8, p.x * 2.0 - time * 0.4)) - 0.5) * 0.09;
@@ -49,11 +48,11 @@ void main() {
   // Afterburn: how long ago the front passed this column, from the stamped texture.
   float stamp = texture(passed, vec2(clamp(uv.x + warp / aspect, 0.0, 1.0), 0.5)).r;
   float since = stamp >= 0.0 ? max(0.0, age - stamp) : 1e3;
-  float burn = exp(-since * 2.6);
+  float burn = exp(-since * 0.9);
   float turbulence = fbm(vec2(p.x * 6.0 - time * 1.2, p.y * 6.0 + since * 3.0));
   float wake = burn * (0.35 + 0.65 * turbulence) * 0.32;
   // Hot core just behind the front, cooling into the wake.
-  float ember = exp(-since * 9.0) * 0.25;
+  float ember = exp(-since * 4.0) * 0.25;
 
   // The contents, seen only in the burn: a hatch, nothing legible, shimmering as it cools.
   float hatch = step(0.55, fract((p.x + p.y + warp * 4.0) * 22.0)) * burn * 0.22;

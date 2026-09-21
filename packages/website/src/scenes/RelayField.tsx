@@ -76,7 +76,7 @@ export function RelayField({ front, age, ink = "#e8e4dc", className }: { front: 
       resize()
       const f = front.get(), a = age.get()
       stamp(f, a)
-      const alive = a >= 0 && f < 3
+      const alive = a >= 0
       gl.clear(gl.COLOR_BUFFER_BIT)
       if (alive) {
         gl.uniform1f(uniforms.front, f); gl.uniform1f(uniforms.age, a); gl.uniform1f(uniforms.time, (performance.now() - start) / 1000)

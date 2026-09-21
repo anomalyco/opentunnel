@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react"
 import { useMotionValue, useMotionValueEvent, useTransform, type MotionValue } from "motion/react"
-import { DiagramFrame, DiagramHeader, NodeCard } from "../graphics/Diagram"
+import { DiagramFrame, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
 import { CardGlow, Pulse, pulseEase, pulseGatherMs } from "../graphics/Pulse"
 import { pluginActivity, usePluginActivity } from "../graphics/pluginActivity"
@@ -12,6 +12,8 @@ import "./tunnel-scene.css"
 
 /** The page's one colour: the paper red, for everything that carries the signal. */
 export const accent = "#ff2a2a"
+/** The signal itself, hotter than the ink: red gone nearly white. */
+export const hot = "#ffc4b8"
 
 /** pluginActivity's inks are grey ramps (rgb(n n n)); print them as the red at that strength instead. */
 function useRedInks(clock: MotionValue<number>, activity: Parameters<typeof usePluginActivity>[1]) {
@@ -44,7 +46,8 @@ type Box = { x: number; y: number; width: number; height: number }
 type Bounds = { width: number; height: number; browser: Box; relay: Box; machine: Box; routes: Box[] }
 /** Scene seconds at which each leg's pulse enters the relay, leaves it, and is read (its midpoint). */
 export type Crossing = { enter: number; leave: number; read: number }
-const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
+/** The frame's 2px border, traced along its centre. */
+const outlineOf = (box: Box) => `M${box.x + 1} ${box.y + 1}h${box.width - 2}v${box.height - 2}h${2 - box.width}Z`
 
 function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: boolean }) {
   const inks = useRedInks(clock, { dispatches: tunnelLegs.map(leg => leg.start), reduced })
@@ -55,14 +58,14 @@ function Relay({ clock, reduced, crossings, front, age }: { clock: MotionValue<n
   // Working while the bytes are inside: the icon holds bright while the field is lit.
   const inks = useRedInks(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
   return <NodeCard name="relay" icon="relay" armored data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
-    {!reduced && <RelayField front={front} age={age} ink={accent} className="tunnel-relay-field" />}
+    {!reduced && <RelayField front={front} age={age} ink="#ff5a48" className="tunnel-relay-field" />}
   </NodeCard>
 }
 
-function Route({ index, clock, reduced, crossing }: { index: number; clock: MotionValue<number>; reduced: boolean; crossing?: Crossing }) {
+function Route({ index, clock, reduced }: { index: number; clock: MotionValue<number>; reduced: boolean }) {
   const route = tunnelRoutes[index]!, leg = tunnelLegs[index]!
-  // The relay's read shows on the destination: its name flashes as the hostname is read, and it works once the bytes land.
-  const inks = useRedInks(clock, { dispatches: crossing ? [crossing.read] : [], running: [[leg.contact, leg.contact + 1.1]], reduced })
+  // The destination flashes as the bytes land, and works for a beat after.
+  const inks = useRedInks(clock, { dispatches: [leg.contact], running: [[leg.contact, leg.contact + 1.1]], reduced })
   return <NodeCard name={route.name} icon={route.icon} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
     <span className="node-card-detail">{route.target}</span>
   </NodeCard>
@@ -146,9 +149,10 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, front, age }: { cl
     for (const [index, leg] of geometry.legs.entries()) {
       const { send } = tunnelLegs[index]!
       const t = seconds - send
-      if (t < 0 || t > flight) continue
-      const x = leg.path.getPointAtLength(leg.ease.at(t / flight) * leg.length).x
+      if (t < 0 || t > flight + 4) continue
       const enter = send + leg.ease.inverse(leg.enter) * flight
+      // After the flight the dot is gone; the burn keeps cooling in place.
+      const x = t <= flight ? leg.path.getPointAtLength(leg.ease.at(t / flight) * leg.length).x : inner.x + inner.width * 3
       front.set((x - inner.x) / inner.width); age.set(seconds - enter)
       return
     }
@@ -169,7 +173,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, front, age }: { cl
   const { browser, relay, machine, routes } = bounds
   const { stacked, browserOut, relayIn, relayOut, routeIn, legs, wires } = geometry
   const routeLanding = (box: Box) => stacked ? { x: box.x, y: box.y + box.height / 2 } : routeIn(box)
-  const reflection = { borders: [browser, relay, machine, ...routes].map(outlineOf).join("") }
+  const reflection = { borders: [browser, relay, machine, ...routes].map(outlineOf).join(""), width: 2, strength: .9, radius: 110 }
 
   return <svg className="tunnel-signals" viewBox={`0 0 ${bounds.width} ${bounds.height}`} aria-hidden="true">
     <defs>
@@ -212,7 +216,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, front, age }: { cl
       </g>)}
     </>}>
       {!reduced && <g mask={`url(#${id}-relay-cutout)`}>
-        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} color={accent} trail={{ cooling: 300, segments: 256 }} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
+        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} color={accent} dotColor={hot} trail={{ cooling: 300, segments: 256 }} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
       </g>}
     </GraphSignals>
   </svg>
@@ -233,9 +237,9 @@ export function TunnelScene() {
       <div className="tunnel-column tunnel-visitor"><Browser clock={player.clock} reduced={player.reduced} /></div>
       <div className="tunnel-column tunnel-relay"><Relay clock={player.clock} reduced={player.reduced} crossings={crossings} front={front} age={age} /></div>
       <DiagramFrame as="section" className="tunnel-machine" data-machine="" aria-label="Your machine">
-        <DiagramHeader>Your machine</DiagramHeader>
+        <span className="tunnel-machine-label" aria-hidden="true">your machine</span>
         <div className="tunnel-routes">
-          {tunnelRoutes.map((route, index) => <Route key={route.id} index={index} clock={player.clock} reduced={player.reduced} crossing={crossings[index]} />)}
+          {tunnelRoutes.map((route, index) => <Route key={route.id} index={index} clock={player.clock} reduced={player.reduced} />)}
         </div>
       </DiagramFrame>
       <TunnelSignals clock={player.clock} reduced={player.reduced} panels={panels} onCrossings={setCrossings} front={front} age={age} />
