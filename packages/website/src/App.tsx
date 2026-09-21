@@ -4,6 +4,7 @@ import { PosterControls } from "./poster/PosterControls"
 import { TunnelScene } from "./scenes/TunnelScene"
 import { Mist } from "./mist/Mist"
 import { TunnelArt } from "./poster/TunnelArt"
+import { Barcode, Crosshair, Ruler } from "./Micro"
 import { monoTables, theme } from "./theme"
 
 const github = "https://github.com/anomalyco/opentunnel"
@@ -35,7 +36,12 @@ function Install() {
 const WORDMARK = "OPENTUNNEL", WIDTH = 1000, ASPECT = 4.6, CAP = .867
 
 /** Dev: subtitle treatments to compare on the page; ← and → cycle them, the choice persists. */
-const subtitleVariants = ["mono-left", "mono-right", "mono-caps", "mono-red", "mono-rule", "mono-bracket", "anton-left", "anton-caps", "anton-right", "mono-center"] as const
+const subtitleVariants = [
+  "mono-left", "mono-right", "mono-caps", "mono-red", "mono-rule", "mono-bracket", "anton-left", "anton-caps", "anton-right", "mono-center",
+  "caps-rule", "caps-red", "caps-right", "caps-spread", "caps-underline", "caps-box", "caps-numbered",
+  "two-lines-right", "two-lines-square", "on-square", "full-row-rule", "large-light", "caps-dim-large", "caps-between",
+  "micro-a", "micro-b", "micro-c",
+] as const
 type SubtitleVariant = typeof subtitleVariants[number]
 function useSubtitleVariant(): SubtitleVariant {
   const [variant, setVariant] = useState<SubtitleVariant>(() => (import.meta.env.DEV && localStorage.getItem("subtitle") as SubtitleVariant) || "mono-left")
@@ -84,8 +90,10 @@ function Masthead() {
     observer.observe(element)
     return () => observer.disconnect()
   }, [fontSize, height])
+  const micro = variant.startsWith("micro")
   return <div ref={host} className="masthead" data-subtitle={variant}>
     {import.meta.env.DEV && <span className="variant-badge" aria-hidden="true">← {variant} →</span>}
+    {(variant === "micro-b" || variant === "micro-c") && <><Ruler className="micro-ruler" /><Crosshair className="micro-crosshair" /></>}
     {/* Mist from the O's counter: parked until the smoke reads right. */}
     {mist && showMist && <Mist className="mist" style={{ left: mist.left, top: mist.top, width: mist.width, height: mist.height }} source={mist.source} />}
     {/* The tunnel print, as a square the height of the mark, beside it. */}
@@ -93,7 +101,10 @@ function Masthead() {
     <svg ref={svg} className="wordmark" viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <text ref={text} x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={fontSize} fill="currentColor">{WORDMARK}</text>
     </svg>
-    <h1><span>public urls for anything</span></h1>
+    <h1><span>{variant.startsWith("two-lines") ? <>public urls<br />for anything</> : variant === "caps-between" ? <><em>public</em><em>urls</em><em>for</em><em>anything</em></> : "public urls for anything"}</span>
+      {micro && <><span className="micro-leader" aria-hidden="true" /><span className="micro-meta">e2e · tls · v0.0.30</span></>}
+      {variant === "micro-c" && <Barcode className="micro-barcode" text="OPENTUNNEL.XYZ" height={18} />}
+    </h1>
   </div>
 }
 
