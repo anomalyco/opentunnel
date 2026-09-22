@@ -1,12 +1,5 @@
-// Micrographics: the small marks of a printed sheet, in the page's inks. A tick ruler, a crosshair
-// (registration mark), and a Code 39 barcode that really encodes its text.
-
-/** Ticks across a width, every `step` px, a taller one every fifth. */
-export function Ruler({ className }: { className?: string }) {
-  const step = 8, count = 400
-  const d = Array.from({ length: count }, (_, i) => `M${i * step + .5} 0v${i % 5 === 0 ? 10 : 5}`).join("")
-  return <svg className={className} viewBox={`0 0 ${count * step} 10`} preserveAspectRatio="xMinYMin slice" aria-hidden="true"><path d={d} /></svg>
-}
+// Micrographics for the share card: a crosshair (registration mark) and a Code 39 barcode that really
+// encodes its text.
 
 /** A registration mark: circle and cross. */
 export function Crosshair({ className, size = 14 }: { className?: string; size?: number }) {

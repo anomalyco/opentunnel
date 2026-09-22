@@ -1,14 +1,9 @@
-/* IBM Plex Mono (OFL), as on the original site, for everything that reads; Commit Mono (OFL) for the
-   diagrams, the blog's face; Anton (OFL) for the portrait poster. */
+/* IBM Plex Mono (OFL), as on the original site, for everything that reads; Anton (OFL) for the wordmark. */
 @font-face { font-family: "IBM Plex Mono"; src: url("/fonts/ibm-plex-mono-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "IBM Plex Mono"; src: url("/fonts/ibm-plex-mono-500.woff2") format("woff2"); font-weight: 500; font-display: swap; }
-@font-face { font-family: "IBM Plex Mono"; src: url("/fonts/ibm-plex-mono-600.woff2") format("woff2"); font-weight: 600; font-display: swap; }
-@font-face { font-family: "Commit Mono"; src: url("/fonts/CommitMonoV143-VF.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: "Anton"; src: url("/fonts/anton.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 
 :root {
-  --font-mono: "Commit Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --font-text: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --font-display: "Anton", Impact, "Arial Narrow Bold", sans-serif;
   --font-wordmark: "Anton", Impact, "Arial Narrow Bold", sans-serif;
 }

@@ -1,4 +1,4 @@
-.tunnel-scene { position: relative; container-type: inline-size; margin: 0; padding: 0 0 28px; color: #aaa; font: 13px/1.5 var(--font-mono), monospace; font-variant-numeric: tabular-nums lining-nums; }
+.tunnel-scene { position: relative; container-type: inline-size; margin: 0; padding: 0 0 28px; color: #aaa; font: 13px/1.5 var(--font-text), monospace; font-variant-numeric: tabular-nums lining-nums; }
 .tunnel-panels { position: relative; display: grid; grid-template-columns: 150px 180px minmax(0, 1fr); gap: 40px; align-items: center; padding-top: 0; }
 .tunnel-column { min-width: 0; }
 .tunnel-routes { display: grid; gap: 10px; padding: 16px; }
@@ -9,11 +9,12 @@
 @container (max-width: 560px) {
   .tunnel-panels { grid-template-columns: minmax(0, 1fr); gap: 36px; align-items: stretch; }
   .tunnel-column { max-width: 320px; }
+  /* Stacked, the wire comes down the left into the machine; the label steps aside to the right. */
+  .tunnel-machine .tunnel-machine-label { left: auto; right: 0; }
 }
 .tunnel-relay-field { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); display: block; pointer-events: none; }
 
 /* The blog's diagram inks, in the page's own face: plain Plex Mono, lowercase, grey structure, ivory light. */
-.tunnel-scene { font-family: var(--font-text), monospace; }
 .tunnel-scene .node-card { min-height: 52px; padding: 10px 14px; flex-wrap: nowrap; gap: 12px; }
 .tunnel-scene .node-card-name { font: 500 13px/18px var(--font-text), monospace; gap: 10px; }
 .tunnel-scene .node-card-label { white-space: nowrap; overflow-wrap: normal; }

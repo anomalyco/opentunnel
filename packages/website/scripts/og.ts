@@ -1,11 +1,13 @@
-// Screenshots the share card at /og into dist/og.png. Runs after `vite build` so the image ships with the site.
-// A private dev server on a free port renders the card; Chromium draws the WebGL print through SwiftShader.
+// `bun run og`: screenshots the share card at /og into public/og.png, which ships with the site. Run it again
+// after changing the card; the render is deterministic (reduced motion prints one fixed frame), so the file
+// only changes when the card does. A private dev server on a free port renders the card; Chromium draws the
+// WebGL print through SwiftShader.
 import { mkdir } from "node:fs/promises"
 import { join, resolve } from "node:path"
 import { chromium } from "playwright-core"
 import { createServer } from "vite"
 
-const root = resolve(import.meta.dirname, ".."), outDir = join(root, "dist"), file = join(outDir, "og.png")
+const root = resolve(import.meta.dirname, ".."), outDir = join(root, "public"), file = join(outDir, "og.png")
 
 const server = await createServer({ root, configFile: join(root, "vite.config.ts"), logLevel: "error", server: { host: "127.0.0.1", port: 0, strictPort: false } })
 await server.listen()

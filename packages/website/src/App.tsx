@@ -1,20 +1,11 @@
-import { useEffect, useRef, useState } from "react"
-import { Banner } from "./banner/Banner"
-import { PosterControls } from "./poster/PosterControls"
+import { useState } from "react"
 import { TunnelScene } from "./scenes/TunnelScene"
-import { Mist } from "./mist/Mist"
 import { TunnelArt } from "./poster/TunnelArt"
-import { Barcode, Crosshair, Ruler } from "./Micro"
-import { Globe as GlobeIcon, LockSimple, ArrowRight } from "@phosphor-icons/react"
+import { LockSimple } from "@phosphor-icons/react"
 import { Globe } from "./scenes/Globe"
 import { useTime, useTransform } from "motion/react"
-import { monoTables, theme } from "./theme"
 
 const github = "https://github.com/anomalyco/opentunnel"
-
-/** Dev only: `?hero=banner` puts the red print above the page; `?mist` shows the mist from the O. */
-const hero = import.meta.env.DEV ? new URLSearchParams(location.search).get("hero") : null
-const showMist = import.meta.env.DEV && new URLSearchParams(location.search).has("mist")
 
 const installs = {
   npm: "npm i -g opentunnel",
@@ -34,109 +25,22 @@ function Install() {
   </div>
 }
 
-/** The wordmark as a tunnel mouth. Set like FitText (glyphs stretched to the box), drawn here so mist can be hung
- * from the O's counter, which is measured with a canvas in the same resolved font. */
+/** The wordmark: Anton, its glyphs stretched to a 4.6:1 box (`textLength` + `preserveAspectRatio="none"`). */
 const WORDMARK = "OPENTUNNEL", WIDTH = 1000, ASPECT = 4.6, CAP = .867
 
-/** Dev: subtitle treatments to compare on the page; ← and → cycle them, the choice persists. */
-const subtitleVariants = [
-  "mono-left", "mono-right", "mono-caps", "mono-red", "mono-rule", "mono-bracket", "anton-left", "anton-caps", "anton-right", "mono-center",
-  "caps-rule", "caps-red", "caps-right", "caps-spread", "caps-underline", "caps-box", "caps-numbered",
-  "two-lines-right", "two-lines-square", "on-square", "full-row-rule", "large-light", "caps-dim-large", "caps-between",
-  "micro-a", "micro-b", "micro-c", "square-just", "square-just-red", "square-just-rule", "square-just-right",
-  "square-dots", "square-arrows", "square-icons", "square-icons-end",
-  "square-end-plain", "square-end-white", "square-end-lead", "square-end-rule", "square-end-tight",
-] as const
-type SubtitleVariant = typeof subtitleVariants[number]
-function useSubtitleVariant(): SubtitleVariant {
-  const [variant, setVariant] = useState<SubtitleVariant>(() => (import.meta.env.DEV && localStorage.getItem("subtitle") as SubtitleVariant) || "square-icons-end")
-  useEffect(() => {
-    if (!import.meta.env.DEV) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
-      if ((event.target as HTMLElement)?.closest("input, textarea, button, [contenteditable]")) return
-      setVariant(current => {
-        const index = subtitleVariants.indexOf(current), step = event.key === "ArrowRight" ? 1 : -1
-        const next = subtitleVariants[(index + step + subtitleVariants.length) % subtitleVariants.length]!
-        localStorage.setItem("subtitle", next)
-        return next
-      })
-    }
-    addEventListener("keydown", onKey)
-    return () => removeEventListener("keydown", onKey)
-  }, [])
-  return variant
-}
-
-/** Development: R cycles the mark's ink (white, the red, red with a white caption); remembered. */
-const markInks = ["white", "red", "red-white-caption"] as const
-type MarkInk = typeof markInks[number]
-function useMarkInk(): MarkInk {
-  const [ink, setInk] = useState<MarkInk>(() => (import.meta.env.DEV && localStorage.getItem("mark") as MarkInk) || "red")
-  useEffect(() => {
-    if (!import.meta.env.DEV) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "r" || event.metaKey || event.ctrlKey || event.altKey) return
-      if ((event.target as HTMLElement)?.closest("input, textarea, button, [contenteditable]")) return
-      setInk(current => { const next = markInks[(markInks.indexOf(current) + 1) % markInks.length]!; localStorage.setItem("mark", next); return next })
-    }
-    addEventListener("keydown", onKey)
-    return () => removeEventListener("keydown", onKey)
-  }, [])
-  return ink
-}
-
+/** The print in a square the mark's height, the mark beside it, and under the square the caption: two lines
+ * justified to its width, word · dotted leader · word · a small icon (a turning globe, a lock). */
 function Masthead() {
-  const variant = useSubtitleVariant()
   const seconds = useTransform(useTime(), ms => ms / 1000)
-  const host = useRef<HTMLDivElement>(null), svg = useRef<SVGSVGElement>(null), text = useRef<SVGTextElement>(null)
-  const height = WIDTH / ASPECT, fontSize = height / CAP
-  const [mist, setMist] = useState<{ left: number; top: number; width: number; height: number; source: [number, number] } | null>(null)
-  useEffect(() => {
-    const element = host.current, root = svg.current, glyphs = text.current
-    if (!element || !root || !glyphs) return
-    const context = document.createElement("canvas").getContext("2d")!
-    const measure = () => {
-      context.font = `400 ${fontSize}px ${getComputedStyle(glyphs).fontFamily}`
-      const first = context.measureText("O"), all = context.measureText(WORDMARK)
-      const stretch = WIDTH / all.width
-      const next = { top: height - first.actualBoundingBoxAscent, bottom: height + first.actualBoundingBoxDescent, centre: first.width / 2 * stretch }
-      // Where the ink really starts and ends, so a line under the mark can align with the O's and the L's edges.
-      const scaleX = root.getBoundingClientRect().width / WIDTH
-      element.style.setProperty("--ink-left", `${Math.max(0, -first.actualBoundingBoxLeft) * stretch * scaleX}px`)
-      element.style.setProperty("--ink-right", `${Math.max(0, WIDTH - all.actualBoundingBoxRight * stretch) * scaleX}px`)
-      // The mist rises from the O's counter and may wander anywhere: the canvas spans the viewport, from well
-      // above the mark to a little below it.
-      const ctm = root.getScreenCTM(), box = element.getBoundingClientRect()
-      if (!ctm) return
-      const mouth = new DOMPoint(next.centre, (next.top + next.bottom) / 2).matrixTransform(ctm)
-      const left = -box.left, width = document.documentElement.clientWidth, top = -box.height * 1.6, span = box.height * 3
-      setMist({ left, top, width, height: span, source: [(mouth.x - box.left - left) / width, 1 - (mouth.y - box.top - top) / span] })
-    }
-    document.fonts.ready.then(measure)
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [fontSize, height])
-  const micro = variant.startsWith("micro")
-  const ink = useMarkInk()
-  return <div ref={host} className="masthead" data-subtitle={variant} data-mark={ink}>
-    {import.meta.env.DEV && <span className="variant-badge" aria-hidden="true">← {variant} → · R {ink}</span>}
-    {(variant === "micro-b" || variant === "micro-c") && <><Ruler className="micro-ruler" /><Crosshair className="micro-crosshair" /></>}
-    {/* Mist from the O's counter: parked until the smoke reads right. */}
-    {mist && showMist && <Mist className="mist" style={{ left: mist.left, top: mist.top, width: mist.width, height: mist.height }} source={mist.source} />}
-    {/* The tunnel print, as a square the height of the mark, beside it. */}
+  const height = WIDTH / ASPECT
+  return <div className="masthead">
     <div className="masthead-print" role="img" aria-label="A tunnel"><TunnelArt className="masthead-canvas" /></div>
-    <svg ref={svg} className="wordmark" viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
-      <text ref={text} x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={fontSize} fill="currentColor">{WORDMARK}</text>
+    <svg className="wordmark" viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      <text x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={height / CAP} fill="currentColor">{WORDMARK}</text>
     </svg>
-    <h1><span>{variant.startsWith("two-lines") ? <>public urls<br />for anything</> : variant.startsWith("square-just") ? <><b>public urls</b><b>for anything</b></> :
-      variant === "square-dots" ? <><b>public<i className="fill" />urls</b><b>for<i className="fill" />anything</b></> :
-      variant === "square-arrows" ? <><b>public<i className="fill"><ArrowRight size={10} weight="bold" /></i>urls</b><b>for<i className="fill"><ArrowRight size={10} weight="bold" /></i>anything</b></> :
-      variant === "square-icons" ? <><b>public<i className="fill"><GlobeIcon size={11} /></i>urls</b><b>for<i className="fill"><LockSimple size={11} /></i>anything</b></> :
-      variant.startsWith("square-end") || variant === "square-icons-end" ? <><b><span>public</span><i className="fill" /><span>urls</span><Globe clock={seconds} size={11} className="tail" /></b><b><span>for</span><i className="fill" /><span>anything</span><LockSimple size={11} className="tail" /></b></> : variant === "caps-between" ? <><em>public</em><em>urls</em><em>for</em><em>anything</em></> : "public urls for anything"}</span>
-      {micro && <><span className="micro-leader" aria-hidden="true" /><span className="micro-meta">e2e · tls · v0.0.30</span></>}
-      {variant === "micro-c" && <Barcode className="micro-barcode" text="OPENTUNNEL.XYZ" height={18} />}
+    <h1>
+      <b><span>public</span><i className="fill" /><span>urls</span><Globe clock={seconds} size={11} className="tail" /></b>
+      <b><span>for</span><i className="fill" /><span>anything</span><LockSimple size={11} className="tail" /></b>
     </h1>
   </div>
 }
@@ -144,19 +48,7 @@ function Masthead() {
 const out = (text: string) => <span className="output">{text}</span>
 
 export function App() {
-  return <div className="site" data-theme={theme}>
-    {theme === "mono" && <svg width={0} height={0} style={{ position: "absolute" }} aria-hidden="true"><defs>
-      <filter id="monotone" colorInterpolationFilters="sRGB">
-        <feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0 0 0 1 0" />
-        <feComponentTransfer>
-          <feFuncR type="table" tableValues={monoTables[0]} />
-          <feFuncG type="table" tableValues={monoTables[1]} />
-          <feFuncB type="table" tableValues={monoTables[2]} />
-        </feComponentTransfer>
-      </filter>
-    </defs></svg>}
-
-    {hero === "banner" && <Banner />}
+  return <div className="site">
 
     <main>
       <Masthead />
@@ -225,7 +117,5 @@ console.log(connection.routes[0].hostname)
         </dl>
       </section>
     </main>
-
-    {import.meta.env.DEV && <PosterControls />}
   </div>
 }

@@ -1,17 +1,13 @@
 import { useEffect, useRef } from "react"
 import { fragmentSource, vertexSource } from "./tunnelShader"
-import { pipeFragmentSource } from "./pipeShader"
-import { posterSettings, usePosterSettings, type PosterSettings } from "./posterSettings"
+import { posterSettings, type PosterSettings } from "./posterSettings"
 
 const hex = (value: string): [number, number, number] => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16) / 255) as [number, number, number]
 
 const scalarUniforms = ["depth", "ringFrequency", "ringSpeed", "wallInk", "bandInk", "distanceInk", "eyeGlow", "sphereRadius", "sphereHalo", "seaLevel", "seaInk"] as const satisfies readonly (keyof PosterSettings)[]
 
-/** The poster's printed image: a WebGL tunnel dithered to two inks. Pauses offscreen and in hidden tabs; reduced motion prints one still frame.
- * `fade` dissolves the print into paper along an axis: no ink before `from`, the full print after `to` (fractions; x runs left to right, y top to bottom). */
-export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className }: { ink?: string; paper?: string; fade?: { axis: "x" | "y"; from: number; to: number }; className?: string }) {
-  const fadeStart = fade?.from ?? 0, fadeEnd = fade?.to ?? 0, fadeAxis = fade?.axis === "y" ? 1 : 0
-  const scene = usePosterSettings().scene
+/** The print: a WebGL tunnel dithered to two inks. Pauses offscreen and in hidden tabs; reduced motion prints one still frame. */
+export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", className }: { ink?: string; paper?: string; className?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -28,7 +24,7 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className 
     }
     const program = gl.createProgram()!
     gl.attachShader(program, shader(gl.VERTEX_SHADER, vertexSource))
-    gl.attachShader(program, shader(gl.FRAGMENT_SHADER, scene === "pipe" ? pipeFragmentSource : fragmentSource))
+    gl.attachShader(program, shader(gl.FRAGMENT_SHADER, fragmentSource))
     gl.linkProgram(program)
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) ?? "program")
     gl.useProgram(program)
@@ -43,7 +39,6 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className 
     const scalars = Object.fromEntries(scalarUniforms.map(name => [name, location(name)])) as Record<typeof scalarUniforms[number], WebGLUniformLocation | null>
     gl.uniform3fv(location("ink"), hex(ink))
     gl.uniform3fv(location("paper"), hex(paper))
-    gl.uniform3f(location("fade"), fadeStart, fadeEnd, fadeAxis)
     const warp = location("warpAmount"), streak = location("streakAmount")
 
     // Dither cells are CSS pixels: render at the display's density, capped for battery.
@@ -59,22 +54,19 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className 
       gl.viewport(0, 0, width, height)
       gl.uniform2f(uniforms.resolution, width, height)
     }
-    const upload = (settings: PosterSettings) => {
-      gl.uniform1f(uniforms.cell, settings.cell * scale)
-      gl.uniform2f(uniforms.eye, settings.eyeX, settings.eyeY)
-      gl.uniform2f(uniforms.sphereCenter, settings.sphereX, settings.sphereY)
-      gl.uniform1f(warp, settings.warp); gl.uniform1f(streak, settings.streak)
-      for (const name of scalarUniforms) gl.uniform1f(scalars[name], settings[name])
-    }
+    const settings = posterSettings
+    gl.uniform1f(uniforms.cell, settings.cell * scale)
+    gl.uniform2f(uniforms.eye, settings.eyeX, settings.eyeY)
+    gl.uniform2f(uniforms.sphereCenter, settings.sphereX, settings.sphereY)
+    gl.uniform1f(warp, settings.warp); gl.uniform1f(streak, settings.streak)
+    for (const name of scalarUniforms) gl.uniform1f(scalars[name], settings[name])
     const media = matchMedia("(prefers-reduced-motion: reduce)")
-    // Scene time integrates speed, so turning a knob never jumps the picture.
-    let visible = false, hidden = document.hidden, raf = 0, previous = performance.now(), sceneTime = 7 * posterSettings.get().speed
+    // Scene time starts a few seconds in, so the first frame (and the reduced-motion still) is a settled picture.
+    let visible = false, hidden = document.hidden, raf = 0, previous = performance.now(), sceneTime = 7 * settings.speed
     const draw = (now: number) => {
-      const settings = posterSettings.get()
       sceneTime += Math.min(.1, (now - previous) / 1000) * settings.speed
       previous = now
       resize()
-      upload(settings)
       gl.uniform1f(uniforms.time, sceneTime)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
     }
@@ -92,14 +84,13 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", fade, className 
     media.addEventListener("change", run)
     const sizing = new ResizeObserver(() => { if (media.matches || !visible) still() })
     sizing.observe(element)
-    const unsubscribe = posterSettings.subscribe(() => { if (media.matches) still() })
     still()
     return () => {
-      cancelAnimationFrame(raf); observer.disconnect(); sizing.disconnect(); unsubscribe()
+      cancelAnimationFrame(raf); observer.disconnect(); sizing.disconnect()
       document.removeEventListener("visibilitychange", visibility); media.removeEventListener("change", run)
       gl.deleteProgram(program); gl.deleteBuffer(quad)
     }
-  }, [ink, paper, fadeStart, fadeEnd, fadeAxis, scene])
+  }, [ink, paper])
 
   return <canvas ref={canvas} className={className} aria-hidden="true" />
 }

@@ -3,7 +3,7 @@
 .diagram-frame { min-width: 0; box-sizing: border-box; border: 1px solid #383838; background: #ffffff02; }
 .diagram-frame[data-fill="plain"] { background: transparent; }
 
-.diagram-header { height: 43px; display: flex; align-items: center; justify-content: space-between; margin: 0; padding-inline: 18px; background: #131313; color: #aaa; font: 400 10px/16px var(--font-mono), monospace; letter-spacing: .06em; text-transform: uppercase; }
+.diagram-header { height: 43px; display: flex; align-items: center; justify-content: space-between; margin: 0; padding-inline: 18px; background: #131313; color: #aaa; font: 400 10px/16px var(--font-text), monospace; letter-spacing: .06em; text-transform: uppercase; }
 .diagram-header[data-divider="below"] { box-shadow: inset 0 -1px #292929; }
 .diagram-header[data-divider="above"] { box-shadow: inset 0 1px #292929; }
 @media (max-width: 640px) { .diagram-header { padding-inline: 16px; } }

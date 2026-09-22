@@ -22,9 +22,6 @@ uniform float wallInk, bandInk, distanceInk, eyeGlow;
 uniform vec2 sphereCenter;
 uniform float sphereRadius, sphereHalo;
 uniform float seaLevel, seaInk;
-// Dissolve into paper: no ink before fade.x, the full print after fade.y (fractions along the axis;
-// fade.z selects x, left to right, or y, top to bottom).
-uniform vec3 fade;
 
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) {
@@ -83,10 +80,6 @@ void main() {
   float shore = smoothstep(seaLevel, seaLevel - 0.43, uv.y);
   sea = seaInk * ((0.3 + 1.0 * smoothstep(0.35, 0.7, sea)) * shore + 0.4 * smoothstep(seaLevel - 0.48, seaLevel - 0.73, uv.y));
   field = mix(max(field, sea), field, body);
-
-  // Toward the paper the field thins, so the dither dissolves instead of stopping at an edge.
-  float along = fade.z > 0.5 ? 1.0 - px.y / resolution.y : px.x / resolution.x;
-  if (fade.y > fade.x) field *= smoothstep(fade.x, fade.y, along);
 
   // Two inks. Dither in CSS-pixel cells so the grain is the same on every display.
   float threshold = ign(floor(px / cell));
