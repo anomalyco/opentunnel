@@ -1,16 +1,19 @@
 /* The share card: a printed sheet in one ink, the red, on a fixed 1200×630 black canvas. */
-.og-card { --ink: #ff2a2a; --ink-dim: rgba(255, 42, 42, .55); position: relative; display: grid; grid-template-columns: 430px minmax(0, 1fr); gap: 0 40px; align-items: stretch; width: 1200px; height: 630px; padding: 100px 88px; background: #000; color: var(--ink); font: 400 14px/1.6 var(--font-text), monospace; text-transform: lowercase; overflow: hidden; }
+.og-card { --ink: #ff2a2a; --ink-dim: rgba(255, 42, 42, .55); position: relative; display: grid; grid-template-columns: 430px minmax(0, 1fr); gap: 0 40px; align-items: stretch; width: 1200px; height: 630px; padding: 90px 88px; background: #000; color: var(--ink); font: 400 14px/1.6 var(--font-text), monospace; text-transform: lowercase; overflow: hidden; }
 .og-frame { position: absolute; inset: 24px; border: 1px solid var(--ink-dim); pointer-events: none; }
 .og-reg { position: absolute; width: 14px; height: 14px; color: var(--ink); }
 .og-reg-tl { left: -7.5px; top: -7.5px; } .og-reg-tr { right: -7.5px; top: -7.5px; } .og-reg-bl { left: -7.5px; bottom: -7.5px; } .og-reg-br { right: -7.5px; bottom: -7.5px; }
 .og-print { position: relative; aspect-ratio: 1; overflow: hidden; }
 .og-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
-/* The wordmark, its caption justified to the same width, and the address on the baseline. */
-.og-right { display: grid; grid-template-rows: auto auto 1fr; }
+/* The wordmark, its caption justified to the same width, three squares of facts, and the address on the baseline. */
+.og-right { display: grid; grid-template-rows: auto auto 1fr auto; }
 .og-wordmark { display: block; width: 100%; aspect-ratio: 4.6; color: var(--ink); font-family: var(--font-wordmark), sans-serif; text-transform: none; overflow: visible; }
-.og-caption { margin: 22px 0 0; font-size: 19px; line-height: 1.8; text-transform: uppercase; }
+.og-caption { margin: 20px 0 0; font-size: 22px; line-height: 1.75; text-transform: uppercase; }
 .og-caption b { display: flex; align-items: center; font-weight: 400; }
 .og-caption .fill { flex: 1; margin: 0 .7em; border-bottom: 1px dotted currentColor; opacity: .6; }
 .og-caption .tail { flex: none; margin-left: .6em; position: relative; top: .5px; }
-.og-foot { align-self: end; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-top: 14px; border-top: 1px solid var(--ink-dim); font-size: 13px; letter-spacing: .1em; }
+.og-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-self: end; margin: 24px 0 20px; padding: 0; list-style: none; }
+.og-facts li { display: grid; place-items: center; align-content: center; gap: 14px; height: 128px; border: 1px solid var(--ink-dim); }
+.og-facts b { font-weight: 400; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; }
+.og-foot { align-self: end; display: flex; align-items: center; justify-content: space-between; gap: 24px; font-size: 13px; letter-spacing: .1em; }
 .og-barcode { height: 22px; width: 240px; color: var(--ink); }

@@ -4,7 +4,6 @@ import { DiagramFrame, NodeCard } from "../graphics/Diagram"
 import { GraphPort, GraphSignals, GraphWire } from "../graphics/GraphSignals"
 import { CardGlow, Pulse, pulseGatherMs } from "../graphics/Pulse"
 import { pluginActivity, pluginActivityAt, usePluginActivity } from "../graphics/pluginActivity"
-import { roundedWire } from "../graphics/roundedWire"
 import { useScenePlayback } from "../graphics/useScenePlayback"
 import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel } from "./tunnelScore"
 import { RelayField, type RelayFront } from "./RelayField"
@@ -49,7 +48,7 @@ function Relay({ clock, reduced, crossings, fronts, now }: { clock: MotionValue<
   </NodeCard>
 }
 
-function Route({ index, clock, reduced }: { index: number; clock: MotionValue<number>; reduced: boolean }) {
+function Route({ index, clock, reduced, stacked }: { index: number; clock: MotionValue<number>; reduced: boolean; stacked: boolean }) {
   const route = tunnelRoutes[index]!, leg = tunnelLegs[index]!
   // The destination flashes as the bytes land and cools over the next second; its icon flashes and decays with the name.
   const activity = { dispatches: [leg.contact], reduced }
@@ -57,7 +56,8 @@ function Route({ index, clock, reduced }: { index: number; clock: MotionValue<nu
   const { rest, active } = pluginActivity.icon
   inks.iconColor = useTransform(clock, time => { const n = Math.round(rest + pluginActivityAt(time, activity).flash * (active - rest)); return `rgb(${n} ${n} ${n})` })
   return <NodeCard name={route.name} icon={routeIcons[route.icon]} data-node={route.id} aria-label={`${route.name} on ${route.target}`} {...inks}>
-    {!reduced && <BurstField clock={clock} at={[leg.contact]} origin={[0, .5]} mode="strike" className="tunnel-card-field" />}
+    {/* The strike floods from the socket the wire lands on: the left edge, or the top when the routes stand upright. */}
+    {!reduced && <BurstField clock={clock} at={[leg.contact]} origin={stacked ? [.5, 0] : [0, .5]} mode="strike" className="tunnel-card-field" />}
     <span className="node-card-detail">{route.target}</span>
   </NodeCard>
 }
@@ -108,14 +108,14 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
     const browserOut = stacked ? { x: middle(browser).x, y: browser.y + browser.height } : { x: browser.x + browser.width, y: middle(browser).y }
     const relayIn = stacked ? { x: middle(relay).x, y: relay.y } : { x: relay.x, y: middle(relay).y }
     const relayOut = stacked ? { x: middle(relay).x, y: relay.y + relay.height } : { x: relay.x + relay.width, y: middle(relay).y }
+    // Stacked (phones), the routes stand upright side by side and the relay fans down into their tops.
     const routeIn = (box: Box) => stacked ? { x: middle(box).x, y: box.y } : { x: box.x, y: middle(box).y }
-    const spine = (relayOut.x + machine.x) / 2
-    const inside = machine.x + 16
+    const spine = stacked ? (relayOut.y + machine.y) / 2 : (relayOut.x + machine.x) / 2
     // The whole leg is one path: into the relay, straight through it, out the far socket, then an S-curve to the route.
     const through = `M${browserOut.x} ${browserOut.y}L${relayIn.x} ${relayIn.y}L${relayOut.x} ${relayOut.y}`
     const hop = (box: Box) => {
       const input = routeIn(box)
-      if (stacked) return roundedWire([relayOut, { x: relayOut.x, y: machine.y - 12 }, { x: inside, y: machine.y - 12 }, { x: inside, y: middle(box).y }, { x: box.x, y: middle(box).y }], 12).replace(/^M[^L]*/, "")
+      if (stacked) return Math.abs(input.x - relayOut.x) < 1 ? `V${input.y}` : `C${relayOut.x} ${spine} ${input.x} ${spine} ${input.x} ${input.y}`
       if (Math.abs(input.y - relayOut.y) < 1) return `H${input.x}`
       return `C${spine} ${relayOut.y} ${spine} ${input.y} ${input.x} ${input.y}`
     }
@@ -155,7 +155,12 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
 
   const { browser, relay, machine, routes } = bounds
   const { stacked, browserOut, relayIn, relayOut, routeIn, legs, wires } = geometry
-  const routeLanding = (box: Box) => stacked ? { x: box.x, y: box.y + box.height / 2 } : routeIn(box)
+  const routeLanding = routeIn
+  // Where each wire crosses the machine's border: a short gap centred on the socket, `thickness` deep.
+  const opening = (box: Box, thickness: number) => stacked
+    ? { x: routeIn(box).x - 18, y: machine.y - Math.floor(thickness / 2), width: 36, height: thickness }
+    : { x: machine.x - Math.floor(thickness / 2), y: routeIn(box).y - 18, width: thickness, height: 36 }
+  const along = stacked ? { x1: "0", x2: "1", y1: "0", y2: "0" } : { x1: "0", x2: "0", y1: "0", y2: "1" }
   const reflection = { borders: [browser, relay, machine, ...routes].map(outlineOf).join(""), strength: .9, radius: 110 }
 
   return <svg className="tunnel-signals" viewBox={`0 0 ${bounds.width} ${bounds.height}`} aria-hidden="true">
@@ -165,22 +170,22 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
         <rect width={bounds.width} height={bounds.height} fill="white" />
         <rect x={relay.x + 1} y={relay.y + 1} width={relay.width - 2} height={relay.height - 2} fill="black" />
       </mask>
-      {/* The frame's border opens softly where a wire enters. */}
-      <linearGradient id={`${id}-opening`} x1="0" x2="0" y1="0" y2="1">
+      {/* The frame's border opens softly where a wire enters (along the edge the wires cross). */}
+      <linearGradient id={`${id}-opening`} {...along}>
         <stop offset="0" stopColor="#000" stopOpacity="0" /><stop offset=".5" stopColor="#000" stopOpacity="1" /><stop offset="1" stopColor="#000" stopOpacity="0" />
       </linearGradient>
       {/* Reflected light respects the openings: the cut border only glimmers there. */}
-      <linearGradient id={`${id}-opening-dim`} x1="0" x2="0" y1="0" y2="1">
+      <linearGradient id={`${id}-opening-dim`} {...along}>
         <stop offset="0" stopColor="#fff" /><stop offset=".5" stopColor="#333" /><stop offset="1" stopColor="#fff" />
       </linearGradient>
       <mask id={`${id}-openings`} maskUnits="userSpaceOnUse" x={0} y={0} width={bounds.width} height={bounds.height}>
         <rect width={bounds.width} height={bounds.height} fill="white" />
-        {!stacked && routes.map((box, index) => <rect key={index} x={machine.x - 2} y={routeIn(box).y - 18} width={5} height={36} fill={`url(#${id}-opening-dim)`} />)}
+        {routes.map((box, index) => <rect key={index} {...opening(box, 5)} fill={`url(#${id}-opening-dim)`} />)}
       </mask>
     </defs>
 
     {/* The frame's border opens softly where each wire enters; the wire runs over the gap. */}
-    {!stacked && routes.map((box, index) => <rect key={index} x={machine.x - 1} y={routeIn(box).y - 18} width={3} height={36} fill={`url(#${id}-opening)`} />)}
+    {routes.map((box, index) => <rect key={index} {...opening(box, 3)} fill={`url(#${id}-opening)`} />)}
     <GraphWire d={wires.request} />
     {wires.hops.map((d, index) => <GraphWire key={index} d={d} />)}
 
@@ -230,7 +235,7 @@ export function TunnelScene() {
       <DiagramFrame className="tunnel-machine" data-machine="" aria-label="Your machine">
         <span className="tunnel-machine-label" aria-hidden="true"><span>your machine</span></span>
         <div className="tunnel-routes">
-          {tunnelRoutes.map((route, index) => <Route key={route.id} index={index} clock={player.clock} reduced={player.reduced} />)}
+          {tunnelRoutes.map((route, index) => <Route key={route.id} index={index} clock={player.clock} reduced={player.reduced} stacked={crossings[0]?.stacked ?? false} />)}
         </div>
       </DiagramFrame>
       <TunnelSignals clock={player.clock} reduced={player.reduced} panels={panels} onCrossings={setCrossings} fronts={fronts} now={now} />

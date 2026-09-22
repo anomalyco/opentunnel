@@ -1,4 +1,5 @@
 import { useEffect } from "react"
+import { ArrowsLeftRight, Globe, LockSimple } from "@phosphor-icons/react"
 import { TunnelArt } from "./poster/TunnelArt"
 import { Barcode, Crosshair } from "./Micro"
 import { Caption, Wordmark, wordmarkFontSize } from "./wordmark"
@@ -9,7 +10,7 @@ declare global {
 }
 
 // The share card, as a printed sheet in one ink: a frame with registration marks, the print, the wordmark with
-// its caption, a hairline, the address and a barcode. Rendered at `/og` in development; `bun run og`
+// its caption, three squares that say what the thing is, the address and a barcode. Rendered at `/og` in development; `bun run og`
 // screenshots it under reduced motion into public/og.png.
 
 export function OpenGraphCard() {
@@ -24,7 +25,12 @@ export function OpenGraphCard() {
     <div className="og-print"><TunnelArt className="og-canvas" /></div>
     <div className="og-right">
       <Wordmark className="og-wordmark" />
-      <p className="og-caption"><Caption size={16} /></p>
+      <p className="og-caption"><Caption size={22} /></p>
+      <ul className="og-facts">
+        <li><Globe size={48} weight="thin" /><b>public url</b></li>
+        <li><ArrowsLeftRight size={48} weight="thin" /><b>relay</b></li>
+        <li><LockSimple size={48} weight="thin" /><b>end to end</b></li>
+      </ul>
       <div className="og-foot"><span>opentunnel.xyz</span><Barcode text="OPENTUNNEL.XYZ" height={22} className="og-barcode" /></div>
     </div>
   </div>
