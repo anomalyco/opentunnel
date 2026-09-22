@@ -1,0 +1,15 @@
+/* Clear neutral inks: #aaa small labels, #5a5a5a sockets, #383838 frames, #292929 rules. Frames and resting
+   connectors stay quiet; traveling signals carry the light. */
+.diagram-frame { min-width: 0; box-sizing: border-box; border: 1px solid #383838; background: #ffffff02; }
+
+.node-card { position: relative; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px; min-height: 44px; padding: 8px 14px; }
+.node-card-inset { position: absolute; inset: 3px; border: 1px solid #292929; pointer-events: none; }
+.node-card-name { display: flex; align-items: center; gap: 7px; min-width: 0; color: #aaa; font-size: 11px; }
+.node-card-icon { flex-shrink: 0; color: #777; }
+.node-card-label { min-width: 0; overflow-wrap: anywhere; }
+.node-card-detail { margin-left: auto; color: #858585; font-size: 11px; white-space: nowrap; }
+@media (max-width: 500px) { .node-card { min-height: 58px; padding-inline: 8px; } .node-card-name { font-size: 10px; } }
+
+.graph-dots circle { fill: #5a5a5a; }
+.pulse-rim, .pulse-glow, .pulse-ring { pointer-events: none; }
+.pulse-rim { fill: none; }

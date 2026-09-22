@@ -1,0 +1,58 @@
+/* One 760px column of IBM Plex Mono on black, lowercase, nothing framed: the masthead, the diagram, the
+   matter of the old page. */
+/* One spacing scale, doubling: s1 inside a lockup, s2 between related lines, s3 between a heading and its
+   matter, s4 around a figure, s5 between sections. Every margin on the page is one of these. */
+:root { --s1: 8px; --s2: 16px; --s3: 32px; --s4: 64px; --s5: 128px; }
+* { box-sizing: border-box; }
+html { background: #000; color-scheme: dark; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { margin: 0; background: #000; color: #fff; font-family: var(--font-text), monospace; }
+::selection { background: #fff; color: #000; }
+a { color: #fff; text-decoration: none; }
+
+main { width: min(100% - 48px, 760px); margin: 0 auto; padding: var(--s5) 0 var(--s5); }
+
+/* A square the mark's height, then the mark: with the mark at 4.6:1 the square is 1/5.6 of the row less the gap. */
+.masthead { container-type: inline-size; display: grid; grid-template-columns: calc((100% - 16px) / 5.6) minmax(0, 1fr); gap: 0 16px; align-items: stretch; }
+.masthead-print { position: relative; aspect-ratio: 1; overflow: hidden; }
+.masthead-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.wordmark { display: block; width: 100%; aspect-ratio: 4.6; color: #ff2a2a; font-family: var(--font-wordmark), sans-serif; overflow: visible; }
+/* The caption under the square, justified to its width and sized from it, in the print's red: each line a
+   word, a dotted leader, a word and a small icon on the caps. */
+h1 { grid-column: 1; grid-row: 2; margin: 12px 0 0; font: 400 1.5cqw/1.75 var(--font-text), monospace; letter-spacing: 0; text-transform: uppercase; color: #ff2a2a; }
+h1 b { display: flex; align-items: center; font-weight: 400; }
+h1 .fill { flex: 1; margin: 0 .7em; border-bottom: 1px dotted currentColor; opacity: .6; }
+h1 .tail { flex: none; margin-left: .6em; position: relative; top: .5px; }
+h2 { margin: 0 0 var(--s3); font-size: clamp(20px, 3.2vw, 27px); font-weight: 500; letter-spacing: .02em; }
+
+.description { margin: var(--s4) 0 0; font-size: clamp(15px, 2vw, 18px); line-height: 1.7; }
+
+.install { margin-top: var(--s3); font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
+.tabs { display: flex; gap: 24px; margin-bottom: var(--s1); }
+.tabs button { appearance: none; margin: 0; padding: 0; border: 0; background: none; color: #fff; font: inherit; cursor: pointer; opacity: .45; }
+.tabs a { opacity: .45; }
+.tabs button:hover, .tabs a:hover, .tabs button[data-current] { opacity: 1; }
+.command { overflow-x: auto; white-space: nowrap; }
+
+.usage, .sdk, .how, .privacy { margin-top: var(--s5); }
+
+pre { margin: 0; overflow-x: auto; color: #fff; font: clamp(14px, 2vw, 17px)/1.8 var(--font-text), monospace; }
+.output { opacity: .55; }
+
+.steps { display: grid; margin: 0; padding: 0; gap: var(--s3); list-style: none; counter-reset: step; }
+.steps li { display: grid; grid-template-columns: 44px 1fr; counter-increment: step; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
+.steps li::before { content: "0" counter(step); opacity: .45; }
+.steps p { margin: 0; }
+
+.privacy-list { display: grid; margin: 0; gap: var(--s3); }
+.privacy-list dt { margin-bottom: var(--s1); font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
+.privacy-list dd { margin: 0; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; opacity: .55; }
+
+/* The diagram takes the old drawing's slot and may run a little wider than the column, centred on it. */
+.diagram-wrap { --bleed: min(940px, 100vw - 48px); width: var(--bleed); margin: var(--s4) 0 0 calc((100% - var(--bleed)) / 2); }
+
+@media (max-width: 600px) {
+  :root { --s4: 48px; --s5: 80px; }
+  main { width: min(100% - 32px, 760px); }
+  /* The caption spans the whole row under the lockup, still justified, at a size that reads. */
+  h1 { grid-column: 1 / -1; font-size: 11px; }
+}

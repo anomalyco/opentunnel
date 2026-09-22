@@ -1,0 +1,41 @@
+.tunnel-scene { position: relative; container-type: inline-size; margin: 0; padding: 0 0 28px; color: #aaa; font: 13px/1.5 var(--font-text), monospace; font-variant-numeric: tabular-nums lining-nums; }
+.tunnel-panels { position: relative; display: grid; grid-template-columns: 150px 180px minmax(0, 1fr); gap: 40px; align-items: center; padding-top: 0; }
+.tunnel-column { min-width: 0; }
+.tunnel-routes { display: grid; gap: 10px; padding: 16px; }
+.tunnel-signals { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+/* Sized by the column the diagram sits in, not the viewport. */
+@container (min-width: 900px) { .tunnel-panels { grid-template-columns: 200px 230px minmax(0, 460px); justify-content: space-between; gap: 80px; } }
+.tunnel-relay-field { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); display: block; pointer-events: none; }
+
+/* The blog's diagram inks, in the page's own face: plain Plex Mono, lowercase, grey structure, ivory light. */
+.tunnel-scene .node-card { min-height: 52px; padding: 10px 14px; flex-wrap: nowrap; gap: 12px; }
+.tunnel-scene .node-card-name { font: 500 13px/18px var(--font-text), monospace; gap: 10px; }
+.tunnel-scene .node-card-label { white-space: nowrap; overflow-wrap: normal; }
+.tunnel-scene .node-card-icon { display: inline-flex; width: 16px; height: 16px; }
+.tunnel-scene .node-card-detail { font: 400 12px/18px var(--font-text), monospace; color: #858585; }
+/* Every card can be lit from inside; its type sits above the light. */
+.tunnel-card-field { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); display: block; pointer-events: none; }
+.tunnel-scene .node-card-name, .tunnel-scene .node-card-detail { position: relative; z-index: 1; }
+.tunnel-scene .node-card[data-node=relay] .node-card-name { text-shadow: 0 0 2px #000, 0 0 4px #000, 0 0 8px #000; }
+
+/* The machine's name sits above its box, as the old drawing had it. */
+.tunnel-machine { position: relative; margin-top: 24px; }
+.tunnel-machine-label { position: absolute; bottom: 100%; left: 0; margin-bottom: 8px; color: #aaa; font: 400 12px/16px var(--font-text), monospace; }
+
+/* Sound: the whole diagram is the switch; a small speaker in its corner says which way it is. */
+.tunnel-panels { cursor: pointer; }
+.tunnel-sound { position: absolute; right: 0; bottom: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: #fff; opacity: 0; font: 400 11px/16px var(--font-text), monospace; cursor: pointer; transition: opacity .2s; }
+.tunnel-scene:hover .tunnel-sound, .tunnel-sound:focus-visible { opacity: .5; }
+.tunnel-sound:focus-visible { outline: 1px solid #fff; outline-offset: 4px; }
+
+/* Phones: the same drawing, wordless. Cards shrink to their icons; the machine's name stays. */
+@container (max-width: 560px) {
+  .tunnel-panels { grid-template-columns: 52px minmax(96px, 128px) 96px; justify-content: space-between; gap: 16px; }
+  .tunnel-scene .node-card { min-height: 52px; padding: 0; justify-content: center; }
+  .tunnel-scene .node-card-label, .tunnel-scene .node-card-detail { display: none; }
+  .tunnel-scene .node-card-name { gap: 0; }
+  .tunnel-scene .node-card-icon { width: 20px; height: 20px; }
+  .tunnel-scene .node-card-icon svg { width: 20px; height: 20px; }
+  .tunnel-routes { gap: 14px; padding: 14px; }
+  .tunnel-machine .tunnel-machine-label { left: auto; right: 0; white-space: nowrap; }
+}

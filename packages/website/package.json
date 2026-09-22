@@ -2,12 +2,30 @@
   "name": "@opentunnel/website",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "build": "wrangler deploy --dry-run",
-    "deploy": "wrangler deploy"
+    "dev": "vite --host 127.0.0.1 --port 4190 --strictPort",
+    "build": "tsc -p tsconfig.json && vite build && wrangler deploy --dry-run",
+    "preview": "vite preview --host 127.0.0.1 --port 4190 --strictPort",
+    "deploy": "vite build && wrangler deploy",
+    "deploy:preview": "tsc -p tsconfig.json && vite build && wrangler deploy -c wrangler.preview.jsonc",
+    "og": "bun run scripts/og.ts",
+    "track": "bun run scripts/render-track.ts"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "2.1.10",
+    "motion": "12.42.2",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   },
   "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "playwright-core": "1.62.1",
+    "typescript": "catalog:",
+    "vite": "8.1.3",
     "wrangler": "catalog:"
   }
 }
