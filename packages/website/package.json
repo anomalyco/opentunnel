@@ -10,7 +10,8 @@
     "deploy": "vite build && wrangler deploy",
     "deploy:preview": "tsc -p tsconfig.json && vite build && wrangler deploy -c wrangler.preview.jsonc",
     "og": "bun run scripts/og.ts",
-    "track": "bun run scripts/render-track.ts"
+    "track": "bun run scripts/render-track.ts",
+    "bench:frames": "bun run scripts/bench-frames.ts"
   },
   "dependencies": {
     "@kitlangton/justice": "0.3.0",

@@ -80,12 +80,15 @@ export function Pulse({ d, clock, duration, delay, reflection, underlayMask, eas
     let painted = 0
     let previous = -Infinity
     const heatedAt = new Float64Array(BANDS).fill(-Infinity)
+    // Each band is its own short polyline along its stretch of the path, not a dash of the whole path: stroking
+    // hundreds of full-length dashed paths a frame is what made Safari crawl.
     const passedAt = Array.from({ length: BANDS }, (_, i) => {
-      const from = length * i / BANDS
-      bands.current[i]?.setAttribute("stroke-dasharray", `${length / BANDS} ${length + 1}`)
-      bands.current[i]?.setAttribute("stroke-dashoffset", String(-from))
+      const from = length * i / BANDS, step = length / BANDS / 3
+      const points = Array.from({ length: 4 }, (_, k) => geometry.getPointAtLength(Math.min(length, from + k * step)))
+      bands.current[i]?.setAttribute("d", points.map((p, k) => `${k ? "L" : "M"}${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(""))
       return traveling * ease.inverse((i + 0.5) / BANDS)
     })
+    const shown = new Float64Array(BANDS)
 
     const hide = () => { c.setAttribute("r", "0"); r.setAttribute("r", "0"); r.setAttribute("opacity", "0"); reflect(end, 0) }
     // Stamp a segment only when the dot crosses it. Its geometry never retracts; its heat decays
@@ -95,7 +98,16 @@ export function Pulse({ d, clock, duration, delay, reflection, underlayMask, eas
         heatedAt[painted] = origin + passedAt[painted]!
         painted++
       }
-      for (let i = 0; i < BANDS; i++) bands.current[i]?.setAttribute("stroke-opacity", String(heat(now - heatedAt[i]!)))
+      // Only bands whose heat changed are written; cold bands are hidden rather than stroked at zero.
+      for (let i = 0; i < BANDS; i++) {
+        const value = heat(now - heatedAt[i]!)
+        if (value === shown[i]) continue
+        shown[i] = value
+        const band = bands.current[i]
+        if (!band) continue
+        if (value === 0) band.setAttribute("visibility", "hidden")
+        else { band.removeAttribute("visibility"); band.setAttribute("stroke-opacity", value.toFixed(3)) }
+      }
     }
     const tick = (now: number) => {
       // Rewound: the trail starts over.
@@ -162,7 +174,7 @@ export function Pulse({ d, clock, duration, delay, reflection, underlayMask, eas
     <path ref={path} d={d} fill="none" stroke="none" />
     <g mask={underlayMask}>
       {reflection && <path ref={reflectedBorder} d={reflection.borders} fill="none" stroke={`url(#${bloom}-reflection)`} strokeWidth={reflection.width ?? 1} opacity={0} />}
-      {Array.from({ length: BANDS }, (_, i) => <path key={i} ref={(el) => { bands.current[i] = el }} className="pulse-trail" d={d} fill="none" stroke={palette.dot} strokeWidth={1.6} strokeOpacity={0} strokeLinecap="butt" strokeDasharray="0 99999" />)}
+      {Array.from({ length: BANDS }, (_, i) => <path key={i} ref={(el) => { bands.current[i] = el }} className="pulse-trail" fill="none" stroke={palette.dot} strokeWidth={1.6} strokeOpacity={0} strokeLinecap="butt" visibility="hidden" />)}
       <circle ref={ring} className="pulse-ring" fill={`url(#${bloom})`} r={0} opacity={0} />
     </g>
     <circle ref={dot} className="pulse-dot" r={0} fill={palette.dot} />

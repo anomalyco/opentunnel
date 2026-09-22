@@ -10,7 +10,11 @@ body { margin: 0; background: #000; color: #fff; font-family: var(--font-text), 
 a { color: #fff; text-decoration: none; }
 
 /* The measure: 66 characters of the body type, the classic comfortable line (45–75). `ch` is the mono's advance. */
-main { width: min(100% - 48px, 66ch); font-size: clamp(14px, 2vw, 17px); margin: 0 auto; padding: var(--s5) 0 var(--s5); filter: url(#ink); will-change: filter; }
+main { width: min(100% - 48px, 66ch); font-size: clamp(14px, 2vw, 17px); margin: 0 auto; padding: var(--s5) 0 var(--s5); }
+/* The ink's displacement is a software filter: on the whole column it re-rasterised the page every frame the
+   diagram moved (Safari fell to ~1 fps). It goes only on the still things that read as printed: the mark, the
+   caption and the headings. */
+.wordmark, .masthead h1, h2 { filter: url(#ink); }
 
 /* Ink: the filter above wobbles every edge; this multiply overlay of hard specks drops ink out. */
 .ink-defs { position: absolute; }
@@ -21,7 +25,6 @@ main { width: min(100% - 48px, 66ch); font-size: clamp(14px, 2vw, 17px); margin:
 }
 .masthead { position: relative; }
 .splatter { position: absolute; width: 54cqw; transform: translate(-50%, -50%); pointer-events: none; z-index: 4; }
-@media (prefers-reduced-motion: reduce) { main { will-change: auto; } }
 
 /* A square the mark's height, then the mark: with the mark at 4.6:1 the square is 1/5.6 of the row less the gap. */
 .masthead { container-type: inline-size; display: grid; grid-template-columns: calc((100% - 16px) / 5.6) minmax(0, 1fr); gap: 0 16px; align-items: stretch; }
