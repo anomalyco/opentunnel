@@ -6,7 +6,11 @@
 .og-print { position: relative; aspect-ratio: 1; overflow: hidden; }
 .og-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 /* The wordmark, its caption justified to the same width, three squares of facts, and the address on the baseline. */
-.og-right { display: grid; grid-template-rows: auto auto 1fr auto; }
+.og-right { display: grid; grid-template-rows: auto auto 1fr auto; filter: url(#ink); }
+.og-print { filter: url(#ink); }
+/* The spray over the mark, placed as on the page: fractions of the mark's box. */
+.og-mark { position: relative; container-type: inline-size; }
+.og-mark .splatter { width: 54cqw; top: -40%; }
 .og-wordmark { display: block; width: 100%; aspect-ratio: 4.6; color: var(--ink); font-family: var(--font-wordmark), sans-serif; text-transform: none; overflow: visible; }
 .og-caption { margin: 20px 0 0; font-size: 22px; line-height: 1.75; text-transform: uppercase; }
 .og-caption b { display: flex; align-items: center; font-weight: 400; }

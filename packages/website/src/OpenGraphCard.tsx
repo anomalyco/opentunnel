@@ -3,6 +3,8 @@ import { ArrowsLeftRight, Globe, LockSimple } from "@phosphor-icons/react"
 import { TunnelArt } from "./poster/TunnelArt"
 import { Barcode, Crosshair } from "./Micro"
 import { Caption, Wordmark, wordmarkFontSize } from "./wordmark"
+import { Splatter } from "./Splatter"
+import { Ink } from "./Ink"
 import "./OpenGraphCard.css"
 
 declare global {
@@ -19,12 +21,13 @@ export function OpenGraphCard() {
       .then(() => new Promise(resolve => setTimeout(resolve, 600)))
   }, [])
   return <div className="og-card" data-og-card>
+    <Ink />
     <div className="og-frame" aria-hidden="true">
       <Crosshair className="og-reg og-reg-tl" /><Crosshair className="og-reg og-reg-tr" /><Crosshair className="og-reg og-reg-bl" /><Crosshair className="og-reg og-reg-br" />
     </div>
     <div className="og-print"><TunnelArt className="og-canvas" /></div>
     <div className="og-right">
-      <Wordmark className="og-wordmark" />
+      <div className="og-mark"><Wordmark className="og-wordmark" /><Splatter /></div>
       <p className="og-caption"><Caption size={22} /></p>
       <ul className="og-facts">
         <li><Globe size={48} weight="thin" /><b>public url</b></li>
