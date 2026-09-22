@@ -4,6 +4,7 @@ import { TunnelArt } from "./poster/TunnelArt"
 import { Globe } from "./scenes/Globe"
 import { useTime, useTransform } from "motion/react"
 import { Caption, Wordmark } from "./wordmark"
+import { Justified } from "./Justified"
 import { Splatter } from "./Splatter"
 
 const github = "https://github.com/anomalyco/opentunnel"
@@ -61,10 +62,7 @@ export function App() {
 
       <div className="diagram-wrap"><div className="diagram"><TunnelScene /></div></div>
 
-      <p className="description">
-        a cli and sdk to create end-to-end encrypted public urls for apps running on your
-        machine reachable from anywhere in the world
-      </p>
+      <Justified className="description" text="a cli and sdk to create end-to-end encrypted public urls for apps running on your machine reachable from anywhere in the world" />
 
       <Install />
 
@@ -93,11 +91,11 @@ console.log(connection.routes[0].hostname)
       <section className="how">
         <h2>how it works</h2>
         <ol className="steps">
-          <li><p>opentunnel create reserves your hostname and generates a private key on your machine. the key never leaves it.</p></li>
-          <li><p>the cli sends a certificate request for that hostname. a certificate is issued and bound to your tunnel name. the relay only ever sees the public half.</p></li>
-          <li><p>a service on your machine opens an encrypted bridge to the relay.</p></li>
-          <li><p>visitors hit your public url. the relay reads only the hostname from the tls handshake and forwards the encrypted stream through the bridge.</p></li>
-          <li><p>your machine terminates tls with its private key and proxies the traffic to your local apps.</p></li>
+          <li><Justified text="opentunnel create reserves your hostname and generates a private key on your machine. the key never leaves it." /></li>
+          <li><Justified text="the cli sends a certificate request for that hostname. a certificate is issued and bound to your tunnel name. the relay only ever sees the public half." /></li>
+          <li><Justified text="a service on your machine opens an encrypted bridge to the relay." /></li>
+          <li><Justified text="visitors hit your public url. the relay reads only the hostname from the tls handshake and forwards the encrypted stream through the bridge." /></li>
+          <li><Justified text="your machine terminates tls with its private key and proxies the traffic to your local apps." /></li>
         </ol>
       </section>
 
@@ -106,19 +104,19 @@ console.log(connection.routes[0].hostname)
         <dl className="privacy-list">
           <div>
             <dt>the relay can't read your traffic</dt>
-            <dd>connections are routed by the hostname in the tls handshake. the bytes stay encrypted until they reach your machine. the relay has no key to decrypt them.</dd>
+            <Justified as="dd" text="connections are routed by the hostname in the tls handshake. the bytes stay encrypted until they reach your machine. the relay has no key to decrypt them." />
           </div>
           <div>
             <dt>your tunnel hostname is public</dt>
-            <dd>anyone with your url can reach your services. when a tunnel is created, its certificate is published to certificate transparency logs, so the hostname is discoverable by anyone watching them.</dd>
+            <Justified as="dd" text="anyone with your url can reach your services. when a tunnel is created, its certificate is published to certificate transparency logs, so the hostname is discoverable by anyone watching them." />
           </div>
           <div>
             <dt>route names are private, not secret</dt>
-            <dd>the certificate is a wildcard, so route names never appear in any log. they are still guessable, especially common names like api or postgres, so don't treat them as authentication.</dd>
+            <Justified as="dd" text="the certificate is a wildcard, so route names never appear in any log. they are still guessable, especially common names like api or postgres, so don't treat them as authentication." />
           </div>
           <div>
             <dt>put auth in the services themselves</dt>
-            <dd>anything sensitive behind a tunnel should authenticate on its own.</dd>
+            <Justified as="dd" text="anything sensitive behind a tunnel should authenticate on its own." />
           </div>
         </dl>
       </section>

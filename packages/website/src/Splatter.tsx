@@ -1,6 +1,7 @@
 /** A seeded spray of black droplets over the masthead. Black on black is invisible, so it reads only where it
  *  knocks ink out of the wordmark. */
-const SPLAT = { seed: 22, count: 98, size: 7, spread: 150, x: 0.77, y: -0.24, width: 410 }
+// Position and size are fractions of the masthead, so the spray scales with the mark on every screen.
+const SPLAT = { seed: 22, count: 84, size: 5.5, spread: 150, x: 0.77, y: -0.28 }
 
 const rng = (seed: number) => () => {
   seed = (seed * 1664525 + 1013904223) >>> 0
@@ -22,7 +23,7 @@ const drops = (() => {
 })()
 
 export function Splatter() {
-  return <svg className="splatter" viewBox="0 0 360 300" aria-hidden="true" style={{ left: `${SPLAT.x * 100}%`, top: `${SPLAT.y * 100}%`, width: SPLAT.width }}>
+  return <svg className="splatter" viewBox="0 0 360 300" aria-hidden="true" style={{ left: `${SPLAT.x * 100}%`, top: `${SPLAT.y * 100}%` }}>
     <filter id="splat-edge"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="2" /><feDisplacementMap in="SourceGraphic" scale="3" /></filter>
     <g fill="#000" filter="url(#splat-edge)">
       {drops.map((d, i) => <ellipse key={i} cx={d.x} cy={d.y} rx={d.rx} ry={d.ry} transform={`rotate(${d.a.toFixed(1)} ${d.x.toFixed(1)} ${d.y.toFixed(1)})`} />)}

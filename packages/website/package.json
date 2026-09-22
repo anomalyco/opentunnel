@@ -13,6 +13,7 @@
     "track": "bun run scripts/render-track.ts"
   },
   "dependencies": {
+    "@kitlangton/justice": "0.3.0",
     "@phosphor-icons/react": "2.1.10",
     "motion": "12.42.2",
     "react": "19.2.7",

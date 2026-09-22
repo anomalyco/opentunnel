@@ -76,6 +76,7 @@
       "name": "@opentunnel/website",
       "version": "0.0.0",
       "dependencies": {
+        "@kitlangton/justice": "0.3.0",
         "@phosphor-icons/react": "2.1.10",
         "motion": "12.42.2",
         "react": "19.2.7",
@@ -287,6 +288,8 @@
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.9", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.0.3", "@jridgewell/sourcemap-codec": "^1.4.10" } }, "sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ=="],
+
+    "@kitlangton/justice": ["@kitlangton/justice@0.3.0", "", {}, "sha512-C6jHgoiqhlkWyYa6S30MydKxFoHvxnivTNgL59DEFgpVuMzv5gsxJWKiWep3kryfKpyI/dNVNtMyqZn8y9/Y1A=="],
 
     "@manypkg/find-root": ["@manypkg/find-root@3.1.0", "", { "dependencies": { "@manypkg/tools": "^2.1.0" } }, "sha512-BcSqCyKhBVZ5YkSzOiheMCV41kqAFptW6xGqYSTjkVTl9XQpr+pqHhwgGCOHQtjDCv7Is6EFyA14Sm5GVbVABA=="],
 

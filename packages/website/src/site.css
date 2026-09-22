@@ -9,7 +9,8 @@ body { margin: 0; background: #000; color: #fff; font-family: var(--font-text), 
 ::selection { background: #fff; color: #000; }
 a { color: #fff; text-decoration: none; }
 
-main { width: min(100% - 48px, 760px); margin: 0 auto; padding: var(--s5) 0 var(--s5); filter: url(#ink); will-change: filter; }
+/* The measure: 66 characters of the body type, the classic comfortable line (45–75). `ch` is the mono's advance. */
+main { width: min(100% - 48px, 66ch); font-size: clamp(14px, 2vw, 17px); margin: 0 auto; padding: var(--s5) 0 var(--s5); filter: url(#ink); will-change: filter; }
 
 /* Ink: the filter above wobbles every edge; this multiply overlay of hard specks drops ink out. */
 .ink-defs { position: absolute; }
@@ -19,7 +20,7 @@ main { width: min(100% - 48px, 760px); margin: 0 auto; padding: var(--s5) 0 var(
   background-size: 260px 260px;
 }
 .masthead { position: relative; }
-.splatter { position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 4; }
+.splatter { position: absolute; width: 54cqw; transform: translate(-50%, -50%); pointer-events: none; z-index: 4; }
 @media (prefers-reduced-motion: reduce) { main { will-change: auto; } }
 
 /* A square the mark's height, then the mark: with the mark at 4.6:1 the square is 1/5.6 of the row less the gap. */
@@ -53,6 +54,8 @@ pre { margin: 0; overflow-x: auto; color: #fff; font: clamp(14px, 2vw, 17px)/1.8
 .steps li { display: grid; grid-template-columns: 44px 1fr; counter-increment: step; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
 .steps li::before { content: "0" counter(step); opacity: .45; }
 .steps p { margin: 0; }
+/* Lines set by justice: one per span, never rewrapped by the browser. */
+.justified-line { display: block; white-space: nowrap; }
 
 .privacy-list { display: grid; margin: 0; gap: var(--s3); }
 .privacy-list dt { margin-bottom: var(--s1); font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
