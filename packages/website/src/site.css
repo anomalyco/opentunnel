@@ -9,7 +9,18 @@ body { margin: 0; background: #000; color: #fff; font-family: var(--font-text), 
 ::selection { background: #fff; color: #000; }
 a { color: #fff; text-decoration: none; }
 
-main { width: min(100% - 48px, 760px); margin: 0 auto; padding: var(--s5) 0 var(--s5); }
+main { width: min(100% - 48px, 760px); margin: 0 auto; padding: var(--s5) 0 var(--s5); filter: url(#ink); will-change: filter; }
+
+/* Ink: the filter above wobbles every edge; this multiply overlay of hard specks drops ink out. */
+.ink-defs { position: absolute; }
+.ink-grain {
+  position: fixed; inset: 0; pointer-events: none; z-index: 5; mix-blend-mode: multiply; opacity: .2;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='260'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='4'/><feColorMatrix type='saturate' values='0'/><feComponentTransfer><feFuncR type='linear' slope='4' intercept='-1.1'/><feFuncG type='linear' slope='4' intercept='-1.1'/><feFuncB type='linear' slope='4' intercept='-1.1'/></feComponentTransfer></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>");
+  background-size: 260px 260px;
+}
+.masthead { position: relative; }
+.splatter { position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 4; }
+@media (prefers-reduced-motion: reduce) { main { will-change: auto; } }
 
 /* A square the mark's height, then the mark: with the mark at 4.6:1 the square is 1/5.6 of the row less the gap. */
 .masthead { container-type: inline-size; display: grid; grid-template-columns: calc((100% - 16px) / 5.6) minmax(0, 1fr); gap: 0 16px; align-items: stretch; }
