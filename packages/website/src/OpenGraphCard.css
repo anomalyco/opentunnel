@@ -1,38 +1,16 @@
-/* The share card: a printed sheet in one ink, the red, on a fixed 1200×630 black canvas. One grid for
-   both columns: the print and the wordmark/schematic above a single hairline, the barcode and the marks
-   below it, a vertical hairline down the gutter. */
-.og-card { --ink: #ff2a2a; --ink-dim: rgba(255, 42, 42, .55); position: relative; display: grid; grid-template-columns: 360px minmax(0, 1fr); grid-template-rows: 434px 1px 83px; gap: 0 32px; align-content: start; width: 1200px; height: 630px; padding: 56px 56px 0; background: #000; color: var(--ink); font: 400 12px/1.6 var(--font-text), monospace; text-transform: lowercase; overflow: hidden; }
-
-/* The frame, its registration marks, the tick ruler along the top, the running edge text on the right. */
+/* The share card: a printed sheet in one ink, the red, on a fixed 1200×630 black canvas. */
+.og-card { --ink: #ff2a2a; --ink-dim: rgba(255, 42, 42, .55); position: relative; display: grid; grid-template-columns: 430px minmax(0, 1fr); gap: 0 40px; align-items: stretch; width: 1200px; height: 630px; padding: 100px 88px; background: #000; color: var(--ink); font: 400 14px/1.6 var(--font-text), monospace; text-transform: lowercase; overflow: hidden; }
 .og-frame { position: absolute; inset: 24px; border: 1px solid var(--ink-dim); pointer-events: none; }
 .og-reg { position: absolute; width: 14px; height: 14px; color: var(--ink); }
 .og-reg-tl { left: -7.5px; top: -7.5px; } .og-reg-tr { right: -7.5px; top: -7.5px; } .og-reg-bl { left: -7.5px; bottom: -7.5px; } .og-reg-br { right: -7.5px; bottom: -7.5px; }
-.og-ruler { position: absolute; left: 12px; right: 12px; top: 0; width: calc(100% - 24px); height: 10px; stroke: var(--ink); stroke-opacity: .5; fill: none; }
-.og-edge { position: absolute; right: 8px; top: 0; transform-origin: right top; transform: rotate(90deg) translateX(100%); white-space: nowrap; font-size: 10px; letter-spacing: .08em; color: var(--ink-dim); text-transform: uppercase; }
-.og-gutter { grid-column: 1; grid-row: 1 / 4; justify-self: end; width: 1px; margin-right: -16.5px; background: var(--ink-dim); }
-.og-rule { grid-column: 1 / 3; grid-row: 2; background: var(--ink-dim); }
-
-/* Left, above the rule: the print, framed; the caption justified to its width. */
-.og-left { grid-column: 1; grid-row: 1; display: grid; grid-template-rows: 360px 1fr; }
-.og-print { position: relative; aspect-ratio: 1; overflow: hidden; outline: 1px solid var(--ink-dim); outline-offset: 5px; }
+.og-print { position: relative; aspect-ratio: 1; overflow: hidden; }
 .og-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
-.og-caption { align-self: center; margin: 0; font-size: 15px; line-height: 1.75; text-transform: uppercase; }
+/* The wordmark, its caption justified to the same width, and the address on the baseline. */
+.og-right { display: grid; grid-template-rows: auto auto 1fr; }
+.og-wordmark { display: block; width: 100%; aspect-ratio: 4.6; color: var(--ink); font-family: var(--font-wordmark), sans-serif; text-transform: none; overflow: visible; }
+.og-caption { margin: 22px 0 0; font-size: 19px; line-height: 1.8; text-transform: uppercase; }
 .og-caption b { display: flex; align-items: center; font-weight: 400; }
 .og-caption .fill { flex: 1; margin: 0 .7em; border-bottom: 1px dotted currentColor; opacity: .6; }
 .og-caption .tail { flex: none; margin-left: .6em; position: relative; top: .5px; }
-
-/* Right, above the rule: the wordmark over its own hairline, then the schematic filling the band. */
-.og-right { grid-column: 2; grid-row: 1; display: grid; grid-template-rows: auto 1fr; gap: 16px; }
-.og-mark { padding-bottom: 16px; border-bottom: 1px solid var(--ink-dim); }
-.og-wordmark { display: block; width: 100%; aspect-ratio: 4.6; color: var(--ink); font-family: var(--font-wordmark), sans-serif; text-transform: none; overflow: visible; }
-.og-schematic { display: block; width: 100%; height: 100%; color: var(--ink); }
-.og-labels text { fill: currentColor; font: 400 11px var(--font-text), monospace; }
-.og-labels .og-small { font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
-
-/* Below the rule: the barcode that encodes the address; the ring stack, the dither ramp and the small print. */
-.og-code { grid-column: 1; grid-row: 3; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 10px; letter-spacing: .12em; }
-.og-barcode { height: 20px; width: 210px; color: var(--ink); }
-.og-marks { grid-column: 2; grid-row: 3; display: grid; grid-template-columns: 52px 216px minmax(0, 1fr); gap: 0 24px; align-items: center; }
-.og-ramp { display: block; color: var(--ink); }
-.og-spec { display: grid; grid-template-columns: max-content 1fr; gap: 0 14px; font-size: 10px; line-height: 1.6; letter-spacing: .04em; }
-.og-spec span:nth-child(odd) { color: var(--ink-dim); text-transform: uppercase; }
+.og-foot { align-self: end; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-top: 14px; border-top: 1px solid var(--ink-dim); font-size: 13px; letter-spacing: .1em; }
+.og-barcode { height: 22px; width: 240px; color: var(--ink); }
