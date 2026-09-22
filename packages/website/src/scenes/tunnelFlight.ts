@@ -9,24 +9,24 @@ export type Crossing = {
   enter: number; leave: number
   /** How the flight spends its time along the path. */
   ease: PulseEase
-  /** The measured path fractions and layout this crossing was built from, so the offline track render
+  /** The measured path fractions this crossing was built from, so the offline track render
    * (scripts/render-track.ts) can rebuild it away from the DOM. */
-  fractions: LegFractions; stacked: boolean
+  fractions: LegFractions
   /** Speed at a scene time, in path lengths per flight: 1 is the mean, the crawl inside the relay ≈ .25, the exit rush > 2. Zero when not flying. */
   speedAt: (time: number) => number
 }
 
-/** How much of the leg's path the relay occupies, as fractions; `stacked` legs (phones) have no relay stretch. */
+/** How much of the leg's path the relay occupies, as fractions. */
 export type LegFractions = { enter: number; leave: number }
 
-export function legCrossing(index: number, fractions: LegFractions, stacked: boolean): Crossing {
-  const ease = stacked ? pulseEase : viscousFlight(fractions.enter, fractions.leave, 5)
+export function legCrossing(index: number, fractions: LegFractions): Crossing {
+  const ease = viscousFlight(fractions.enter, fractions.leave, 5)
   const { send } = tunnelLegs[index]!
   const flight = tunnelTravel / 1000
   const enter = send + ease.inverse(fractions.enter) * flight, leave = send + ease.inverse(fractions.leave) * flight
   const h = 1 / 512
   return {
-    enter, leave, ease, fractions: { enter: fractions.enter, leave: fractions.leave }, stacked,
+    enter, leave, ease, fractions: { enter: fractions.enter, leave: fractions.leave },
     speedAt: time => {
       const u = (time - send) / flight
       if (u <= 0 || u >= 1) return 0

@@ -15,7 +15,7 @@ export const tunnelSoundCues = (crossings: readonly Crossing[]): readonly SceneS
     const crossing = crossings[index]
     return [
       { at: leg.send - .045, event: "dispatch" as const },
-      ...(crossing && !crossing.stacked ? [{ at: crossing.enter, event: "plunge" as const }] : []),
+      ...(crossing ? [{ at: crossing.enter, event: "plunge" as const }] : []),
       { at: leg.contact, event: `strike${index}` as SceneSoundEvent },
     ]
   }),
@@ -32,7 +32,7 @@ export function tunnelVoiceAt(elapsed: number, crossings: readonly Crossing[]) {
     if (time < leg.send || time >= leg.contact) continue
     const crossing = crossings[index]
     const speed = crossing?.speedAt(time) ?? 1
-    const depth = crossing && !crossing.stacked ? smooth((time - crossing.enter) / .12) * (1 - smooth((time - crossing.leave + .08) / .08)) : 0
+    const depth = crossing ? smooth((time - crossing.enter) / .12) * (1 - smooth((time - crossing.leave + .08) / .08)) : 0
     return flightVoice({ speed, depth })
   }
   return undefined

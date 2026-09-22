@@ -44,7 +44,7 @@ window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[
 
 async function render(fractions: LegFractions[], seed = 1979): Promise<TrackReport> {
   seedRandom(seed)
-  const crossings = fractions.map((f, index) => legCrossing(index, f, false))
+  const crossings = fractions.map((f, index) => legCrossing(index, f))
   const duration = tunnelScore.duration
   const cues = tunnelSoundCues(crossings)
   const context = new OfflineAudioContext(2, Math.round((PRE_ROLL + duration + .8) * SAMPLE_RATE), SAMPLE_RATE)

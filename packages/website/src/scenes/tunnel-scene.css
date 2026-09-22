@@ -5,17 +5,6 @@
 .tunnel-signals { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 /* Sized by the column the diagram sits in, not the viewport. */
 @container (min-width: 900px) { .tunnel-panels { grid-template-columns: 200px 230px minmax(0, 460px); justify-content: space-between; gap: 80px; } }
-/* Stacked (phones): browser over relay over the machine, whose three routes stand upright side by side with
-   their type set sideways, so the relay fans down into their tops as it fans right on a wide screen. */
-@container (max-width: 560px) {
-  .tunnel-panels { grid-template-columns: minmax(0, 1fr); gap: 48px; align-items: stretch; }
-  .tunnel-routes { grid-template-columns: repeat(3, minmax(0, 1fr)); height: 272px; padding: 14px; }
-  .tunnel-machine .node-card { writing-mode: vertical-rl; flex-wrap: nowrap; min-height: 0; padding: 16px 0; }
-  .tunnel-machine .node-card-detail { margin: 0; }
-  .tunnel-machine .node-card-label { white-space: nowrap; }
-  /* The wires arrive from above; the label goes under the box. */
-  .tunnel-machine .tunnel-machine-label { bottom: auto; top: 100%; margin: 8px 0 0; }
-}
 .tunnel-relay-field { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); display: block; pointer-events: none; }
 
 /* The blog's diagram inks, in the page's own face: plain Plex Mono, lowercase, grey structure, ivory light. */
@@ -38,3 +27,15 @@
 .tunnel-sound { position: absolute; right: 0; bottom: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: #fff; opacity: 0; font: 400 11px/16px var(--font-text), monospace; cursor: pointer; transition: opacity .2s; }
 .tunnel-scene:hover .tunnel-sound, .tunnel-sound:focus-visible { opacity: .5; }
 .tunnel-sound:focus-visible { outline: 1px solid #fff; outline-offset: 4px; }
+
+/* Phones: the same drawing, wordless. Cards shrink to their icons; the machine's name stays. */
+@container (max-width: 560px) {
+  .tunnel-panels { grid-template-columns: 52px minmax(96px, 128px) 96px; justify-content: space-between; gap: 16px; }
+  .tunnel-scene .node-card { min-height: 52px; padding: 0; justify-content: center; }
+  .tunnel-scene .node-card-label, .tunnel-scene .node-card-detail { display: none; }
+  .tunnel-scene .node-card-name { gap: 0; }
+  .tunnel-scene .node-card-icon { width: 20px; height: 20px; }
+  .tunnel-scene .node-card-icon svg { width: 20px; height: 20px; }
+  .tunnel-routes { gap: 14px; padding: 14px; }
+  .tunnel-machine .tunnel-machine-label { left: auto; right: 0; white-space: nowrap; }
+}

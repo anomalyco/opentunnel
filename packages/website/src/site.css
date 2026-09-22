@@ -4,7 +4,7 @@
    matter, s4 around a figure, s5 between sections. Every margin on the page is one of these. */
 :root { --s1: 8px; --s2: 16px; --s3: 32px; --s4: 64px; --s5: 128px; }
 * { box-sizing: border-box; }
-html { background: #000; color-scheme: dark; -webkit-font-smoothing: antialiased; }
+html { background: #000; color-scheme: dark; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { margin: 0; background: #000; color: #fff; font-family: var(--font-text), monospace; }
 ::selection { background: #fff; color: #000; }
 a { color: #fff; text-decoration: none; }
