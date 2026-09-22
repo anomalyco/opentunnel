@@ -32,7 +32,6 @@ export function createSoundActivation(context: () => AudioPort | null) {
       if (typeof navigator !== "undefined" && navigator.userActivation && !navigator.userActivation.hasBeenActive) { changed(); return }
       try { void audio.resume().then(changed, changed) } catch { changed() }
     },
-    // Read at activation time, before a gesture can change the context's state.
     needsUnlock: () => current()?.state !== "running",
   }
 }

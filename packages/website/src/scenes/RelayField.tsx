@@ -2,7 +2,8 @@ import { useEffect, useRef } from "react"
 import type { MotionValue } from "motion/react"
 import { relayFragmentSource, relayVertexSource } from "./relayFieldShader"
 
-const hex = (value: string): [number, number, number] => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16) / 255) as [number, number, number]
+/** The ivory of the traveling light. */
+const INK = [232 / 255, 228 / 255, 220 / 255]
 
 /** One dot inside the relay: which leg it belongs to, and its position across the card (0 entry wall, 1 exit wall). */
 export type RelayFront = { leg: number; x: number }
@@ -12,7 +13,7 @@ const COOLING = 6
 
 /** The relay's interior as a light field while sealed bytes pass through. `fronts` are the dots currently in flight
  * inside the card; `now` is scene time. Passes stack: each column burns from the last time a front crossed it. */
-export function RelayField({ fronts, now, ink = "#e8e4dc", className }: { fronts: MotionValue<readonly RelayFront[]>; now: MotionValue<number>; ink?: string; className?: string }) {
+export function RelayField({ fronts, now, className }: { fronts: MotionValue<readonly RelayFront[]>; now: MotionValue<number>; className?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const element = canvas.current
@@ -39,7 +40,7 @@ export function RelayField({ fronts, now, ink = "#e8e4dc", className }: { fronts
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0)
     const u = (name: string) => gl.getUniformLocation(program, name)
     const uniforms = { resolution: u("resolution"), now: u("now"), time: u("time"), frontCount: u("frontCount"), fronts: u("fronts") }
-    gl.uniform3fv(u("ink"), hex(ink))
+    gl.uniform3fv(u("ink"), INK)
     gl.clearColor(0, 0, 0, 0)
 
     // One texel per column across the card: the scene time at which a front last passed it.
@@ -87,7 +88,7 @@ export function RelayField({ fronts, now, ink = "#e8e4dc", className }: { fronts
     // Draw only while the field is alive: while a dot is inside, and until the last burn has cooled.
     const start = performance.now()
     const positions = new Float32Array(4)
-    let raf = 0, dirty = true
+    let raf = 0
     const draw = () => {
       raf = 0
       resize()
@@ -102,9 +103,8 @@ export function RelayField({ fronts, now, ink = "#e8e4dc", className }: { fronts
         gl.uniform1f(uniforms.now, t); gl.uniform1f(uniforms.time, (performance.now() - start) / 1000)
         gl.drawArrays(gl.TRIANGLES, 0, 3)
       }
-      dirty = false
     }
-    const request = () => { dirty = true; if (!raf) raf = requestAnimationFrame(draw) }
+    const request = () => { if (!raf) raf = requestAnimationFrame(draw) }
     const unsubscribe = [fronts.on("change", request), now.on("change", request)]
     const observer = new ResizeObserver(request)
     observer.observe(element)
@@ -114,8 +114,7 @@ export function RelayField({ fronts, now, ink = "#e8e4dc", className }: { fronts
       for (const stop of unsubscribe) stop()
       observer.disconnect()
       gl.deleteProgram(program); gl.deleteBuffer(quad); gl.deleteTexture(texture)
-      void dirty
     }
-  }, [fronts, now, ink])
+  }, [fronts, now])
   return <canvas ref={canvas} className={className} aria-hidden="true" />
 }

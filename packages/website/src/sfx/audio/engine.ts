@@ -5,15 +5,7 @@
  * shimmer tail) instead of a hard transient, so nothing feels harsh.
  */
 
-import {
-  RECIPES,
-  isSoundName,
-  type NoiseLayer,
-  type Shimmer,
-  type SoundName,
-  type SoundRecipe,
-  type ToneLayer,
-} from "../sounds/recipes.js";
+import type { NoiseLayer, Shimmer, SoundRecipe, ToneLayer } from "../sounds/recipes.js";
 import { smoothEnvelope } from "./envelope.js";
 
 const SOURCE_STOP_PADDING = 0.05;
@@ -162,7 +154,7 @@ export type LiveGain = {
 };
 
 export type PlayOptions = {
-  /** Linear gain on the recipe; may exceed 1 for quiet recipes. Global volume and live gain stay within 0–1. */
+  /** Linear gain on the recipe; may exceed 1 for quiet recipes. Live gain stays within 0–1. */
   volume?: number;
   gain?: LiveGain;
   /** Maximum unlock delay in milliseconds. Zero drops suspended scene cues. */
@@ -180,13 +172,7 @@ function renderRecipe(context: BaseAudioContext, recipe: SoundRecipe, volume: nu
   if (gainControl) {
     bus.gain.value = level;
     bus.connect(output);
-    unsubscribe = gainControl.subscribe(value => {
-      const next = normalizeVolume(value, 0);
-      const time = context.currentTime;
-      bus.gain.cancelAndHoldAtTime(time);
-      if (next === 0) bus.gain.setValueAtTime(0, time);
-      else bus.gain.setTargetAtTime(next, time, 0.025);
-    });
+    unsubscribe = followLiveGain(bus, gainControl);
   }
   const master = context.createGain();
   master.gain.value = recipe.masterGain * volume;
@@ -211,25 +197,29 @@ function renderRecipe(context: BaseAudioContext, recipe: SoundRecipe, volume: nu
   }, cleanupAfterMs);
 }
 
+/** A gain node's level follows a live gain: smoothly, except straight to silence. */
+export function followLiveGain(node: GainNode, gain: LiveGain, onSilent?: () => void): () => void {
+  return gain.subscribe(value => {
+    const next = normalizeVolume(value, 0);
+    const time = node.context.currentTime;
+    node.gain.cancelAndHoldAtTime(time);
+    if (next === 0) {
+      node.gain.setValueAtTime(0, time);
+      onSilent?.();
+    } else node.gain.setTargetAtTime(next, time, 0.025);
+  });
+}
+
 /**
  * Synthesizes a sound on a caller-owned context through the same output and
- * limiter chain `play` uses, starting at the context's current time. Like
- * `createTravelSound`, the caller owns the context; the enabled flag and
- * global volume are not applied. Offline rendering and measurement use this.
+ * limiter chain `play` uses, starting at the context's current time. Offline
+ * rendering and measurement use this.
  */
-export function renderSound(
-  context: BaseAudioContext,
-  sound: SoundName | SoundRecipe,
-  options?: Pick<PlayOptions, "volume" | "gain">,
-): void {
-  if (typeof sound === "string" && !isSoundName(sound)) return;
-  const recipe = typeof sound === "string" ? RECIPES[sound] : sound;
+export function renderSound(context: BaseAudioContext, recipe: SoundRecipe, options?: Pick<PlayOptions, "volume" | "gain">): void {
   renderRecipe(context, recipe, normalizeLevel(options?.volume, 1), options?.gain);
 }
 
 let sharedContext: AudioContext | null = null;
-let enabled = true;
-let globalVolume = 1;
 
 function normalizeVolume(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value)
@@ -240,16 +230,6 @@ function normalizeVolume(value: unknown, fallback: number): number {
 /** Per-play level: a linear gain on the recipe. Above 1 lifts quiet recipes; the output limiter still bounds peaks. */
 function normalizeLevel(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : fallback;
-}
-
-/** Enables or disables future playback. Preference storage stays with the app. */
-export function setEnabled(value: boolean): void {
-  if (typeof value === "boolean") enabled = value;
-}
-
-/** Sets the volume multiplier for future playback. Preference storage stays with the app. */
-export function setVolume(value: number): void {
-  globalVolume = normalizeVolume(value, globalVolume);
 }
 
 /** Shared one-shot context; callers still own gesture unlock and sustained voices. */
@@ -274,17 +254,13 @@ export function getAudioContext(): AudioContext | null {
  * started it suspended (e.g. before any user gesture), and is a no-op
  * when Web Audio is unavailable (SSR, old browsers).
  */
-export function play(sound: SoundName | SoundRecipe = "chime", options?: PlayOptions): void {
-  if (!enabled) return;
-  if (typeof sound === "string" && !isSoundName(sound)) return;
-
-  const playVolume = globalVolume * normalizeLevel(options?.volume, 1);
+export function play(recipe: SoundRecipe, options?: PlayOptions): void {
+  const playVolume = normalizeLevel(options?.volume, 1);
   if (playVolume === 0) return;
 
   const context = getAudioContext();
   if (!context) return;
 
-  const recipe = typeof sound === "string" ? RECIPES[sound] : sound;
   if (context.state === "running") {
     renderRecipe(context, recipe, playVolume, options?.gain);
   } else {
@@ -297,7 +273,7 @@ export function play(sound: SoundName | SoundRecipe = "chime", options?: PlayOpt
       void context.resume().then(
         () => {
           if (maxDelay <= 0 || performance.now() - requestedAt > maxDelay) return;
-          if (enabled && context.state === "running") renderRecipe(context, recipe, playVolume, options?.gain);
+          if (context.state === "running") renderRecipe(context, recipe, playVolume, options?.gain);
         },
         () => {},
       );

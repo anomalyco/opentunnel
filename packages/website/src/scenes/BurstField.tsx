@@ -2,15 +2,18 @@ import { useEffect, useRef } from "react"
 import type { MotionValue } from "motion/react"
 import { burstFragmentSource, burstVertexSource } from "./burstFieldShader"
 
-const hex = (value: string): [number, number, number] => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16) / 255) as [number, number, number]
+/** The ivory of the traveling light. */
+const INK = [232 / 255, 228 / 255, 220 / 255]
 
 /** A card's interior lit from one socket: the ember when light leaves it (`mode: "ember"`), the flood when
  * light lands (`mode: "strike"`). `at` are the scene seconds of each event; `clock` is the scene clock. */
-export function BurstField({ clock, at, origin, mode, duration = mode === "ember" ? 1.6 : 1.4, ink = "#e8e4dc", className }: {
-  clock: MotionValue<number>; at: readonly number[]; origin: readonly [number, number]; mode: "ember" | "strike"; duration?: number; ink?: string; className?: string
+export function BurstField({ clock, at, origin, mode, className }: {
+  clock: MotionValue<number>; at: readonly number[]; origin: readonly [number, number]; mode: "ember" | "strike"; className?: string
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const events = at.join(",")
+  // How long a burst lives, in scene seconds: the ember lingers, the strike is quicker.
+  const duration = mode === "ember" ? 1.6 : 1.4
   useEffect(() => {
     const element = canvas.current
     if (!element) return
@@ -36,7 +39,7 @@ export function BurstField({ clock, at, origin, mode, duration = mode === "ember
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0)
     const u = (name: string) => gl.getUniformLocation(program, name)
     const uniforms = { resolution: u("resolution"), age: u("age"), time: u("time") }
-    gl.uniform3fv(u("ink"), hex(ink))
+    gl.uniform3fv(u("ink"), INK)
     gl.uniform2f(u("origin"), origin[0], origin[1])
     gl.uniform1f(u("duration"), duration)
     gl.uniform1f(u("mode"), mode === "ember" ? 0 : 1)
@@ -80,6 +83,6 @@ export function BurstField({ clock, at, origin, mode, duration = mode === "ember
       observer.disconnect()
       gl.deleteProgram(program); gl.deleteBuffer(quad)
     }
-  }, [clock, events, origin[0], origin[1], mode, duration, ink])
+  }, [clock, events, origin[0], origin[1], mode])
   return <canvas ref={canvas} className={className} aria-hidden="true" />
 }

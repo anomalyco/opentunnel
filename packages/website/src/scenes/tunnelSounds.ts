@@ -1,7 +1,7 @@
-import { useEffect, useRef, type RefObject } from "react"
+import { useEffect, useMemo, useRef, type RefObject } from "react"
 import { useMotionValueEvent, type MotionValue } from "motion/react"
-import { playSceneSound, soundsBetween, useSoundProximity, useSounds, type SceneSoundCue, type SceneSoundEvent } from "../sound/sounds"
-import { bindFlightVoice } from "../sound/flightVoice"
+import { forwardWindow, playSceneSound, soundsBetween, useSoundProximity, type SceneSoundCue, type SceneSoundEvent } from "../sound/sounds"
+import { createFlightVoice } from "../sound/flightVoice"
 import { flightVoice } from "../sound/recipes"
 import { tunnelLegs, tunnelScore } from "./tunnelScore"
 import type { Crossing } from "./tunnelFlight"
@@ -23,8 +23,9 @@ export const tunnelSoundCues = (crossings: readonly Crossing[]): readonly SceneS
 
 const smooth = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t) }
 
-/** The dot's state at a scene time: speed from the leg's flight, depth ramping in over the plunge and out with the exit. */
-export function tunnelFlightAt(elapsed: number, crossings: readonly Crossing[]) {
+/** The voice at a scene time: speed from the leg's flight, depth ramping in over the plunge and out with the
+ * exit; nothing when no dot is flying. */
+export function tunnelVoiceAt(elapsed: number, crossings: readonly Crossing[]) {
   if (elapsed < 0) return undefined
   const time = elapsed % tunnelScore.duration
   for (const [index, leg] of tunnelLegs.entries()) {
@@ -32,29 +33,25 @@ export function tunnelFlightAt(elapsed: number, crossings: readonly Crossing[]) 
     const crossing = crossings[index]
     const speed = crossing?.speedAt(time) ?? 1
     const depth = crossing && !crossing.stacked ? smooth((time - crossing.enter) / .12) * (1 - smooth((time - crossing.leave + .08) / .08)) : 0
-    return { speed, depth }
+    return flightVoice({ speed, depth })
   }
   return undefined
 }
 
-export const tunnelVoiceAt = (elapsed: number, crossings: readonly Crossing[]) => {
-  const flight = tunnelFlightAt(elapsed, crossings)
-  return flight && flightVoice(flight)
-}
-
-/** `elapsed` is the scene's animated time (not the looped clock: only the animated value reports `isAnimating`). */
-export function useTunnelSounds(clock: MotionValue<number>, host: RefObject<HTMLElement | null>, active: boolean, crossings: readonly Crossing[]) {
+/** `elapsed` is the scene's animated time (not the looped clock, which is derived and never reports itself
+ * animating). Cues and the voice both fire only on continuous forward motion. */
+export function useTunnelSounds(elapsed: MotionValue<number>, host: RefObject<HTMLElement | null>, active: boolean, crossings: readonly Crossing[]) {
   const gain = useSoundProximity(host, active)
-  const enabled = useSounds()
-  useEffect(() => {
-    if (!active || !enabled) return
-    return bindFlightVoice(clock, gain, elapsed => tunnelVoiceAt(elapsed, crossings))
-  }, [clock, gain, active, enabled, crossings])
-  const previous = useRef(clock.get())
-  useMotionValueEvent(clock, "change", now => {
+  const cues = useMemo(() => tunnelSoundCues(crossings), [crossings])
+  const voice = useMemo(() => createFlightVoice(gain), [gain])
+  useEffect(() => () => voice.dispose(), [voice])
+  useEffect(() => elapsed.on("animationCancel", voice.silence), [elapsed, voice])
+  const previous = useRef(elapsed.get())
+  useMotionValueEvent(elapsed, "change", now => {
     const before = previous.current
     previous.current = now
-    if (!active || !clock.isAnimating()) return
-    for (const cue of soundsBetween(tunnelSoundCues(crossings), tunnelScore.duration, before, now)) playSceneSound(cue.event, active, gain)
+    if (!active || !elapsed.isAnimating() || now <= before || now - before > forwardWindow) { voice.silence(); return }
+    for (const cue of soundsBetween(cues, tunnelScore.duration, before, now)) playSceneSound(cue.event, gain)
+    voice.follow(tunnelVoiceAt(now, crossings))
   })
 }

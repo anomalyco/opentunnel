@@ -8,15 +8,16 @@
 // one is up at 127.0.0.1:4190; otherwise the 760px column's fractions are assumed.
 import { existsSync } from "node:fs"
 import { mkdir, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { chromium } from "playwright-core"
 import type { TrackReport } from "./track/page"
 
 const args = process.argv.slice(2)
 const option = (name: string) => args.includes(name) ? args[args.indexOf(name) + 1] : undefined
-const out = option("--out") ?? "/private/var/folders/dd/5fz89drs5p9_r0fk7rwqqnbr0000gn/T/opencode/track"
+const out = option("--out") ?? join(tmpdir(), "opentunnel-track")
 const seed = Number(option("--seed") ?? 1979)
-const fallback = { enter: .245, leave: .41 }
+const fallback = { enter: .19, leave: .73 }
 
 const bundle = await Bun.build({ entrypoints: ["scripts/track/page.ts"], target: "browser", format: "esm", minify: false, define: { "import.meta.env.DEV": "false" } })
 if (!bundle.success) throw new Error(bundle.logs.map(String).join("\n"))

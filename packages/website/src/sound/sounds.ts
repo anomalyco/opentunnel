@@ -1,8 +1,8 @@
 import { useLayoutEffect, useMemo, useSyncExternalStore, type RefObject } from "react"
 import { cancelFrame, frame, useMotionValue } from "motion/react"
-import { getAudioContext, play, type LiveGain, type SoundName, type SoundRecipe } from "../sfx"
-import { dispatch, plunge, strike, strikeRatios } from "./recipes"
-import { createSoundPreference, soundPreferenceKey, soundVolumeKey } from "./preference"
+import { getAudioContext, play, type LiveGain, type SoundRecipe } from "../sfx"
+import { dispatch, plunge, release, strike, strikeRatios } from "./recipes"
+import { createSoundPreference, soundPreferenceKey } from "./preference"
 import { createSoundActivation } from "./activation"
 import { soundProximity } from "./proximity"
 
@@ -10,9 +10,9 @@ import { soundProximity } from "./proximity"
 // sound and its level. A saved on/off preference (visitors start muted), an AudioContext unlocked by
 // a real gesture, and a gain that follows how much of the scene is in view.
 
-type Layer = { sound: SoundName | SoundRecipe; volume: number }
+type Layer = { sound: SoundRecipe; volume: number }
 export const soundPalette = {
-  select: [{ sound: "release", volume: 2.3 }],
+  select: [{ sound: release, volume: 2.3 }],
   dispatch: [{ sound: dispatch, volume: .7 }],
   plunge: [{ sound: plunge, volume: .28 }],
   strike0: [{ sound: strike(strikeRatios[0]), volume: .5 }],
@@ -24,16 +24,27 @@ export type SceneSoundCue = { at: number; event: SceneSoundEvent }
 
 const preference = createSoundPreference()
 const activation = createSoundActivation(getAudioContext)
+// For a returning visitor with sound on, the first gesture's pointerdown resumes the context; if that
+// gesture is the click on the diagram, the click must count as the unlock and not as a switch off.
+let unlocking = false, unlockingUntil: ReturnType<typeof setTimeout> | undefined
+const unlock = () => {
+  if (!preference.get()) return
+  if (activation.needsUnlock()) {
+    unlocking = true
+    clearTimeout(unlockingUntil)
+    unlockingUntil = setTimeout(() => { unlocking = false }, 600)
+  }
+  activation.unlock()
+}
+const storageChanged = (event: StorageEvent) => { if (event.key === soundPreferenceKey || event.key === null) { preference.refresh(); unlock() } }
 let subscribers = 0
-const unlock = () => { if (preference.get()) activation.unlock() }
-const storageChanged = (event: StorageEvent) => { if (event.key === soundPreferenceKey || event.key === soundVolumeKey || event.key === null) { preference.refresh(); unlock() } }
 const subscribe = (listener: () => void) => {
   const stop = preference.subscribe(listener), stopActivation = activation.subscribe(listener)
   if (subscribers++ === 0) {
     window.addEventListener("pointerdown", unlock, { capture: true, passive: true })
     window.addEventListener("keydown", unlock, true)
     window.addEventListener("storage", storageChanged)
-    preference.refresh()
+    // Where the browser allows it, a returning visitor's context runs before any gesture.
     unlock()
   }
   return () => {
@@ -50,22 +61,24 @@ export const useSoundReady = () => useSyncExternalStore(subscribe, activation.ge
 
 /** The explicit gesture: on (and unlocked, with a confirming click) or off. No earlier scene events are replayed. */
 export function toggleSounds() {
-  if (preference.get() && activation.needsUnlock()) { activation.unlock(); return }
-  const enabled = preference.toggle()
-  if (enabled) {
+  if (preference.get() && (unlocking || activation.needsUnlock())) { unlocking = false; activation.unlock(); return }
+  if (preference.toggle()) {
     activation.unlock()
-    for (const layer of soundPalette.select) play(layer.sound, { volume: layer.volume * preference.getVolume() })
+    for (const layer of soundPalette.select) play(layer.sound, { volume: layer.volume })
   }
 }
 
-export function playSceneSound(event: SceneSoundEvent, active: boolean, gain: LiveGain) {
-  if (!preference.get() || !active || document.hidden || gain.get() <= 0) return
+export function playSceneSound(event: SceneSoundEvent, gain: LiveGain) {
+  if (gain.get() <= 0) return
   for (const layer of soundPalette[event]) play(layer.sound, { volume: layer.volume, gain, maxDelay: 0 })
 }
 
+/** The longest gap between two clock readings that still counts as continuous playback, in seconds. */
+export const forwardWindow = .12
+
 /** Cues crossed going forward between two clock readings, within one loop; nothing on seeks, jumps or reverse. */
 export function soundsBetween(cues: readonly SceneSoundCue[], duration: number, before: number, now: number): SceneSoundCue[] {
-  if (now <= before || now - before > .12) return []
+  if (now <= before || now - before > forwardWindow) return []
   const result: SceneSoundCue[] = []
   for (let cycle = Math.max(0, Math.floor(before / duration)); cycle <= Math.floor(now / duration); cycle++) {
     for (const cue of cues) {
@@ -76,7 +89,7 @@ export function soundsBetween(cues: readonly SceneSoundCue[], duration: number, 
   return result
 }
 
-/** Gain from how much of the scene is in view, times the saved volume. */
+/** Gain from how much of the scene is in view: zero when sound is off, the scene inactive or the tab hidden. */
 export function useSoundProximity(host: RefObject<HTMLElement | null>, active: boolean): LiveGain {
   const enabled = useSounds()
   const proximity = useMotionValue(0)
@@ -107,12 +120,5 @@ export function useSoundProximity(host: RefObject<HTMLElement | null>, active: b
       proximity.set(0)
     }
   }, [host, active, enabled, proximity])
-  return useMemo(() => {
-    const get = () => proximity.get() * preference.getVolume()
-    return { get, subscribe: (listener: (value: number) => void) => {
-      const changed = () => listener(get())
-      const stopSource = proximity.on("change", changed), stopVolume = preference.subscribe(changed)
-      return () => { stopSource(); stopVolume() }
-    } }
-  }, [proximity])
+  return useMemo(() => ({ get: () => proximity.get(), subscribe: (listener: (value: number) => void) => proximity.on("change", listener) }), [proximity])
 }

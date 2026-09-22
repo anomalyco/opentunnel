@@ -1,9 +1,9 @@
 import { useState } from "react"
 import { TunnelScene } from "./scenes/TunnelScene"
 import { TunnelArt } from "./poster/TunnelArt"
-import { LockSimple } from "@phosphor-icons/react"
 import { Globe } from "./scenes/Globe"
 import { useTime, useTransform } from "motion/react"
+import { Caption, Wordmark } from "./wordmark"
 
 const github = "https://github.com/anomalyco/opentunnel"
 
@@ -25,23 +25,13 @@ function Install() {
   </div>
 }
 
-/** The wordmark: Anton, its glyphs stretched to a 4.6:1 box (`textLength` + `preserveAspectRatio="none"`). */
-const WORDMARK = "OPENTUNNEL", WIDTH = 1000, ASPECT = 4.6, CAP = .867
-
-/** The print in a square the mark's height, the mark beside it, and under the square the caption: two lines
- * justified to its width, word · dotted leader · word · a small icon (a turning globe, a lock). */
+/** The print in a square the mark's height, the mark beside it, and under the square the caption. */
 function Masthead() {
   const seconds = useTransform(useTime(), ms => ms / 1000)
-  const height = WIDTH / ASPECT
   return <div className="masthead">
     <div className="masthead-print" role="img" aria-label="A tunnel"><TunnelArt className="masthead-canvas" /></div>
-    <svg className="wordmark" viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
-      <text x={0} y={height} textLength={WIDTH} lengthAdjust="spacingAndGlyphs" fontSize={height / CAP} fill="currentColor">{WORDMARK}</text>
-    </svg>
-    <h1>
-      <b><span>public</span><i className="fill" /><span>urls</span><Globe clock={seconds} size={11} className="tail" /></b>
-      <b><span>for</span><i className="fill" /><span>anything</span><LockSimple size={11} className="tail" /></b>
-    </h1>
+    <Wordmark className="wordmark" />
+    <h1><Caption globe={<Globe clock={seconds} size={11} className="tail" />} /></h1>
   </div>
 }
 

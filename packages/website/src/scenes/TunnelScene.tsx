@@ -10,10 +10,10 @@ import { tunnelLegs, tunnelRoutes, tunnelScore, tunnelTravel } from "./tunnelSco
 import { RelayField, type RelayFront } from "./RelayField"
 import { useTunnelSounds } from "./tunnelSounds"
 import { toggleSounds, useSoundReady, useSounds } from "../sound/sounds"
-import { SpeakerHigh, SpeakerSlash } from "@phosphor-icons/react"
 import { BurstField } from "./BurstField"
 import { Globe } from "./Globe"
-import { ArrowsLeftRight, Stack, Terminal, WebhooksLogo } from "@phosphor-icons/react"
+import { legCrossing, type Crossing } from "./tunnelFlight"
+import { ArrowsLeftRight, SpeakerHigh, SpeakerSlash, Stack, Terminal, WebhooksLogo } from "@phosphor-icons/react"
 import "./tunnel-scene.css"
 
 // browser ──▶ relay ──▶ opencode
@@ -28,9 +28,6 @@ import "./tunnel-scene.css"
 
 type Box = { x: number; y: number; width: number; height: number }
 type Bounds = { width: number; height: number; browser: Box; relay: Box; machine: Box; routes: Box[] }
-/** Scene seconds at which each leg's pulse enters the relay, leaves it, and is read (its midpoint). */
-import { legCrossing, legEase, type Crossing } from "./tunnelFlight"
-export type { Crossing }
 
 /** The frame's 1px border, traced along its centre. */
 const outlineOf = (box: Box) => `M${box.x + .5} ${box.y + .5}h${box.width - 1}v${box.height - 1}h${1 - box.width}Z`
@@ -122,15 +119,15 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
       if (Math.abs(input.y - relayOut.y) < 1) return `H${input.x}`
       return `C${spine} ${relayOut.y} ${spine} ${input.y} ${input.x} ${input.y}`
     }
-    const legs = routes.map(box => {
+    const legs = routes.map((box, index) => {
       const d = through + hop(box)
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
       path.setAttribute("d", d)
       const length = path.getTotalLength()
       const enter = stacked ? 0 : fractionAtX(path, length, relay.x), leave = stacked ? 0 : fractionAtX(path, length, relay.x + relay.width)
-      // Through the relay the bytes move as through something thick: that stretch takes four times its share.
-      const ease = legEase({ enter, leave }, stacked)
-      return { d, path, length, enter, leave, ease }
+      // Through the relay the bytes move as through something thick: the crossing knows when, and how fast.
+      const crossing = legCrossing(index, { enter, leave }, stacked)
+      return { d, path, length, ease: crossing.ease, crossing }
     })
     return { stacked, browserOut, relayIn, relayOut, routeIn, legs, wires: { request: `M${browserOut.x} ${browserOut.y}L${relayIn.x} ${relayIn.y}`, hops: routes.map(box => `M${relayOut.x} ${relayOut.y}${hop(box)}`) } }
   }, [bounds])
@@ -152,7 +149,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
     fronts.set(active)
   })
 
-  const crossings = useMemo(() => geometry ? geometry.legs.map((leg, index) => legCrossing(index, leg, geometry.stacked)) : [], [geometry])
+  const crossings = useMemo(() => geometry ? geometry.legs.map(leg => leg.crossing) : [], [geometry])
   useEffect(() => { if (geometry) onCrossings(crossings) }, [geometry, crossings, onCrossings])
   if (!bounds || !geometry) return null
 
@@ -202,7 +199,7 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
       </g>)}
     </>}>
       {!reduced && <g mask={`url(#${id}-relay-cutout)`}>
-        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} trail={{ cooling: 300, segments: 256 }} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
+        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
       </g>}
     </GraphSignals>
   </svg>
@@ -213,23 +210,24 @@ export function TunnelScene() {
   const panels = useRef<HTMLDivElement>(null)
   const [crossings, setCrossings] = useState<Crossing[]>([])
   const fronts = useMotionValue<readonly RelayFront[]>([]), now = useMotionValue(0)
-  // Development: headless checks pose the scene through `window.__tunnel.seek(seconds)`.
+  // Development: headless checks pose the scene through `window.__tunnel.seek(seconds)`; the offline track
+  // render reads the measured crossings.
   useEffect(() => {
     if (!import.meta.env.DEV) return
-    ;(window as unknown as { __tunnel?: unknown }).__tunnel = { seek: player.seek, crossings, legs: tunnelLegs, duration: tunnelScore.duration, stacked: crossings[0]?.stacked }
+    ;(window as unknown as { __tunnel?: unknown }).__tunnel = { seek: player.seek, crossings }
   }, [player.seek, crossings])
   // Sound: a click on the diagram turns it on (visitors start muted); the track follows the same clock as the picture.
   const sounds = useSounds(), ready = useSoundReady()
   useTunnelSounds(player.elapsed, player.host, player.active && !player.reduced, crossings)
   const sounding = sounds && ready
-  return <figure ref={player.host} className="tunnel-scene" data-sound={sounding || undefined} aria-label="A visitor's browser sends encrypted traffic through the relay, which scans it without being able to read it, to one of three apps on your machine. Only your machine decrypts it.">
+  return <figure ref={player.host} className="tunnel-scene" aria-label="A visitor's browser sends encrypted traffic through the relay, which scans it without being able to read it, to one of three apps on your machine. Only your machine decrypts it.">
     <button type="button" className="tunnel-sound" onClick={toggleSounds} aria-pressed={sounding} aria-label={sounding ? "Turn the diagram's sound off" : "Turn the diagram's sound on"}>
       {sounding ? <SpeakerHigh size={13} /> : <SpeakerSlash size={13} />}<span>{sounding ? "sound on" : "sound off"}</span>
     </button>
     <div ref={panels} className="tunnel-panels" onClick={event => { if (!(event.target as HTMLElement).closest("a, button")) toggleSounds() }}>
       <div className="tunnel-column tunnel-visitor"><Browser clock={player.clock} reduced={player.reduced} /></div>
       <div className="tunnel-column tunnel-relay"><Relay clock={player.clock} reduced={player.reduced} crossings={crossings} fronts={fronts} now={now} /></div>
-      <DiagramFrame as="section" className="tunnel-machine" data-machine="" aria-label="Your machine">
+      <DiagramFrame className="tunnel-machine" data-machine="" aria-label="Your machine">
         <span className="tunnel-machine-label" aria-hidden="true"><span>your machine</span></span>
         <div className="tunnel-routes">
           {tunnelRoutes.map((route, index) => <Route key={route.id} index={index} clock={player.clock} reduced={player.reduced} />)}

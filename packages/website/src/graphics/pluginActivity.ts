@@ -26,15 +26,15 @@ export const pluginActivity = {
 const arrival = spring({ keyframes: [0, 1], visualDuration: .3, bounce: 0 })
 const ease = (age: number) => age <= 0 ? 0 : age >= 1.5 ? 1 : arrival.next(age * 1000).value
 
-export const pluginFlash = (time: number, at: number) => time < at ? 0 : Math.max(0, 1 - (time - at) / pluginActivity.flash.duration) ** 2
-export const pluginFrame = (time: number, at: number) => {
+const pluginFlash = (time: number, at: number) => time < at ? 0 : Math.max(0, 1 - (time - at) / pluginActivity.flash.duration) ** 2
+const pluginFrame = (time: number, at: number) => {
   const age = time - at, { rise, decay } = pluginActivity.frame
   return age < 0 ? 0 : age < rise ? Math.sin(age / rise * Math.PI / 2) : Math.max(0, 1 - (age - rise) / decay) ** 2
 }
 /** Sustained work between `from` and `until`, eased on and off with the shared arrival spring. */
-export const pluginRunning = (time: number, from: number, until: number) => ease(time - from) * (1 - ease(time - until))
+const pluginRunning = (time: number, from: number, until: number) => ease(time - from) * (1 - ease(time - until))
 
-export type PluginActivity = {
+type PluginActivity = {
   /** Scene times at which this plugin's pulses start (gathering). */
   dispatches: readonly number[]
   /** Intervals of sustained work. */
@@ -52,7 +52,7 @@ export function pluginActivityAt(time: number, { dispatches, running = [], reduc
   return { flash, frame, outer, running: active }
 }
 
-export function pluginInks(time: number, activity: PluginActivity) {
+function pluginInks(time: number, activity: PluginActivity) {
   const { flash, frame, outer, running } = pluginActivityAt(time, activity)
   const { flash: name, frame: rules, icon } = pluginActivity
   return {
@@ -63,11 +63,12 @@ export function pluginInks(time: number, activity: PluginActivity) {
   }
 }
 
-/** Live PluginFile inks from a scene clock. */
+/** Live PluginFile inks from a scene clock: one sample per tick, split four ways. */
 export function usePluginActivity(clock: MotionValue<number>, activity: PluginActivity) {
-  const color = useTransform(clock, time => pluginInks(time, activity).color)
-  const iconColor = useTransform(clock, time => pluginInks(time, activity).iconColor)
-  const insetColor = useTransform(clock, time => pluginInks(time, activity).insetColor)
-  const frameColor = useTransform(clock, time => pluginInks(time, activity).frameColor)
+  const inks = useTransform(clock, time => pluginInks(time, activity))
+  const color = useTransform(inks, ink => ink.color)
+  const iconColor = useTransform(inks, ink => ink.iconColor)
+  const insetColor = useTransform(inks, ink => ink.insetColor)
+  const frameColor = useTransform(inks, ink => ink.frameColor)
   return { color, iconColor, insetColor, frameColor }
 }

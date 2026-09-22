@@ -6,6 +6,12 @@ import { travelSoundDefaults, type SoundRecipe, type TravelSoundSettings } from 
 export const centre = travelSoundDefaults.pitch
 const sine = "sine" as const
 
+/** The switch: a key released, confirming sound just turned on. */
+export const release: SoundRecipe = { masterGain: .4, layers: [
+  { kind: "noise", filterType: "bandpass", filterFrequency: 4600, filterQ: 1.8, attack: .001, decay: .016, peak: .12 },
+  { kind: "tone", waveform: sine, frequency: 3200, offset: .006, attack: .001, decay: .05, peak: .02 },
+] }
+
 /** The browser lets go: a low knock, then the note released upward as the light leaves the socket. */
 export const dispatch: SoundRecipe = { masterGain: .4, layers: [
   { kind: "tone", waveform: sine, frequency: centre * .5, attack: .004, decay: .035, peak: .03 },
@@ -35,7 +41,7 @@ export const strike = (ratio: number): SoundRecipe => {
 export const strikeRatios = [1, 1.25, 1.5] as const
 
 /** What the flight voice hears of the dot: how fast it moves (1 is the mean over the flight) and how deep in the relay it is. */
-export type FlightState = { speed: number; depth: number }
+type FlightState = { speed: number; depth: number }
 const clamp = (x: number) => Math.max(0, Math.min(1, x))
 
 /** The voice at one instant: speed lifts pitch, brightness and air (the rush out of the relay); depth muffles it and brings up a low hum.

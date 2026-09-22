@@ -2,12 +2,13 @@ import { useEffect, useRef } from "react"
 import { fragmentSource, vertexSource } from "./tunnelShader"
 import { posterSettings, type PosterSettings } from "./posterSettings"
 
-const hex = (value: string): [number, number, number] => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16) / 255) as [number, number, number]
+/** Two inks: black on the print's red paper. */
+const INK = [0, 0, 0], PAPER = [1, 42 / 255, 42 / 255]
 
-const scalarUniforms = ["depth", "ringFrequency", "ringSpeed", "wallInk", "bandInk", "distanceInk", "eyeGlow", "sphereRadius", "sphereHalo", "seaLevel", "seaInk"] as const satisfies readonly (keyof PosterSettings)[]
+const scalarUniforms = ["depth", "ringFrequency", "ringSpeed", "wallInk", "bandInk", "eyeGlow", "seaLevel", "seaInk"] as const satisfies readonly (keyof PosterSettings)[]
 
 /** The print: a WebGL tunnel dithered to two inks. Pauses offscreen and in hidden tabs; reduced motion prints one still frame. */
-export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", className }: { ink?: string; paper?: string; className?: string }) {
+export function TunnelArt({ className }: { className?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -35,10 +36,10 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", className }: { i
     gl.enableVertexAttribArray(position)
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0)
     const location = (name: string) => gl.getUniformLocation(program, name)
-    const uniforms = { resolution: location("resolution"), time: location("time"), cell: location("cell"), eye: location("eye"), sphereCenter: location("sphereCenter") }
+    const uniforms = { resolution: location("resolution"), time: location("time"), cell: location("cell"), eye: location("eye") }
     const scalars = Object.fromEntries(scalarUniforms.map(name => [name, location(name)])) as Record<typeof scalarUniforms[number], WebGLUniformLocation | null>
-    gl.uniform3fv(location("ink"), hex(ink))
-    gl.uniform3fv(location("paper"), hex(paper))
+    gl.uniform3fv(location("ink"), INK)
+    gl.uniform3fv(location("paper"), PAPER)
     const warp = location("warpAmount"), streak = location("streakAmount")
 
     // Dither cells are CSS pixels: render at the display's density, capped for battery.
@@ -57,7 +58,6 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", className }: { i
     const settings = posterSettings
     gl.uniform1f(uniforms.cell, settings.cell * scale)
     gl.uniform2f(uniforms.eye, settings.eyeX, settings.eyeY)
-    gl.uniform2f(uniforms.sphereCenter, settings.sphereX, settings.sphereY)
     gl.uniform1f(warp, settings.warp); gl.uniform1f(streak, settings.streak)
     for (const name of scalarUniforms) gl.uniform1f(scalars[name], settings[name])
     const media = matchMedia("(prefers-reduced-motion: reduce)")
@@ -90,7 +90,7 @@ export function TunnelArt({ ink = "#000000", paper = "#ff2a2a", className }: { i
       document.removeEventListener("visibilitychange", visibility); media.removeEventListener("change", run)
       gl.deleteProgram(program); gl.deleteBuffer(quad)
     }
-  }, [ink, paper])
+  }, [])
 
   return <canvas ref={canvas} className={className} aria-hidden="true" />
 }

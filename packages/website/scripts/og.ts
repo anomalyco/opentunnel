@@ -2,6 +2,7 @@
 // after changing the card; the render is deterministic (reduced motion prints one fixed frame), so the file
 // only changes when the card does. A private dev server on a free port renders the card; Chromium draws the
 // WebGL print through SwiftShader.
+import { existsSync } from "node:fs"
 import { mkdir } from "node:fs/promises"
 import { join, resolve } from "node:path"
 import { chromium } from "playwright-core"
@@ -15,7 +16,10 @@ const address = server.httpServer?.address()
 if (!address || typeof address === "string") throw new Error("The dev server did not report a port")
 const origin = `http://127.0.0.1:${address.port}`
 
-const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE, args: ["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"] })
+// playwright-core ships no browser: use Playwright's installed Chromium, a system Chrome, or BROWSER_EXECUTABLE.
+const executablePath = process.env.BROWSER_EXECUTABLE ?? [chromium.executablePath(), "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"].find(existsSync)
+if (!executablePath) throw new Error("No Chromium found: run `bunx playwright-core install chromium` or set BROWSER_EXECUTABLE")
+const browser = await chromium.launch({ headless: true, executablePath, args: ["--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"] })
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1, reducedMotion: "reduce" })
   page.on("pageerror", error => { throw error })
