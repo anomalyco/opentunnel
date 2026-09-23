@@ -10,6 +10,7 @@ import type {
   OpenTunnelProfileOptions,
   OpenTunnelProvisionStage,
   OpenTunnelRoute,
+  OpenTunnelStatus,
   OpenTunnelStoredTunnel,
 } from "../effect/types.js";
 import { toEffectStorage, type OpenTunnelStorage } from "./storage.js";
@@ -43,6 +44,7 @@ export interface OpenTunnelPromiseClient {
   readonly tunnel: {
     readonly list: () => Promise<ReadonlyArray<OpenTunnelStoredTunnel>>;
     readonly get: (options?: OpenTunnelProfileOptions) => Promise<OpenTunnelIdentity | undefined>;
+    readonly status: (options?: OpenTunnelProfileOptions) => Promise<OpenTunnelStatus | undefined>;
     readonly pending: (
       options?: OpenTunnelProfileOptions,
     ) => Promise<Pick<OpenTunnelPendingIdentity, "id" | "hostname"> | undefined>;
@@ -88,6 +90,7 @@ export function create(options: OpenTunnelClientOptions = {}): OpenTunnelPromise
     tunnel: {
       list: () => withClient((client) => client.tunnel.list()),
       get: (input) => withClient((client) => client.tunnel.get(input)),
+      status: (input) => withClient((client) => client.tunnel.status(input)),
       pending: (input) => withClient((client) => client.tunnel.pending(input)),
       resume: (input) => withClient((client) => client.tunnel.resume(input)),
       create: (input) => withClient((client) => client.tunnel.create(input)),

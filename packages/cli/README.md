@@ -13,6 +13,7 @@ opentunnel info
 opentunnel route add api 127.0.0.1:3000
 opentunnel route add admin 127.0.0.1:4000
 opentunnel route list
+opentunnel status
 opentunnel serve
 opentunnel service status
 opentunnel service restart
@@ -34,6 +35,8 @@ Each profile owns one tunnel identity and set of subdomain-to-process routes.
 `opentunnel info` reads the selected profile's existing local identity and shows
 its tunnel ID, hostname and URL, certificate expiry, and configured route count.
 It does not create a tunnel when the profile has no identity.
+`opentunnel status` shows every locally stored profile with its hostname, local
+service state, remote tunnel state, and configured route count.
 Path routing is intentionally not supported. Every command ensures a background
 service is running for the selected profile. Configuration changes signal that
 process to reload and reconnect. `opentunnel serve` is a blocking command that

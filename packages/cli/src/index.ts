@@ -12,6 +12,7 @@ import {
   serviceStatus,
   stopService,
 } from "./service.js";
+import { formatStatus, type StatusRow } from "./status.js";
 
 const root = Command.make("opentunnel").pipe(
   Command.withDescription("Create and manage blind TLS tunnels"),
@@ -190,6 +191,44 @@ const service = Command.make("service").pipe(
   Command.withSubcommands([serviceStatusCommand, serviceStart, serviceStop, serviceRestart]),
 );
 
+const status = Command.make(
+  "status",
+  {},
+  Effect.fn(function* () {
+    const client = yield* OpenTunnelClient;
+    const profiles = yield* client.profile.list();
+    const rows = yield* Effect.forEach(
+      profiles,
+      (profile) => Effect.gen(function* () {
+        const tunnel = yield* client.tunnel.get({ profile });
+        const pending = tunnel ? undefined : yield* client.tunnel.pending({ profile });
+        const config = yield* loadOpenTunnelConfig(profile);
+        const running = yield* serviceStatus(profile);
+        const state = yield* client.tunnel.status({ profile }).pipe(
+          Effect.catch(() => Effect.succeed("unreachable" as const)),
+        );
+        return {
+          profile,
+          hostname: tunnel?.hostname ?? pending?.hostname ?? "—",
+          service: running ? "running" : "stopped",
+          tunnel: state ?? "error",
+          routes: Object.keys(config.routes).length,
+        } satisfies StatusRow;
+      }).pipe(
+        Effect.catch(() => Effect.succeed({
+          profile,
+          hostname: "—",
+          service: "stopped",
+          tunnel: "error",
+          routes: "—",
+        } satisfies StatusRow)),
+      ),
+      { concurrency: 4 },
+    );
+    yield* Console.log(formatStatus(rows));
+  }),
+).pipe(Command.withDescription("Show all local tunnel profiles and their status"));
+
 const routeAdd = Command.make(
   "add",
   {
@@ -250,7 +289,7 @@ const route = Command.make("route").pipe(
   Command.withSubcommands([routeAdd, routeRemove, routeList]),
 );
 
-export const cli = root.pipe(Command.withSubcommands([create, serve, service, info, route]));
+export const cli = root.pipe(Command.withSubcommands([create, serve, service, status, info, route]));
 
 Command.run(cli, { version: "0.0.0" }).pipe(
   Effect.provide(OpenTunnelClient.layer()),

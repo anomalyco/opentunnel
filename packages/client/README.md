@@ -43,6 +43,7 @@ interface Client {
   }
   readonly tunnel: {
     get(options?: ProfileOptions): Promise<TunnelIdentity | undefined>
+    status(options?: ProfileOptions): Promise<"online" | "offline" | "pending" | undefined>
     ensure(options?: ProfileOptions): Promise<TunnelIdentity>
     remove(options?: ProfileOptions): Promise<void>
     connect(options?: ConnectOptions): Promise<Connection>
