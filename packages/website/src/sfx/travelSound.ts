@@ -1,3 +1,4 @@
+import { holdAt } from "./audio/engine"
 /** Sustained counterpart to the brief whisper recipe. */
 export const travelSoundDefaults = { volume: 1.702, fadeIn: .22, fadeOut: .32, pitch: 330, cutoff: 1000, air: .25, tone: .1, triangle: 0, overtone: 0, resonance: 0 }
 export type TravelSoundSettings = typeof travelSoundDefaults
@@ -78,7 +79,7 @@ export function createTravelSound(context: BaseAudioContext, destination: AudioN
       const from = travelFadeAt(fade, now)
       fade = { from, to, at: now, duration: Math.max(.01, active ? settings.fadeIn : settings.fadeOut) }
       const curve = Float32Array.from({ length: 65 }, (_, i) => travelFadeAt(fade, now + fade.duration * i / 64))
-      voice.envelope.gain.cancelAndHoldAtTime(now)
+      holdAt(voice.envelope.gain, now)
       voice.envelope.gain.setValueAtTime(from, now)
       voice.envelope.gain.setValueCurveAtTime(curve, now, fade.duration)
       if (!active) cleanup = setTimeout(silence, fade.duration * 1000 + 30)

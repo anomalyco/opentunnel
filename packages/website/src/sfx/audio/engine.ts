@@ -197,12 +197,20 @@ function renderRecipe(context: BaseAudioContext, recipe: SoundRecipe, volume: nu
   }, cleanupAfterMs);
 }
 
+/** Freezes a param's automation at its current value. Firefox has no `cancelAndHoldAtTime`; there, cancel and pin the value. */
+export function holdAt(param: AudioParam, time: number): void {
+  if (typeof param.cancelAndHoldAtTime === "function") { param.cancelAndHoldAtTime(time); return; }
+  const value = param.value;
+  param.cancelScheduledValues(time);
+  param.setValueAtTime(value, time);
+}
+
 /** A gain node's level follows a live gain: smoothly, except straight to silence. */
 export function followLiveGain(node: GainNode, gain: LiveGain, onSilent?: () => void): () => void {
   return gain.subscribe(value => {
     const next = normalizeVolume(value, 0);
     const time = node.context.currentTime;
-    node.gain.cancelAndHoldAtTime(time);
+    holdAt(node.gain, time);
     if (next === 0) {
       node.gain.setValueAtTime(0, time);
       onSilent?.();
