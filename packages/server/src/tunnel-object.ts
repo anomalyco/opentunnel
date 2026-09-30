@@ -14,6 +14,7 @@ interface BridgeAttachment {
   readonly attached: boolean;
   readonly session?: string;
   readonly routes?: ReadonlyArray<string>;
+  readonly lastSeen?: number;
 }
 
 interface Channel {
@@ -75,6 +76,34 @@ const validRoute = (route: string): boolean =>
 export class TunnelObject extends DurableObject<Cloudflare.Env> {
   private readonly channels = new Map<number, Channel>();
   private sequence = 1;
+
+  private touchBridge(socket: WebSocket, attachment: BridgeAttachment): void {
+    const now = Date.now();
+    // Checkpoint activity at most once per heartbeat, not once per data frame.
+    if (attachment.lastSeen === undefined || now - attachment.lastSeen >= BridgeProtocol.BridgeTiming.HEARTBEAT_MS) {
+      socket.serializeAttachment({ ...attachment, lastSeen: now } satisfies BridgeAttachment);
+    }
+  }
+
+  private liveBridge(socket: WebSocket): boolean {
+    const attachment = socket.deserializeAttachment() as BridgeAttachment | null;
+    if (attachment?.kind !== "bridge" || !attachment.attached) return false;
+    if (socket.readyState === WebSocket.OPEN) {
+      if (attachment.lastSeen === undefined) {
+        // Persist one bounded grace period for attachments created before leases existed.
+        socket.serializeAttachment({ ...attachment, lastSeen: Date.now() } satisfies BridgeAttachment);
+        return true;
+      }
+      if (Date.now() - attachment.lastSeen < BridgeProtocol.BridgeTiming.IDLE_TIMEOUT_MS) return true;
+    }
+    // Release routes before the close handshake, which may never complete.
+    socket.serializeAttachment({ ...attachment, attached: false } satisfies BridgeAttachment);
+    for (const channel of this.channels.values()) {
+      if (channel.bridge === socket) channel.finish(new Error("Bridge lease expired"));
+    }
+    if (socket.readyState === WebSocket.OPEN) socket.close(1001, "idle timeout");
+    return false;
+  }
 
   private async record(): Promise<StoredTunnel | undefined> {
     return this.ctx.storage.get<StoredTunnel>("tunnel");
@@ -265,6 +294,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       if (!attachment.attached) return socket.close(1008, "attach required");
       const frame = BridgeProtocol.parseDataFrame(new Uint8Array(message));
       if (!frame) return;
+      this.touchBridge(socket, attachment);
       const channel = this.channels.get(frame.conn);
       if (channel?.bridge === socket) await channel.writer.write(frame.payload);
       return;
@@ -295,9 +325,9 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         return socket.close(1008, "invalid route");
       }
       const conflict = this.ctx.getWebSockets("bridge").some((candidate) => {
-        if (candidate === socket || candidate.readyState !== WebSocket.OPEN) return false;
+        if (candidate === socket) return false;
         const existing = candidate.deserializeAttachment() as BridgeAttachment | null;
-        return existing?.attached && existing.routes?.some((route) => requestedRoutes.includes(route));
+        return existing?.routes?.some((route) => requestedRoutes.includes(route)) && this.liveBridge(candidate);
       });
       if (conflict) {
         socket.send(JSON.stringify({ type: "attach_error", code: "route_conflict" }));
@@ -310,6 +340,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         attached: true,
         session,
         routes: requestedRoutes,
+        lastSeen: Date.now(),
       } satisfies BridgeAttachment);
       await this.save({ ...record, state: "online" });
       socket.send(
@@ -325,10 +356,12 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
     }
 
     if (control.type === "ping" && typeof control.time_sent === "number") {
+      this.touchBridge(socket, attachment);
       socket.send(JSON.stringify({ type: "pong", time_sent: control.time_sent }));
       return;
     }
     if ((control.type === "end" || control.type === "reset") && typeof control.conn === "number") {
+      this.touchBridge(socket, attachment);
       const channel = this.channels.get(control.conn);
       if (channel?.bridge === socket) {
         channel.finish(
@@ -388,7 +421,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       .getWebSockets("bridge")
       .find((candidate) => {
         const attached = candidate.deserializeAttachment() as BridgeAttachment | null;
-        return attached?.attached && route !== undefined && attached.routes?.includes(route);
+        return route !== undefined && attached?.routes?.includes(route) && this.liveBridge(candidate);
       });
     console.log("Routing TCP connection", {
       tunnel: record?.id,
@@ -424,6 +457,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       reject = fail;
     });
     let finished = false;
+    let aborted = false;
     const channel: Channel = {
       bridge,
       writer,
@@ -433,6 +467,8 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         finished = true;
         this.channels.delete(conn);
         if (error) {
+          aborted = true;
+          void reader.cancel(error).catch(() => undefined);
           void writer.abort(error).catch(() => undefined);
           reject(error);
         } else {
@@ -443,30 +479,40 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
     };
     this.channels.set(conn, channel);
 
-    bridge.send(
-      JSON.stringify({
-        type: "open",
-        conn,
-        peer: info.remoteAddress ?? "unknown",
-        sni,
-        alpn,
-      }),
-    );
-    for (const chunk of initial) {
-      bridge.send(BridgeProtocol.buildDataFrame(conn, chunk));
-    }
-
     const upload = async () => {
       try {
+        if (bridge.readyState !== WebSocket.OPEN) throw new Error("Bridge disconnected");
+        bridge.send(JSON.stringify({
+          type: "open",
+          conn,
+          peer: info.remoteAddress ?? "unknown",
+          sni,
+          alpn,
+        }));
+        for (const chunk of initial) {
+          if (bridge.bufferedAmount + chunk.byteLength + BridgeProtocol.DataFrame.CONN_ID_SIZE > 16 * 1024 * 1024) {
+            throw new Error("Bridge backpressure limit");
+          }
+          bridge.send(BridgeProtocol.buildDataFrame(conn, chunk));
+        }
         while (true) {
           const item = await reader.read();
+          if (aborted) return;
           if (item.done) break;
-          if (bridge.bufferedAmount > 16 * 1024 * 1024) throw new Error("Bridge backpressure limit");
+          if (bridge.readyState !== WebSocket.OPEN) throw new Error("Bridge disconnected");
+          if (bridge.bufferedAmount + item.value.byteLength + BridgeProtocol.DataFrame.CONN_ID_SIZE > 16 * 1024 * 1024) {
+            throw new Error("Bridge backpressure limit");
+          }
           bridge.send(BridgeProtocol.buildDataFrame(conn, item.value));
         }
-        bridge.send(JSON.stringify({ type: "end", conn }));
+        if (bridge.readyState === WebSocket.OPEN) bridge.send(JSON.stringify({ type: "end", conn }));
+        else channel.finish(new Error("Bridge disconnected"));
       } catch (error) {
-        bridge.send(JSON.stringify({ type: "reset", conn, code: "client_io_error" }));
+        if (!aborted && bridge.readyState === WebSocket.OPEN) {
+          try {
+            bridge.send(JSON.stringify({ type: "reset", conn, code: "client_io_error" }));
+          } catch {}
+        }
         channel.finish(error);
       } finally {
         reader.releaseLock();
