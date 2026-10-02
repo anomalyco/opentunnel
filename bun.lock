@@ -17,6 +17,7 @@
       "devDependencies": {
         "@effect/platform-node": "catalog:",
         "@opentunnel/client": "workspace:*",
+        "@opentunnel/protocol": "workspace:*",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
