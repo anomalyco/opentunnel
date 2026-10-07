@@ -73,3 +73,10 @@ pre { margin: 0; overflow-x: auto; color: #fff; font: clamp(14px, 2vw, 17px)/1.8
   /* The caption spans the whole row under the lockup, still justified, at a size that reads. */
   h1 { grid-column: 1 / -1; font-size: 11px; }
 }
+
+/* The Anomaly copyright, as on the opencode console: the signature sits faintly behind the line, both centred. */
+.site-footer { display: flex; justify-content: center; padding: 0 0 var(--s4); }
+.copyright { position: relative; color: #909090; font: 400 13px/24px var(--font-text), monospace; }
+.copyright img { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.copyright p { position: relative; margin: 0; }
+.copyright a { color: inherit; text-decoration: underline rgba(255, 255, 255, .2); text-underline-offset: 2px; }

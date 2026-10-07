@@ -7,6 +7,7 @@ import { Caption, Wordmark } from "./wordmark"
 import { Justified } from "./Justified"
 import { Ink } from "./Ink"
 import { Splatter } from "./Splatter"
+import signature from "./footer-signature.svg"
 
 const github = "https://github.com/anomalyco/opentunnel"
 
@@ -108,5 +109,11 @@ console.log(\`https://opencode.\${connection.tunnel.hostname}\`)
         </dl>
       </section>
     </main>
+    <footer className="site-footer">
+      <div className="copyright">
+        <img src={signature} alt="" aria-hidden="true" width={163} height={64} />
+        <p>©2026 <a href="https://anoma.ly">anomaly</a>. all rights reserved</p>
+      </div>
+    </footer>
   </div>
 }
