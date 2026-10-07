@@ -1,6 +1,6 @@
 {
   "name": "opentunnel",
-  "version": "0.0.30",
+  "version": "0.1.0",
   "private": true,
   "description": "Blind TLS tunnels: expose local services without the relay seeing plaintext",
   "license": "MIT",
