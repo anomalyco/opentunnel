@@ -1,3 +1,4 @@
+import "reflect-metadata";
 import { concatBytes, parseClientHello } from "./tls-client-hello.js";
 import { env, waitUntil } from "cloudflare:workers";
 import { base64Url } from "./crypto.js";

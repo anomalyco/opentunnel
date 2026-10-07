@@ -1,7 +1,7 @@
 node_modules
 .env.local
 *.tsbuildinfo
-.wrangler
 .cloudflare
 .dev.vars
 target
+dist

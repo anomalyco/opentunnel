@@ -1,4 +1,3 @@
-import "reflect-metadata";
 import { DurableObject, env } from "cloudflare:workers";
 import { Pkcs10CertificateRequest, SubjectAlternativeNameExtension } from "@peculiar/x509";
 import { BridgeProtocol } from "@opentunnel/protocol/bridge-protocol";

@@ -4,10 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "cf dev",
-    "build": "tsc -p tsconfig.json && cf build",
-    "preview": "vite preview --host 127.0.0.1 --port 4190 --strictPort",
-    "deploy": "cf deploy",
+    "build": "tsc -p tsconfig.json",
     "og": "bun run scripts/og.ts",
     "track": "bun run scripts/render-track.ts",
     "bench:frames": "bun run scripts/bench-frames.ts"
@@ -20,12 +17,9 @@
     "react-dom": "19.2.7"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "catalog:",
     "@types/bun": "catalog:",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.3",
-    "cf": "catalog:",
     "playwright-core": "1.62.1",
     "typescript": "catalog:",
     "vite": "8.1.3"

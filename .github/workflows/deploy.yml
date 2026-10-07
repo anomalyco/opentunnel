@@ -1,15 +1,20 @@
-name: Deploy website
+name: Deploy
 
-# Deploys packages/website in production mode (the opentunnel-website-production Worker, opentunnel.xyz)
-# whenever the site changes on master. Uses the anomalyco org secrets CLOUDFLARE_API_TOKEN and
-# CLOUDFLARE_ACCOUNT_ID.
+# Deploys the opentunnel Worker (cloudflare.config.ts: the relay API and the website) in production mode,
+# as opentunnel-production on opentunnel.xyz, whenever it changes on master. Uses the anomalyco org secrets
+# CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. Worker secrets persist across deploys and are not set here.
 
 on:
   push:
     branches: [master]
     paths:
+      - "cloudflare.config.ts"
+      - "vite.config.ts"
+      - "index.html"
+      - "packages/server/**"
       - "packages/website/**"
-      - ".github/workflows/deploy-website.yml"
+      - "packages/protocol/**"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 concurrency:
@@ -39,11 +44,9 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - run: bun run build
-        working-directory: packages/website
+      - run: bun run ready
 
-      - run: bunx cf deploy --prebuilt --mode production
-        working-directory: packages/website
+      - run: bun run deploy --mode production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

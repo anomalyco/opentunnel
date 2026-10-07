@@ -1,13 +1,14 @@
 # OpenTunnel Server
 
-This package is the complete hosted OpenTunnel application:
+The code of the hosted OpenTunnel Worker:
 
 - HTTP control API
-- inbound Spectrum TCP handler
+- inbound TCP handler, routed by SNI
 - per-tunnel Durable Objects
 - bridge WebSocket transport
 - ZeroSSL certificate Workflow
+- `relay/index.mjs`, the TCP relay that carries `*.opentunnel.xyz:443` connections to the Worker
 
-Run locally with `bun run dev`, validate with `bun run build`, and deploy with
-`bun run deploy`. See the repository README for required Worker secrets and
-Spectrum configuration.
+The Worker is configured, built, and deployed from the repository root
+(`cloudflare.config.ts`); `bun run build` here only typechecks. See the
+repository README.

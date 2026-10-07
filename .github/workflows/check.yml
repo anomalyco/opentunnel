@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # cf (the server and website builds) loads cloudflare.config.ts with Node, not Bun.
+      # The Worker build (vite with the Cloudflare plugin) loads cloudflare.config.ts with Node.
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -23,7 +23,7 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - run: bun run --filter '*' build
+      - run: bun run ready
 
       - run: bun run --filter '*' test
 

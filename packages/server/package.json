@@ -9,10 +9,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "cf dev",
-    "deploy": "cf deploy",
-    "types": "cf workers types",
-    "build": "cf workers types && tsc -p tsconfig.json && cf deploy --dry-run"
+    "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@opentunnel/protocol": "workspace:*",
@@ -24,8 +21,6 @@
   },
   "devDependencies": {
     "@typescript/native-preview": "catalog:",
-    "cf": "catalog:",
-    "typescript": "catalog:",
-    "wrangler": "catalog:"
+    "typescript": "catalog:"
   }
 }

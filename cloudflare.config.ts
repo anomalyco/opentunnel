@@ -1,10 +1,11 @@
 import { bindings, defineConfig, defineWorker, exports, triggers } from "cf/config";
-import * as entrypoint from "./src/index.ts" with { type: "cf-worker" };
+import * as entrypoint from "./packages/server/src/index.ts" with { type: "cf-worker" };
 
-// One Worker per mode, every resource suffixed with it: `cf deploy --mode production` is opentunnel.xyz;
-// any other mode (`cf deploy --mode dev`) is a separate Worker, with its own Durable Objects and Workflow,
-// on workers.dev. Deploying without --mode deploys `development`, never production.
-export default defineConfig(({ mode = "development" }) => {
+// opentunnel is one Worker: the relay's API under /api/* and the website (the Vite build of packages/website)
+// as static assets for everything else. One Worker per mode, every resource suffixed with it:
+// `cf deploy --mode production` is opentunnel.xyz; any other mode (`cf deploy --mode dev`) is a separate
+// Worker, with its own Durable Objects and Workflow, on workers.dev.
+export default defineConfig(({ mode = "production" }) => {
   const production = mode === "production";
   const name = `opentunnel-${mode}`;
   const domain = production ? "opentunnel.xyz" : `${mode}.opentunnel.xyz`;
@@ -25,7 +26,8 @@ export default defineConfig(({ mode = "development" }) => {
       compatibilityFlags: ["nodejs_compat"],
       workersDev: !production,
       observability: { enabled: true },
-      triggers: production ? [triggers.fetch({ pattern: "opentunnel.xyz/api/*", zone: "opentunnel.xyz" })] : [],
+      assets: { runWorkerFirst: ["/api/*"] },
+      triggers: production ? [triggers.fetch({ pattern: "opentunnel.xyz/*", zone: "opentunnel.xyz" })] : [],
       env: {
         OPENTUNNEL_DOMAIN: bindings.text(domain),
         ACME_URL: bindings.text("https://acme.zerossl.com/v2/DV90"),
