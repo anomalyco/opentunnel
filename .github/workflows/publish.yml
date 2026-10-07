@@ -97,7 +97,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       AUR_KEY: ${{ secrets.AUR_KEY }}
-      APP_SECRET: ${{ secrets.OPENCODE_APP_SECRET }}
+      HOMEBREW_TAP_KEY: ${{ secrets.HOMEBREW_TAP_KEY }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -130,19 +130,19 @@ jobs:
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
           git config --global user.name "opentunnel"
           git config --global user.email "opentunnel@anoma.ly"
-      # The opencode GitHub App can push to anomalyco/homebrew-tap.
-      - name: Create Homebrew tap token
-        id: tap
-        if: env.APP_SECRET != ''
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ vars.OPENCODE_APP_ID }}
-          private-key: ${{ secrets.OPENCODE_APP_SECRET }}
-          owner: ${{ github.repository_owner }}
-          repositories: homebrew-tap
+      # A deploy key on anomalyco/homebrew-tap, under its own host alias so it never stands in for github.com.
+      - name: Set up Homebrew tap SSH key
+        if: env.HOMEBREW_TAP_KEY != ''
+        run: |
+          mkdir -p ~/.ssh
+          echo "$HOMEBREW_TAP_KEY" > ~/.ssh/id_homebrew_tap
+          chmod 600 ~/.ssh/id_homebrew_tap
+          printf 'Host homebrew-tap.github.com\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/id_homebrew_tap\n  IdentitiesOnly yes\n' >> ~/.ssh/config
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+          git config --global user.name "opentunnel"
+          git config --global user.email "opentunnel@anoma.ly"
       - uses: changesets/action/publish@v2
         with:
           script: bun run release
         env:
-          HOMEBREW_TAP_TOKEN: ${{ steps.tap.outputs.token }}
           CARGO_REGISTRY_TOKEN: ${{ steps.crates.outputs.token }}

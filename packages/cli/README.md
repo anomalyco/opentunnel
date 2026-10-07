@@ -92,7 +92,10 @@ per platform into `dist/cli-<os>-<arch>/bin/opentunnel`, then:
   the `opentunnel` launcher with those packages as `optionalDependencies`;
 - `script/release.ts` creates the GitHub release with one tarball per platform
   (used by the install script at `packages/website/public/install`), updates
-  the formula in `anomalyco/homebrew-tap` (through the opencode GitHub App:
-  the `OPENCODE_APP_ID` variable and `OPENCODE_APP_SECRET` secret), and
-  pushes the `opentunnel-bin` AUR package (the org-level `AUR_KEY` secret).
-  Steps without credentials are skipped.
+  the formula in `anomalyco/homebrew-tap` (with that repository's deploy key,
+  the org-level `HOMEBREW_TAP_KEY` secret), and pushes the `opentunnel-bin`
+  AUR package (the org-level `AUR_KEY` secret);
+- `script/crates.ts` publishes the `opentunnel` and `opentunnel-cli` crates
+  through crates.io trusted publishing.
+
+Steps without credentials are skipped.

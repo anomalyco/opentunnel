@@ -78,8 +78,9 @@ const formula = `class Opentunnel < Formula
   end
 end
 `
-if (process.env.HOMEBREW_TAP_TOKEN) {
-  const tap = `https://x-access-token:${process.env.HOMEBREW_TAP_TOKEN}@github.com/anomalyco/homebrew-tap.git`
+// CI writes the tap's deploy key (HOMEBREW_TAP_KEY) to an SSH host alias, homebrew-tap.github.com.
+if (process.env.HOMEBREW_TAP_KEY) {
+  const tap = "git@homebrew-tap.github.com:anomalyco/homebrew-tap.git"
   await $`rm -rf ./dist/homebrew-tap`
   await $`git clone --depth 1 ${tap} ./dist/homebrew-tap`
   await Bun.write("./dist/homebrew-tap/opentunnel.rb", formula)
@@ -89,7 +90,7 @@ if (process.env.HOMEBREW_TAP_TOKEN) {
     await $`git push`.cwd("./dist/homebrew-tap")
   }
 } else {
-  console.warn("HOMEBREW_TAP_TOKEN is not set; skipping Homebrew")
+  console.warn("HOMEBREW_TAP_KEY is not set; skipping Homebrew")
 }
 
 // AUR: yay -S opentunnel-bin
