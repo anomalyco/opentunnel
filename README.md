@@ -63,21 +63,28 @@ spec, the vectors, and both clients.
 
 ## Configuration
 
-Set Worker secrets before deploying:
+The server and the website are each configured by one `cloudflare.config.ts`
+and deployed with the [`cf` CLI](https://developers.cloudflare.com/cf/). Every
+deployment has a mode, and every resource is named after it: `cf deploy --mode
+production` deploys `opentunnel-production` and `opentunnel-website-production`
+on opentunnel.xyz, while any other mode (`cf deploy --mode dev`) deploys a
+separate Worker, with its own Durable Objects and Workflow, on workers.dev.
+Anything that differs between stages switches on the mode in that file. `cf`
+loads the config with Node 22.18 or later, not Bun.
+
+The server needs these secrets in each mode. Pass them with the deploy:
 
 ```bash
 cd packages/server
-bunx wrangler secret put ACME_EAB_KID
-bunx wrangler secret put ACME_EAB_HMAC_KEY
-bunx wrangler secret put ACME_ACCOUNT_KEY_JWK
-bunx wrangler secret put CLOUDFLARE_API_TOKEN
+bunx cf deploy --mode production --secrets-file secrets.json
 ```
 
+`secrets.json` holds `ACME_EAB_KID`, `ACME_EAB_HMAC_KEY`,
+`ACME_ACCOUNT_KEY_JWK`, `CLOUDFLARE_API_TOKEN` and `RELAY_TOKEN`.
 `ACME_ACCOUNT_KEY_JWK` is a one-time P-256 private JWK used as the stable
 ZeroSSL account identity; it does not need scheduled rotation. The Cloudflare
-API token only needs DNS edit access to the OpenTunnel zone. The zone ID, other
-non-secret defaults, Durable Object binding, certificate Workflow, and apex API
-route are defined in `packages/server/wrangler.jsonc`.
+API token only needs DNS edit access to the OpenTunnel zone. `RELAY_TOKEN` must
+match the TCP relay's.
 
 Spectrum must route `*.opentunnel.xyz:443` to this Worker with `tls: off`. That
 Worker-backed Spectrum target is currently provisioned through Cloudflare's
@@ -90,7 +97,8 @@ For local development, copy `.env.example` to the ignored
 
 ```bash
 bun install
-bun run cf-typegen
+cd packages/server
+bun run types
 bun run dev
 ```
 

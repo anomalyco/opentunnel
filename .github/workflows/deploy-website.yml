@@ -1,10 +1,8 @@
 name: Deploy website
 
-# Deploys packages/website to the opentunnel-website Worker (opentunnel.xyz) whenever the site changes on
-# master. Needs two repository secrets from the Cloudflare account that owns the opentunnel.xyz zone:
-#   CLOUDFLARE_API_TOKEN   an API token with Workers Scripts: Edit and Workers Routes: Edit (zone: opentunnel.xyz)
-#   CLOUDFLARE_ACCOUNT_ID  that account's ID
-# Until they are set, the job runs and skips.
+# Deploys packages/website in production mode (the opentunnel-website-production Worker, opentunnel.xyz)
+# whenever the site changes on master. Uses the anomalyco org secrets CLOUDFLARE_API_TOKEN and
+# CLOUDFLARE_ACCOUNT_ID.
 
 on:
   push:
@@ -26,28 +24,25 @@ jobs:
     name: Deploy opentunnel.xyz
     runs-on: ubuntu-latest
     env:
-      CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+      CF_SEND_TELEMETRY: "false"
     steps:
-      - if: env.CONFIGURED != 'true'
-        run: echo "CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set; skipping the deploy."
+      - uses: actions/checkout@v6
 
-      - if: env.CONFIGURED == 'true'
-        uses: actions/checkout@v6
+      # cf loads cloudflare.config.ts with Node, not Bun.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
 
-      - if: env.CONFIGURED == 'true'
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
 
-      - if: env.CONFIGURED == 'true'
-        run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
 
-      - if: env.CONFIGURED == 'true'
-        run: bun run build
+      - run: bun run build
         working-directory: packages/website
 
-      - if: env.CONFIGURED == 'true'
-        run: bunx wrangler deploy
+      - run: bunx cf deploy --prebuilt --mode production
         working-directory: packages/website
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

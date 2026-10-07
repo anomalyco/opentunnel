@@ -1,10 +1,19 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["es2023", "dom"],
+    "lib": [
+      "es2023",
+      "dom"
+    ],
     "module": "esnext",
     "moduleResolution": "bundler",
-    "types": ["./worker-configuration.d.ts"],
-    "noEmit": true
-  }
+    "noEmit": true,
+    "types": [],
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "src",
+    "cloudflare.config.ts",
+    ".cloudflare/types"
+  ]
 }

@@ -19,9 +19,10 @@
 ## Cloudflare Runtime
 
 - The hosted application is `packages/server`.
-- It is one Wrangler Worker containing HTTP handlers, inbound TCP, Durable Objects, and a certificate Workflow.
+- It is one Worker containing HTTP handlers, inbound TCP, Durable Objects, and a certificate Workflow, configured by `packages/server/cloudflare.config.ts` and deployed with the `cf` CLI (it still builds through Wrangler underneath).
 - Keep runtime-neutral schemas, bridge framing, and HTTP contracts in `packages/protocol`.
 - Keep API handlers, TLS parsing, Durable Objects, and Workflows in `packages/server`.
 - Spectrum must use TLS passthrough; never move tenant TLS termination into the Worker.
-- Run `bun run cf-typegen` after changing Wrangler bindings.
-- Use `bun run build` in `packages/server` to typecheck the Worker and run a Wrangler dry-run bundle.
+- `cloudflare.config.ts` files switch on `mode`, and every resource is named `<name>-<mode>`; production is `--mode production`. `cf` needs Node 22.18 or later, not Bun.
+- Run `bun run types` after changing bindings.
+- Use `bun run build` in `packages/server` to typecheck the Worker and run a `cf deploy --dry-run` bundle.

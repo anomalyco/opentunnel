@@ -12,6 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # cf (the server and website builds) loads cloudflare.config.ts with Node, not Bun.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
