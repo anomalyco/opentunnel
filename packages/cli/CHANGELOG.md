@@ -1,5 +1,11 @@
 # opentunnel
 
+## 0.1.2
+
+### Patch Changes
+
+- d22e6f8: Publish the `opentunnel` and `opentunnel-cli` crates to crates.io with every release, at the same version as npm.
+
 ## 0.1.1
 
 ### Patch Changes
