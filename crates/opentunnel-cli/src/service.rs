@@ -289,8 +289,15 @@ mod platform {
             .replace('>', "&gt;")
     }
 
+    /// Whether the user's GUI launchd domain exists, which requires a login
+    /// session (not the case over SSH when nobody is logged in at the console).
     pub fn supported() -> bool {
-        true
+        Process::new("launchctl")
+            .args(["print", &domain()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
     }
 
     pub fn installed(profile: &str) -> bool {
