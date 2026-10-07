@@ -1,5 +1,11 @@
 # opentunnel
 
+## 0.1.1
+
+### Patch Changes
+
+- 8960fa2: Fix `npm i -g opentunnel` not installing the `opentunnel` command.
+
 ## 0.1.0
 
 ### Minor Changes
