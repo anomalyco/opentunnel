@@ -53,14 +53,16 @@ h2 { margin: 0 0 var(--s3); font-size: clamp(20px, 3.2vw, 27px); font-weight: 50
 pre { margin: 0; overflow-x: auto; color: #fff; font: clamp(14px, 2vw, 17px)/1.8 var(--font-text), monospace; }
 .output { opacity: .55; }
 
-.steps { display: grid; margin: 0; padding: 0; gap: var(--s3); list-style: none; counter-reset: step; }
-.steps li { display: grid; grid-template-columns: 44px 1fr; counter-increment: step; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
+/* Tracks floored at zero: justified lines don't wrap, so a content-sized track would grow to fit them and never
+   give the width back. */
+.steps { display: grid; grid-template-columns: minmax(0, 1fr); margin: 0; padding: 0; gap: var(--s3); list-style: none; counter-reset: step; }
+.steps li { display: grid; grid-template-columns: 44px minmax(0, 1fr); counter-increment: step; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
 .steps li::before { content: "0" counter(step); opacity: .45; }
 .steps p { margin: 0; }
 /* Lines set by justice: one per span, never rewrapped by the browser. */
 .justified-line { display: block; white-space: nowrap; }
 
-.privacy-list { display: grid; margin: 0; gap: var(--s3); }
+.privacy-list { display: grid; grid-template-columns: minmax(0, 1fr); margin: 0; gap: var(--s3); }
 .privacy-list dt { margin-bottom: var(--s1); font-size: clamp(14px, 2vw, 17px); line-height: 1.7; }
 .privacy-list dd { margin: 0; font-size: clamp(14px, 2vw, 17px); line-height: 1.7; opacity: .55; }
 
@@ -73,6 +75,8 @@ pre { margin: 0; overflow-x: auto; color: #fff; font: clamp(14px, 2vw, 17px)/1.8
   /* The caption spans the whole row under the lockup, still justified, at a size that reads. */
   h1 { grid-column: 1 / -1; font-size: 11px; }
 }
+/* The narrowest phones: the tabs close up to span the column rather than run off its end. */
+@media (max-width: 380px) { .tabs { justify-content: space-between; gap: 12px; } }
 
 /* The Anomaly copyright, as on the opencode console: the signature sits faintly behind the line, both centred. */
 .site-footer { display: flex; justify-content: center; padding: 0 0 var(--s4); }

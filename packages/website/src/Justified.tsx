@@ -33,7 +33,8 @@ export function Justified({ text, as: Tag = "p", className }: { text: string; as
       }))
     }
     compose()
-    void document.fonts.ready.then(compose)
+    // The font string doesn't change when the face arrives, but the canvas measured the fallback until then.
+    void document.fonts.ready.then(() => { prepared = undefined; compose() })
     const observer = new ResizeObserver(compose)
     observer.observe(element)
     return () => { observer.disconnect(); element.textContent = text }
