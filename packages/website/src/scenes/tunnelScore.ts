@@ -7,9 +7,9 @@ import { pulseLandingMs } from "../graphics/Pulse"
 // matching local app, the first thing to open it. Three routes, a shuffled stream of requests, one clock.
 
 export const tunnelRoutes = [
-  { id: "opencode", name: "opencode", target: "localhost:47365", icon: "terminal", request: "GET /", shape: 0 },
-  { id: "api", name: "api", target: "localhost:3000", icon: "layers", request: "POST /api", shape: 1 },
-  { id: "webhooks", name: "webhooks", target: "localhost:8080", icon: "webhook", request: "POST /hook", shape: 2 },
+  { id: "opencode", name: "opencode", target: "localhost:47365", shape: 0 },
+  { id: "api", name: "api", target: "localhost:3000", shape: 1 },
+  { id: "webhooks", name: "webhooks", target: "localhost:8080", shape: 2 },
 ] as const
 
 /** One pulse: gather, flight, landing. `send` is when light leaves the origin socket; `contact` when it lands. */

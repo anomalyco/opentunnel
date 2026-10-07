@@ -34,7 +34,7 @@ try {
     try {
       const probe = await browser.newPage({ viewport: { width: 1280, height: 900 } })
       await probe.goto("http://127.0.0.1:4190/", { waitUntil: "networkidle", timeout: 8000 })
-      await probe.waitForFunction(() => (window as unknown as { __tunnel?: { crossings: unknown[] } }).__tunnel?.crossings.length === 3, undefined, { timeout: 5000 })
+      await probe.waitForFunction(() => (window as unknown as { __tunnel?: { crossings: unknown[] } }).__tunnel?.crossings.length, undefined, { timeout: 5000 })
       const measured = await probe.evaluate(() => (window as unknown as { __tunnel: { crossings: { fractions: { enter: number; leave: number } }[] } }).__tunnel.crossings.map(c => c.fractions))
       fractions = measured
       await probe.close()

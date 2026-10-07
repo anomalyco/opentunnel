@@ -1,4 +1,4 @@
-import { pulseEase, type PulseEase } from "../graphics/Pulse"
+import type { PulseEase } from "../graphics/Pulse"
 import { tunnelLegs, tunnelTravel } from "./tunnelScore"
 import { flightTuning } from "./flightTuning"
 
@@ -9,9 +9,9 @@ import { flightTuning } from "./flightTuning"
 export type Crossing = {
   enter: number; leave: number
   /** The crawl through your machine's border, in scene seconds: where the bytes are opened. */
-  gate?: { start: number; end: number }
+  gate: { start: number; end: number }
   /** The crawl out through the browser's border, in scene seconds: where they are sealed. */
-  exit?: { start: number; end: number }
+  exit: { start: number; end: number }
   /** How the flight spends its time along the path. */
   ease: PulseEase
   /** The measured path fractions this crossing was built from, so the offline track render
@@ -21,8 +21,8 @@ export type Crossing = {
   speedAt: (time: number) => number
 }
 
-/** How much of the leg's path the relay occupies, as fractions; and where the gate is (your machine's border),
- * with the stretch of path over which the bytes slow into it and pull away. */
+/** How much of the leg's path the relay occupies, as fractions; and where the borders are,
+ * with the stretch of path over which the bytes slow into each and pull away. */
 export type LegFractions = { enter: number; leave: number; gate?: number; gateWidth?: number; exit?: number; exitWidth?: number }
 
 /** How much the bytes slow as they pass through each border: the dip in speed (0 none, 1 a stop) and how far either
@@ -33,23 +33,16 @@ export const borderCrawl = {
 }
 
 export function legCrossing(index: number, fractions: LegFractions): Crossing {
-  const flight = tunnelTravel / 1000
-  // Through each border the bytes slow smoothly and recover: a dip in speed, `width` being its reach as a fraction.
-  const crawl = (at: number | undefined, width: number | undefined, depth: number) => at === undefined ? undefined : { at, width: width ?? .02, depth }
-  const gate = crawl(fractions.gate, fractions.gateWidth, borderCrawl.gate.depth), exit = crawl(fractions.exit, fractions.exitWidth, borderCrawl.exit.depth)
-  // A flight that leaves through a border is already moving as it starts (it slid out of the browser), so its overall
-  // ease is soft; otherwise the pulse's own.
-  // In the shape story the relay is only a little thick and lets the bytes go without a rush, so the pace runs evenly
-  // between the borders; otherwise the original round-into-water flight.
-  const ease = exit
-    ? viscousFlight(fractions.enter, fractions.leave, flightTuning.get().drag, [gate, exit].filter(c => c !== undefined), softEase(flightTuning.get().pace), flightTuning.get().rush)
-    : viscousFlight(fractions.enter, fractions.leave, 5, [gate].filter(c => c !== undefined))
+  const flight = tunnelTravel / 1000, tuned = flightTuning.get()
+  const gate = { at: fractions.gate ?? .85, width: fractions.gateWidth ?? .06, depth: borderCrawl.gate.depth }
+  const exit = { at: fractions.exit ?? .007, width: fractions.exitWidth ?? .028, depth: borderCrawl.exit.depth }
+  const ease = viscousFlight(fractions.enter, fractions.leave, tuned.drag, [gate, exit], softEase(tuned.pace), tuned.rush)
   const { send } = tunnelLegs[index]!
   const enter = send + ease.inverse(fractions.enter) * flight, leave = send + ease.inverse(fractions.leave) * flight
   const h = 1 / 512
   const span = (c: { at: number; width: number }) => ({ start: send + ease.inverse(Math.max(0, c.at - c.width)) * flight, end: send + ease.inverse(Math.min(1, c.at + c.width)) * flight })
   return {
-    enter, leave, ease, fractions: { ...fractions }, ...(gate ? { gate: span(gate) } : {}), ...(exit ? { exit: span(exit) } : {}),
+    enter, leave, ease, fractions: { ...fractions }, gate: span(gate), exit: span(exit),
     speedAt: time => {
       const u = (time - send) / flight
       if (u <= 0 || u >= 1) return 0
@@ -62,7 +55,7 @@ export function legCrossing(index: number, fractions: LegFractions): Crossing {
  * speed, slows smoothly over the first stretch inside, crawls, then builds speed hard through the back half and
  * leaves faster than it came, bleeding the excess off along the next run of wire. Speed is a smooth profile over
  * path distance, integrated into a table; no kinks. */
-export function viscousFlight(from: number, to: number, drag: number, crawls: readonly { at: number; width: number; depth: number }[] = [], outer: PulseEase = pulseEase, rush = .9): PulseEase {
+export function viscousFlight(from: number, to: number, drag: number, crawls: readonly { at: number; width: number; depth: number }[], outer: PulseEase, rush: number): PulseEase {
   const N = 1024
   const span = to - from, crawl = 1 / drag
   const clamp = (x: number) => Math.max(0, Math.min(1, x))

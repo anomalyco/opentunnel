@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react"
 import type { Tuning } from "./tuning"
-import "./scenes/shield-tuner.css"
+import "./tuning-panel.css"
 
 /** Development only: live sliders for a tuning. R randomizes the unlocked values, T hides the panel; click a label to
  * lock it against randomizing. */
@@ -28,8 +28,8 @@ export function TuningPanel<K extends string>({ title, tuning }: { title: string
     setCopied(true)
     setTimeout(() => setCopied(false), 1200)
   }
-  if (!open) return <button type="button" className="shield-tuner-tab" onClick={event => { event.stopPropagation(); setOpen(true) }}>{title}</button>
-  return <aside className="shield-tuner" onClick={event => event.stopPropagation()}>
+  if (!open) return <button type="button" className="tuning-panel-tab" onClick={event => { event.stopPropagation(); setOpen(true) }}>{title}</button>
+  return <aside className="tuning-panel" onClick={event => event.stopPropagation()}>
     <header>
       <span>{title}</span>
       <button type="button" onClick={() => tuning.randomize(locked)}>randomize</button>
@@ -39,8 +39,8 @@ export function TuningPanel<K extends string>({ title, tuning }: { title: string
     </header>
     {tuning.params.map(param => {
       const key = param.key as K, value = values[key]
-      return <div key={key} className="shield-tuner-row" data-locked={locked.has(key) || undefined}>
-        <button type="button" className="shield-tuner-label" onClick={() => toggleLock(key)} title="Lock against randomize">{param.label}</button>
+      return <div key={key} className="tuning-panel-row" data-locked={locked.has(key) || undefined}>
+        <button type="button" className="tuning-panel-label" onClick={() => toggleLock(key)} title="Lock against randomize">{param.label}</button>
         <input type="range" min={param.min} max={param.max} step={param.step} value={value} onChange={event => tuning.set(key, Number(event.target.value))} />
         <output>{value.toFixed(param.step < .1 ? 2 : param.step < 1 ? 1 : 0)}</output>
       </div>

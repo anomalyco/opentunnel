@@ -19,7 +19,7 @@ export const tunnelSoundCues = (crossings: readonly Crossing[]): readonly SceneS
       ...reelTicks(leg.send).map(at => ({ at, event: "tick" as const })),
       { at: leg.send - choosing.slide - choosing.rest, event: "pick" as const },
       { at: leg.send - choosing.slide * .36, event: "seal" as const },
-      ...(crossing?.gate ? [{ at: crossing.gate.start + (crossing.gate.end - crossing.gate.start) * .15, event: "open" as const }] : []),
+      ...(crossing ? [{ at: crossing.gate.start + (crossing.gate.end - crossing.gate.start) * .15, event: "open" as const }] : []),
       { at: leg.send - .045, event: "dispatch" as const },
       ...(crossing ? [{ at: crossing.enter, event: "plunge" as const }] : []),
       { at: leg.contact, event: `strike${leg.route}` as SceneSoundEvent },

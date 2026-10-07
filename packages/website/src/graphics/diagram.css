@@ -10,6 +10,5 @@
 .node-card-detail { margin-left: auto; color: #858585; font-size: 11px; white-space: nowrap; }
 @media (max-width: 500px) { .node-card { min-height: 58px; padding-inline: 8px; } .node-card-name { font-size: 10px; } }
 
-.graph-dots circle { fill: #5a5a5a; }
 .pulse-rim, .pulse-glow, .pulse-ring { pointer-events: none; }
 .pulse-rim { fill: none; }
