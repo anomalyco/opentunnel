@@ -1,6 +1,6 @@
 export * as BridgeProtocol from "./bridge-protocol.js";
 
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 
 /**
  * Bridge protocol types and schemas for the WebSocket binding.
@@ -109,6 +109,17 @@ export const ServerControlMessage = Schema.Union([
 ]);
 export type ServerControlMessage = Schema.Schema.Type<typeof ServerControlMessage>;
 
+const decodeServerControl = Schema.decodeUnknownOption(ServerControlMessage);
+
+/** Decodes a server control frame. Unknown or invalid messages yield `None`. */
+export function decodeServerMessage(text: string): Option.Option<ServerControlMessage> {
+  try {
+    return decodeServerControl(JSON.parse(text));
+  } catch {
+    return Option.none();
+  }
+}
+
 // Union of all control message types
 export const ControlMessage = Schema.Union([
   AttachMessage,
@@ -139,6 +150,7 @@ export const BridgeErrorCode = {
   IDLE_TIMEOUT: "idle_timeout",
   ROUTE_CONFLICT: "route_conflict",
   INVALID_ROUTE: "invalid_route",
+  UNKNOWN_ROUTE: "unknown_route",
 } as const;
 
 // Default timing constants from specs.md
@@ -169,7 +181,7 @@ export function parseDataFrame(data: Uint8Array): { conn: number; payload: Uint8
 }
 
 // Build a binary data frame from connection ID and payload
-export function buildDataFrame(conn: number, payload: Uint8Array): Uint8Array {
+export function buildDataFrame(conn: number, payload: Uint8Array): Uint8Array<ArrayBuffer> {
   const result = new Uint8Array(DataFrame.CONN_ID_SIZE + payload.length);
   const view = new DataView(result.buffer);
   view.setUint32(0, conn, false); // big-endian

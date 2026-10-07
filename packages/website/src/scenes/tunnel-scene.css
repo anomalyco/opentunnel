@@ -39,3 +39,11 @@
   .tunnel-routes { gap: 14px; padding: 14px; }
   .tunnel-machine .tunnel-machine-label { left: auto; right: 0; white-space: nowrap; }
 }
+
+/* Your machine's left border is opentunnel: its name runs up the border, and the apps sit back from it to
+   leave room for the wire to fan out. */
+.tunnel-machine .tunnel-routes { padding-left: 64px; }
+.tunnel-gate-label text { fill: #aaa; font: 400 10px var(--font-text), monospace; letter-spacing: .22em; }
+@container (max-width: 899px) { .tunnel-machine .tunnel-routes { padding-left: 48px; } }
+@container (max-width: 560px) { .tunnel-machine .tunnel-routes { padding-left: 28px; } .tunnel-gate-label { display: none; } }
+.tunnel-cipher { fill: #e8e4dc; font: 500 10px var(--font-text), monospace; paint-order: stroke; stroke: #000; stroke-width: 3px; }

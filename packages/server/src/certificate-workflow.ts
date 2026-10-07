@@ -120,6 +120,17 @@ async function patchExternalAccountBinding(
   };
 }
 
+/** Includes the ACME server's HTTP status and response body, which AcmeError keeps separately. */
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const { status, inner } = error as Error & { status?: number; inner?: unknown };
+  return [
+    error.message,
+    status ? `HTTP ${status}` : undefined,
+    inner instanceof Error ? inner.message.slice(0, 300) : undefined,
+  ].filter(Boolean).join(" | ");
+}
+
 export class CertificateWorkflow extends WorkflowEntrypoint<Cloudflare.Env, CertificateWorkflowParams> {
   private async update(tunnelID: string, certificateID: string, state: Certificate.State) {
     const updated = await env.TUNNELS.getByName(tunnelID).updateCertificate(certificateID, state);
@@ -131,8 +142,19 @@ export class CertificateWorkflow extends WorkflowEntrypoint<Cloudflare.Env, Cert
     try {
       return await step.do(
         "issue certificate",
-        { retries: { limit: 0, delay: 0 } },
-        async () => this.issue(params),
+        // ZeroSSL fails orders intermittently; each attempt starts a fresh order.
+        { retries: { limit: 2, delay: "15 seconds", backoff: "exponential" } },
+        async () => {
+          try {
+            return await this.issue(params);
+          } catch (error) {
+            // Step errors are serialized without custom fields, so keep the
+            // ACME status and response body in the message.
+            const reason = describeError(error);
+            console.error("Certificate issuance attempt failed", { tunnel: params.tunnelID, reason });
+            throw new Error(reason);
+          }
+        },
       );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);

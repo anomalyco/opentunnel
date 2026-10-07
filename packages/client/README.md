@@ -1,197 +1,95 @@
 # OpenTunnel Client
 
-> Design draft. This documents the intended public interface before implementation.
+`@opentunnel/client` is a pure TypeScript SDK for Bun that creates tunnels and
+forwards them to local services from inside your process. TLS terminates in
+your process, so the relay never sees plaintext or your private key.
 
-`@opentunnel/client` contains all reusable client-side OpenTunnel behavior. The
-CLI is a thin wrapper around its Effect interface.
+It implements the same protocol and on-disk layout as the Rust client and CLI
+(see `docs/protocol.md`), so a tunnel created by the CLI can be used here and
+vice versa.
 
-## Exports
-
-The default export is Promise-based and does not require Effect at runtime:
+## Quick start
 
 ```ts
 import { create } from "@opentunnel/client"
+
+const client = create()
+const connection = await client.tunnel.connect({
+  routes: { api: "127.0.0.1:3000" },
+})
+console.log(`https://api.${connection.tunnel.hostname}`)
+
+for await (const event of connection.events) console.log(event)
 ```
 
-The Effect interface is available separately:
+`connect` creates the profile's tunnel if it has none, resolves once the bridge
+first attaches, and reconnects with backoff until you call `close()`. It
+rejects on fatal errors such as an invalid token.
+
+The Effect interface exposes the same capabilities, with scoped connections and
+events as a `Stream`:
 
 ```ts
 import { OpenTunnelClient } from "@opentunnel/client/effect"
 ```
 
-Both interfaces expose the same capabilities and types.
+## Routes
 
-## Client
+Routes map a name to a `host:port` target. A name is a subdomain label, or `@`
+for the tunnel hostname itself. Path routing is not supported.
 
 ```ts
-const client = create()
-
-const profiles = await client.profile.list()
+await connection.setRoutes({ api: "127.0.0.1:4000", "@": "127.0.0.1:8080" })
 ```
 
-Proposed shape:
+Changing only targets applies to new connections immediately. Adding or
+removing names re-attaches the bridge.
+
+## API
 
 ```ts
 interface Client {
-  readonly profile: {
-    list(): Promise<ReadonlyArray<ProfileSummary>>
+  profile: { list(): Promise<string[]> }
+  tunnel: {
+    list(): Promise<StoredTunnel[]>
+    get(options?: { profile?: string }): Promise<Identity | undefined>
+    pending(options?): Promise<{ id: string; hostname: string } | undefined>
+    create(options?: { profile?: string; onProgress?(stage): void }): Promise<Identity>
+    resume(options?): Promise<Identity | undefined>
+    ensure(options?: { profile?: string }): Promise<Identity>
+    remove(options?: { profile?: string }): Promise<void>
+    connect(options: { profile?: string; routes: Routes; signal?: AbortSignal }): Promise<Connection>
   }
-  readonly route: {
-    list(options?: ProfileOptions): Promise<ReadonlyArray<Route>>
-    add(options: AddRouteOptions): Promise<Route>
-    remove(options: RemoveRouteOptions): Promise<void>
-  }
-  readonly tunnel: {
-    get(options?: ProfileOptions): Promise<TunnelIdentity | undefined>
-    ensure(options?: ProfileOptions): Promise<TunnelIdentity>
-    remove(options?: ProfileOptions): Promise<void>
-    connect(options?: ConnectOptions): Promise<Connection>
-  }
+  dispose(): Promise<void>
 }
 
-interface ProfileOptions {
-  readonly profile?: string
-}
-
-interface AddRouteOptions extends ProfileOptions {
-  readonly name: string
-  readonly target: string
-}
-
-interface RemoveRouteOptions extends ProfileOptions {
-  readonly name: string
-}
-
-interface ConnectOptions extends ProfileOptions {
-  readonly signal?: AbortSignal
-}
-
-interface Route {
-  readonly name: string
-  readonly hostname: string
-  readonly target: string
-}
-
-interface TunnelIdentity {
-  readonly id: string
-  readonly hostname: string
-  readonly token: string
-  readonly privateKey: string
-  readonly certificate: string
-  readonly chain: string
-  readonly certificateExpiry: Date
-}
-```
-
-Profile-scoped operations accept an optional `profile`. Omitting it selects the
-profile named `default`.
-
-```ts
-await client.route.list()
-await client.route.list({ profile: "work" })
-
-await client.route.add({
-  name: "api",
-  target: "127.0.0.1:3000",
-})
-
-await client.route.add({
-  profile: "work",
-  name: "api",
-  target: "127.0.0.1:4000",
-})
-```
-
-There is no profile object and callers do not retain profile handles. The client
-resolves storage paths for each operation.
-
-Routes map subdomains to local HTTP processes. Path routing is intentionally not
-supported.
-
-`client.tunnel.ensure()` creates a tunnel when the selected profile has no identity,
-provisions its certificate, and otherwise returns the existing identity.
-
-### Connection
-
-```ts
 interface Connection {
-  readonly tunnel: TunnelIdentity
-  readonly routes: ReadonlyArray<Route>
-  readonly events: AsyncIterable<ClientEvent>
-  readonly closed: Promise<void>
-
+  tunnel: Identity
+  events: AsyncIterable<ClientEvent>
+  status(): Status
+  setRoutes(routes: Routes): Promise<void>
+  closed: Promise<void>
   close(): Promise<void>
 }
 ```
 
-`client.tunnel.connect({ profile })` performs the bridge handshake, terminates
-TLS locally, and routes incoming connections to configured targets. It resolves
-once the initial bridge connection is ready. Automatic reconnect is planned but
-not yet implemented.
-
-Promise callers explicitly close the returned connection or use an
-`AbortSignal` in `ConnectOptions`.
-
-The Effect version returns a scoped connection. Releasing its scope closes the
-bridge, listeners, timers, TLS servers, and active upstream sockets. Its events
-are exposed as an Effect `Stream` rather than an `AsyncIterable`.
+Events are `connecting`, `connected`, `disconnected`, `reconnecting`,
+`connection-opened`, `connection-closed`, and `stopped`.
 
 ## Storage
 
-`create()` uses XDG storage by default:
+`create()` stores identities under `$XDG_DATA_HOME/opentunnel/<profile>/`, the
+same files the CLI uses. Pass a store to isolate or own persistence:
 
 ```ts
-const client = create()
+import { create, OpenTunnelStorage } from "@opentunnel/client"
+
+const client = create({ store: OpenTunnelStorage.memory() })
 ```
 
-Storage can be replaced when an application wants isolation or owns its own
-persistence:
+## Backpressure
 
-```ts
-const client = create({ store: memoryStore() })
-const client = create({ store: databaseStore })
-```
-
-```ts
-interface ClientOptions {
-  readonly api?: URL | string
-  readonly store?: TunnelStore
-}
-
-interface TunnelStore {
-  list(): Promise<ReadonlyArray<StoredTunnel>>
-  load(profile: string): Promise<TunnelIdentity | undefined>
-  save(profile: string, tunnel: TunnelIdentity): Promise<void>
-  remove(profile: string): Promise<void>
-}
-```
-
-Omitting `store` is equivalent to using `xdgStore()`.
-
-The XDG store only manages generated identity and credentials:
-
-```text
-$XDG_DATA_HOME/opentunnel/default/
-  tunnel.json
-  token
-  private-key.pem
-  certificate.pem
-  chain.pem
-```
-
-Route configuration is not part of `OpenTunnelStorage`. The CLI owns TOML
-configuration, while embedded applications provide routes at runtime.
-
-## Dependency Boundary
-
-```text
-@opentunnel/cli
-        ↓
-@opentunnel/client
-        ↓
-@opentunnel/protocol
-```
-
-The CLI does not implement profile, route, certificate, bridge, TLS, or proxy
-behavior. It only maps commands and flags to the Effect client interface and
-renders results.
+The SDK stops reading from a local socket while more than 1 MiB is queued on
+the bridge WebSocket, and resets a connection whose local side stops reading
+for long enough to buffer 8 MiB. The protocol has no per-connection flow
+control yet, so one slow public reader can delay others on the same bridge.

@@ -1,0 +1,30 @@
+[package]
+name = "opentunnel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Client for OpenTunnel blind TLS tunnels"
+readme = "README.md"
+
+[dependencies]
+futures-util = "0.3.34"
+humantime = "2.4.0"
+rand = "0.10.3"
+rcgen = { version = "0.14.10", default-features = false, features = ["ring", "pem"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["http2", "json", "rustls-no-provider"] }
+rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-pki-types = { version = "1.15.1", features = ["std"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.21"
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "net", "io-util", "time", "sync", "macros", "fs"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12", "logging"] }
+tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-webpki-roots"] }
+toml = "1.1.6"
+tracing = "0.1.44"
+webpki-root-certs = "1.0.9"
+
+[dev-dependencies]
+hex = "0.4.3"

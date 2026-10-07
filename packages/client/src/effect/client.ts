@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { Effect, Layer, ServiceMap } from "effect";
+import { Cause, Effect, Layer, Queue, ServiceMap, Stream } from "effect";
 import {
   Pkcs10CertificateRequestGenerator,
   SubjectAlternativeNameExtension,
@@ -10,14 +10,15 @@ import { OpenTunnelApiClient } from "./api.js";
 import { OpenTunnelClientError } from "./errors.js";
 import { OpenTunnelStorage, type OpenTunnelStorage as Storage } from "./storage.js";
 import type {
+  OpenTunnelClientEvent,
+  OpenTunnelConnection,
   OpenTunnelEffectClient,
   OpenTunnelIdentity,
   OpenTunnelPendingIdentity,
   OpenTunnelProfileOptions,
   OpenTunnelProvisionStage,
-  OpenTunnelRoute,
 } from "./types.js";
-import { connectBridge } from "./bridge.js";
+import { Tunnel as RunningTunnel, validateRoutes } from "./tunnel.js";
 
 const profileName = (options?: OpenTunnelProfileOptions) => options?.profile ?? "default";
 const clientError = (message: string, cause: unknown) =>
@@ -46,7 +47,7 @@ export class OpenTunnelClient extends ServiceMap.Service<
       OpenTunnelClient,
       Effect.gen(function* () {
         const api = yield* OpenTunnelApiClient;
-        const routesByProfile = new Map<string, ReadonlyArray<OpenTunnelRoute>>();
+        const apiUrl = new URL(options.api ?? "https://opentunnel.xyz");
 
         const get = Effect.fn("OpenTunnelClient.tunnel.get")(function* (
           input?: OpenTunnelProfileOptions,
@@ -65,6 +66,8 @@ export class OpenTunnelClient extends ServiceMap.Service<
             params: { id: Tunnel.ID.makeUnsafe(options.pending.id) },
             payload: { csr: options.pending.csr as CSR.Raw },
           }).pipe(
+            // A resumed provision may already have an issuance in flight.
+            Effect.catchTag("CertificateInProgressError", () => Effect.void),
             Effect.mapError((cause) => clientError("Failed to start certificate issuance", cause)),
           );
 
@@ -154,7 +157,6 @@ export class OpenTunnelClient extends ServiceMap.Service<
 
         const create = Effect.fn("OpenTunnelClient.tunnel.create")(function* (
           input?: OpenTunnelProfileOptions & {
-            readonly name?: string;
             readonly onProgress?: (stage: OpenTunnelProvisionStage) => void;
           },
         ) {
@@ -173,7 +175,7 @@ export class OpenTunnelClient extends ServiceMap.Service<
 
           yield* Effect.sync(() => input?.onProgress?.("creating-tunnel"));
           const created = yield* api.client.tunnel["tunnel.create"]({
-            payload: { name: input?.name },
+            payload: {},
           }).pipe(Effect.mapError((cause) => clientError("Failed to create tunnel", cause)));
           return yield* provision({
             profile,
@@ -185,7 +187,7 @@ export class OpenTunnelClient extends ServiceMap.Service<
         });
 
         const ensure = Effect.fn("OpenTunnelClient.tunnel.ensure")(function* (
-          input?: OpenTunnelProfileOptions & { readonly name?: string },
+          input?: OpenTunnelProfileOptions,
         ) {
           const existing = yield* get(input);
           if (!existing) return yield* create(input);
@@ -195,7 +197,19 @@ export class OpenTunnelClient extends ServiceMap.Service<
           }).pipe(
             Effect.mapError((cause) => clientError("Failed to read certificate", cause)),
           );
-          if (certificate.state.type !== "failed") return existing;
+          const state = certificate.state;
+          // The server renewed the certificate while this machine was offline.
+          if (state.type === "ready" && state.certificate !== existing.certificate) {
+            const renewed: OpenTunnelIdentity = {
+              ...existing,
+              certificate: state.certificate,
+              chain: state.chain,
+              certificateExpiry: new Date(state.expiry),
+            };
+            yield* storage.save(profileName(input), renewed);
+            return renewed;
+          }
+          if (state.type !== "failed") return existing;
           return yield* provision({
             profile: profileName(input),
             id: Tunnel.ID.makeUnsafe(existing.id),
@@ -223,57 +237,8 @@ export class OpenTunnelClient extends ServiceMap.Service<
           return yield* completePending({ profile, pending: value, onProgress: input?.onProgress });
         });
 
-        const listRoutes = Effect.fn("OpenTunnelClient.route.list")(function* (
-          input?: OpenTunnelProfileOptions,
-        ) {
-          const profile = profileName(input);
-          const identity = yield* storage.load(profile);
-          const routes = routesByProfile.get(profile) ?? [];
-          return routes.map((route) => ({
-            ...route,
-            hostname: identity ? `${route.name}.${identity.hostname}` : route.name,
-          }));
-        });
-
         const client: OpenTunnelEffectClient = {
           profile: { list: storage.profiles },
-          route: {
-            list: listRoutes,
-            add: Effect.fn("OpenTunnelClient.route.add")(function* (input) {
-              const profile = profileName(input);
-              const identity = yield* ensure(input);
-              const routes = routesByProfile.get(profile) ?? [];
-              if (routes.some((route) => route.name === input.name)) {
-                return yield* new OpenTunnelClientError({
-                  message: `Route '${input.name}' already exists in profile '${profile}'`,
-                });
-              }
-              if (input.target.includes("://")) {
-                return yield* new OpenTunnelClientError({
-                  message: "Route targets must use host:port",
-                });
-              }
-              const target = new URL(`tcp://${input.target}`);
-              if (!target.hostname || !target.port) {
-                return yield* new OpenTunnelClientError({ message: "Route targets must use host:port" });
-              }
-              const route: OpenTunnelRoute = {
-                name: input.name,
-                hostname: `${input.name}.${identity.hostname}`,
-                target: input.target,
-              };
-              routesByProfile.set(profile, [...routes, route]);
-              return route;
-            }),
-            remove: Effect.fn("OpenTunnelClient.route.remove")(function* (input) {
-              const profile = profileName(input);
-              const routes = routesByProfile.get(profile) ?? [];
-              routesByProfile.set(
-                profile,
-                routes.filter((route) => route.name !== input.name),
-              );
-            }),
-          },
           tunnel: {
             list: storage.list,
             get,
@@ -293,17 +258,52 @@ export class OpenTunnelClient extends ServiceMap.Service<
               );
               yield* storage.remove(profile);
             }),
-            connect: (input) =>
-              Effect.gen(function* () {
-                const profile = profileName(input);
-                const identity = yield* ensure(input);
-                const configured = routesByProfile.get(profile) ?? [];
-                return yield* connectBridge({
-                  api: new URL(options.api ?? "https://opentunnel.xyz"),
-                  identity,
-                  routes: configured,
-                });
-              }),
+            connect: Effect.fn("OpenTunnelClient.tunnel.connect")(function* (input) {
+              yield* Effect.try({
+                try: () => validateRoutes(input.routes),
+                catch: (cause) => clientError(cause instanceof Error ? cause.message : "Invalid routes", cause),
+              });
+              const identity = yield* ensure(input);
+              const events = yield* Queue.unbounded<OpenTunnelClientEvent, Cause.Done>();
+              const tunnel = yield* Effect.acquireRelease(
+                Effect.sync(() =>
+                  new RunningTunnel({
+                    api: apiUrl,
+                    identity,
+                    routes: input.routes,
+                    onEvent: (event) => {
+                      Queue.offerUnsafe(events, event);
+                      if (event.type === "stopped") Queue.endUnsafe(events);
+                    },
+                    onRenewed: (renewed) => {
+                      Effect.runFork(storage.save(profileName(input), renewed).pipe(Effect.ignore));
+                    },
+                  })
+                ),
+                (tunnel) =>
+                  Effect.promise(() => tunnel.close()).pipe(Effect.andThen(Queue.end(events))),
+              );
+              yield* Effect.tryPromise({
+                try: () => tunnel.ready,
+                catch: (cause) => clientError("Failed to connect tunnel", cause),
+              });
+              return {
+                tunnel: identity,
+                events: Stream.fromQueue(events),
+                status: Effect.sync(() => tunnel.getStatus()),
+                setRoutes: (routes) =>
+                  Effect.try({
+                    try: () => tunnel.setRoutes(routes),
+                    catch: (cause) =>
+                      clientError(cause instanceof Error ? cause.message : "Invalid routes", cause),
+                  }),
+                closed: Effect.tryPromise({
+                  try: () => tunnel.closed,
+                  catch: (cause) => clientError("Tunnel stopped", cause),
+                }),
+                close: Effect.promise(() => tunnel.close()),
+              } satisfies OpenTunnelConnection;
+            }),
           },
         };
         return client;

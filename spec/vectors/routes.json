@@ -1,0 +1,10 @@
+[
+  { "hostname": "demo.opentunnel.xyz", "sni": "demo.opentunnel.xyz", "route": "@" },
+  { "hostname": "demo.opentunnel.xyz", "sni": "api.demo.opentunnel.xyz", "route": "api" },
+  { "hostname": "demo.opentunnel.xyz", "sni": "API.Demo.OpenTunnel.xyz", "route": "api" },
+  { "hostname": "demo.opentunnel.xyz", "sni": "a.b.demo.opentunnel.xyz", "route": null },
+  { "hostname": "demo.opentunnel.xyz", "sni": "other.opentunnel.xyz", "route": null },
+  { "hostname": "demo.opentunnel.xyz", "sni": "xdemo.opentunnel.xyz", "route": null },
+  { "hostname": "demo.opentunnel.xyz", "sni": ".demo.opentunnel.xyz", "route": null },
+  { "hostname": "demo.opentunnel.xyz", "sni": "", "route": null }
+]

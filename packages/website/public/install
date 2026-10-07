@@ -1,0 +1,46 @@
+#!/bin/sh
+# Installs the opentunnel CLI.
+#
+#   curl -fsSL https://opentunnel.xyz/install | sh
+#
+# OPENTUNNEL_VERSION   version to install (default: latest)
+# OPENTUNNEL_INSTALL   install directory (default: ~/.local/bin)
+set -eu
+
+repo="anomalyco/opentunnel"
+
+case "$(uname -s)" in
+  Linux) os="linux" ;;
+  Darwin) os="darwin" ;;
+  *) echo "opentunnel: unsupported operating system $(uname -s)" >&2; exit 1 ;;
+esac
+
+case "$(uname -m)" in
+  x86_64 | amd64) arch="x64" ;;
+  arm64 | aarch64) arch="arm64" ;;
+  *) echo "opentunnel: unsupported architecture $(uname -m)" >&2; exit 1 ;;
+esac
+
+if [ -n "${OPENTUNNEL_VERSION:-}" ]; then
+  url="https://github.com/$repo/releases/download/v${OPENTUNNEL_VERSION#v}/opentunnel-$os-$arch.tar.gz"
+else
+  url="https://github.com/$repo/releases/latest/download/opentunnel-$os-$arch.tar.gz"
+fi
+
+dir="${OPENTUNNEL_INSTALL:-$HOME/.local/bin}"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+echo "Downloading opentunnel for $os-$arch..."
+curl -fsSL "$url" | tar -xz -C "$tmp"
+mkdir -p "$dir"
+mv "$tmp/opentunnel" "$dir/opentunnel"
+chmod 755 "$dir/opentunnel"
+
+echo "Installed $("$dir/opentunnel" --version) to $dir/opentunnel"
+case ":$PATH:" in
+  *":$dir:"*) ;;
+  *) echo "Add $dir to your PATH to run opentunnel, for example:"
+     echo "  export PATH=\"$dir:\$PATH\"" ;;
+esac
+echo "Get started: opentunnel route add <name> <port>"

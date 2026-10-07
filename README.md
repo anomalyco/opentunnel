@@ -12,17 +12,24 @@ HTTP plaintext.
 
 ## Installation
 
-The CLI requires [Bun](https://bun.sh):
+Install the CLI with any of:
 
 ```bash
-bun install -g opentunnel
+curl -fsSL https://opentunnel.xyz/install | sh
+brew install anomalyco/tap/opentunnel
+yay -S opentunnel-bin                  # Arch Linux (AUR)
+npm install -g opentunnel              # or bun / pnpm
+cargo install opentunnel-cli
 ```
 
-Then create a tunnel and route traffic to a local process:
+Prebuilt binaries for Linux and macOS (x64 and arm64) are attached to each
+[GitHub release](https://github.com/anomalyco/opentunnel/releases).
+
+Then route a subdomain to a local port. This creates the tunnel on first use
+and starts the background service:
 
 ```bash
-opentunnel create
-opentunnel route add api 127.0.0.1:3000
+opentunnel route add api 3000
 ```
 
 See [packages/cli](packages/cli) for the full command reference.
@@ -35,13 +42,24 @@ See [packages/cli](packages/cli) for the full command reference.
 - One Durable Object per tunnel owns durable metadata, the authenticated bridge
   WebSocket, and active TCP channels.
 - A Cloudflare Workflow issues certificates with ZeroSSL using DNS-01.
-- The local bridge owns the certificate private key and forwards decrypted
-  traffic to the local application.
+- The local client owns the certificate private key, terminates TLS, and
+  forwards decrypted traffic to the local application.
 
-Shared schemas, bridge framing, and the Effect HTTP API contract live in
-`packages/protocol`. Server handlers, ClientHello routing, Cloudflare runtime,
-and the temporary relay live in `packages/server`. The local proxy lives in
-`packages/client` and is exposed through `packages/cli`.
+There are two client implementations that share one protocol:
+
+| Path | What it is |
+| --- | --- |
+| `crates/opentunnel` | Rust client library and wire types, published as `opentunnel` on crates.io |
+| `crates/opentunnel-cli` | The `opentunnel` CLI and per-profile background service |
+| `packages/client` | Pure TypeScript SDK for Bun (`@opentunnel/client`) |
+| `packages/protocol` | TypeScript schemas, bridge framing, and the HTTP API contract |
+| `packages/server` | Cloudflare Worker, Durable Objects, Workflow, temporary relay |
+| `packages/cli` | npm launcher and publish script for the Rust CLI |
+
+The wire protocol and on-disk layout are specified in
+[docs/protocol.md](docs/protocol.md). Both clients are tested against the
+shared vectors in `spec/vectors`, so a change to the protocol must update the
+spec, the vectors, and both clients.
 
 ## Configuration
 
@@ -76,21 +94,18 @@ bun run cf-typegen
 bun run dev
 ```
 
-The local Worker listens on `http://localhost:8787`. Run the demo bridge in a
+The local Worker listens on `http://localhost:8787`. Point the CLI at it in a
 second terminal after starting a local HTTP application on port 4096:
 
 ```bash
-bun run opentunnel create
-bun run opentunnel route add api http://127.0.0.1:4096
-bun run opentunnel connect
+export OPENTUNNEL_API=http://localhost:8787
+bun run opentunnel route add api 4096
 ```
 
 Useful commands:
 
 ```bash
-bun run ready
+bun run test      # Rust and TypeScript tests
+bun run ready     # TypeScript checks and a Wrangler dry-run bundle
 bun run deploy
 ```
-
-`bun run ready` runs every package's tests, TypeScript checks, and a Wrangler
-dry-run bundle.

@@ -4,10 +4,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opentunnel.git"
+    "url": "git+https://github.com/anomalyco/opentunnel.git",
+    "directory": "packages/protocol"
   },
   "files": [
-    "dist"
+    "src"
   ],
   "type": "module",
   "exports": {
@@ -20,7 +21,7 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "prepublishOnly": "bun run build"
+    "test": "bun test"
   },
   "dependencies": {
     "effect": "catalog:"
@@ -29,6 +30,8 @@
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "bumpp": "catalog:",
-    "typescript": "catalog:"
-  }
+    "typescript": "catalog:",
+    "@types/bun": "catalog:"
+  },
+  "description": "OpenTunnel wire protocol: schemas, bridge framing, and the HTTP API contract"
 }

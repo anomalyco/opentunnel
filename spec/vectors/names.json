@@ -1,0 +1,34 @@
+{
+  "route": [
+    { "value": "@", "valid": true },
+    { "value": "api", "valid": true },
+    { "value": "a", "valid": true },
+    { "value": "my-app2", "valid": true },
+    { "value": "-api", "valid": false },
+    { "value": "api-", "valid": false },
+    { "value": "Api", "valid": false },
+    { "value": "a.b", "valid": false },
+    { "value": "", "valid": false },
+    { "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "valid": true },
+    { "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "valid": false }
+  ],
+  "profile": [
+    { "value": "default", "valid": true },
+    { "value": "work-2", "valid": true },
+    { "value": "@", "valid": false },
+    { "value": "../etc", "valid": false },
+    { "value": "Work", "valid": false },
+    { "value": "", "valid": false }
+  ],
+  "target": [
+    { "value": "127.0.0.1:3000", "valid": true },
+    { "value": "localhost:8080", "valid": true },
+    { "value": "[::1]:4000", "valid": true },
+    { "value": "127.0.0.1", "valid": false },
+    { "value": "http://127.0.0.1:3000", "valid": false },
+    { "value": "127.0.0.1:0", "valid": false },
+    { "value": "127.0.0.1:65536", "valid": false },
+    { "value": ":3000", "valid": false },
+    { "value": "127.0.0.1:3000/path", "valid": false }
+  ]
+}

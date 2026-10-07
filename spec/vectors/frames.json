@@ -1,0 +1,6 @@
+[
+  { "conn": 0, "payload": "", "frame": "00000000" },
+  { "conn": 1, "payload": "68656c6c6f", "frame": "0000000168656c6c6f" },
+  { "conn": 4294967295, "payload": "ff00", "frame": "ffffffffff00" },
+  { "conn": 305419896, "payload": "16030100", "frame": "1234567816030100" }
+]

@@ -8,6 +8,14 @@
 - Run commands in the most granular package you are testing, not at the root (e.g. `cd packages/protocol && bun run build` instead of `bun run ready` from the root).
 - Common commands: `bun run build` (build for production), `bun run test` (run tests).
 
+## Clients
+
+- There are two client implementations: Rust (`crates/`) and the TypeScript SDK (`packages/client`, Bun only).
+- The CLI and background service are Rust (`crates/opentunnel-cli`). `packages/cli` only contains the npm launcher and the publish script that generates the per-platform packages.
+- `docs/protocol.md` is the source of truth for the wire protocol and on-disk layout. Protocol changes must update the spec, `spec/vectors`, and both clients.
+- Rust checks: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`.
+- Rust uses the `ring` crypto provider everywhere; do not add dependencies that pull in `aws-lc-rs`, since it complicates cross-compiling.
+
 ## Cloudflare Runtime
 
 - The hosted application is `packages/server`.

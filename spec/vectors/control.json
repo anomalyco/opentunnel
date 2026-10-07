@@ -1,0 +1,29 @@
+{
+  "client": [
+    { "type": "attach", "token": "tok_123", "transport": "ws", "routes": ["@", "api"], "client": { "version": "0.1.0", "max_conns": 256 } },
+    { "type": "ping", "time_sent": 1700000000000 },
+    { "type": "pong", "time_sent": 1700000000000 },
+    { "type": "end", "conn": 7 },
+    { "type": "reset", "conn": 4294967295, "code": "unknown_route" }
+  ],
+  "server": [
+    { "type": "attached", "session": "sess_1", "routes": ["api"], "heartbeat_ms": 15000, "idle_timeout_ms": 45000 },
+    { "type": "attach_error", "code": "bad_token" },
+    { "type": "open", "conn": 1, "peer": "203.0.113.9", "sni": "api.demo.opentunnel.xyz", "alpn": "h2,http/1.1" },
+    { "type": "ping", "time_sent": 1700000000000 },
+    { "type": "pong", "time_sent": 1700000000000 },
+    { "type": "drain", "reason": "deploy" },
+    { "type": "end", "conn": 1 },
+    { "type": "reset", "conn": 1, "code": "client_io_error" }
+  ],
+  "ignored": [
+    { "type": "future_message", "anything": true }
+  ],
+  "invalid": [
+    { "type": "open", "conn": -1, "peer": "x", "sni": "x", "alpn": "" },
+    { "type": "open", "conn": 4294967296, "peer": "x", "sni": "x", "alpn": "" },
+    { "type": "end" },
+    { "type": "attached", "session": "s" },
+    { "conn": 1 }
+  ]
+}

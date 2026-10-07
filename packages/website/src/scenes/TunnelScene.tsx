@@ -15,9 +15,11 @@ import { legCrossing, type Crossing } from "./tunnelFlight"
 import { ArrowsLeftRight, SpeakerHigh, SpeakerSlash, Stack, Terminal, WebhooksLogo } from "@phosphor-icons/react"
 import "./tunnel-scene.css"
 
-// browser ──▶ relay ──▶ opencode
-//                  ╲──▶ api          (your machine)
-//                   ╲─▶ webhooks
+// browser ──▶ relay ──▶│opencode
+//                       │╲──▶ api          (your machine)
+//                       │ ╲─▶ webhooks
+//
+// opentunnel is the left border of your machine: the one place the bytes come in, and where they are opened.
 //
 // HTML frames carry the anatomy; one SVG overlay measures them and draws wires,
 // sockets, pulses and light, as the blog's shipped diagrams do. Each leg is one
@@ -43,7 +45,7 @@ function Browser({ clock, reduced }: { clock: MotionValue<number>; reduced: bool
 function Relay({ clock, reduced, crossings, fronts, now }: { clock: MotionValue<number>; reduced: boolean; crossings: readonly Crossing[]; fronts: MotionValue<readonly RelayFront[]>; now: MotionValue<number> }) {
   // Working while the bytes are inside: the icon holds bright while the field is lit.
   const inks = usePluginActivity(clock, { dispatches: [], running: crossings.map(c => [c.enter, c.leave] as const), reduced })
-  return <NodeCard name="relay" icon={<ArrowsLeftRight size={16} />} data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
+  return <NodeCard name="*.opentunnel.xyz" icon={<ArrowsLeftRight size={16} />} data-node="relay" aria-label="The relay, which cannot decrypt" {...inks}>
     {!reduced && <RelayField fronts={fronts} now={now} className="tunnel-relay-field" />}
   </NodeCard>
 }
@@ -69,6 +71,50 @@ function fractionAtX(path: SVGPathElement, length: number, x: number) {
     if (path.getPointAtLength(mid * length).x < x) low = mid; else high = mid
   }
   return (low + high) / 2
+}
+
+/** opentunnel, written up your machine's left border below where the bytes come in. The text knocks the border out. */
+function GateLabel({ machine, entry }: { machine: Box; entry: { x: number; y: number } }) {
+  const below = entry.y + 22, bottom = machine.y + machine.height - 12
+  const centre = (below + bottom) / 2, x = machine.x
+  return <g className="tunnel-gate-label">
+    <rect x={x - 8} y={centre - 46} width={16} height={92} fill="#000" />
+    <text x={x} y={centre} transform={`rotate(-90 ${x} ${centre})`} textAnchor="middle" dominantBaseline="central">OPENTUNNEL</text>
+  </g>
+}
+
+const GLYPHS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789+/=#%&*$@"
+const scramble = (slot: number, tick: number) => {
+  const x = Math.sin(slot * 91.7 + tick * 47.3) * 43758.5453
+  return GLYPHS[Math.floor((x - Math.floor(x)) * GLYPHS.length)]!
+}
+
+/** The request as the relay sees it: a few characters of ciphertext riding the dot's path, never the same twice,
+ * until they cross your machine's border and condense into the light. */
+function Cipher({ clock, path, length, ease, send, opened }: { clock: MotionValue<number>; path: SVGPathElement; length: number; ease: Crossing["ease"]; send: number; opened: number }) {
+  const text = useRef<SVGTextElement>(null)
+  const SLOTS = 4, collapse = 14 / length
+  const paint = (seconds: number) => {
+    const element = text.current
+    if (!element) return
+    const u = (seconds - send) / (tunnelTravel / 1000)
+    const progress = u <= 0 ? 0 : ease.at(Math.min(1, u))
+    const gathering = pulseGatherMs / 1000 / (tunnelTravel / 1000)
+    if (u < -gathering || progress >= opened) { element.setAttribute("opacity", "0"); return }
+    const point = path.getPointAtLength(progress * length)
+    // Fades up as the request gathers at the browser; draws in on itself as it reaches the border.
+    const arriving = Math.min(1, (u + gathering) / gathering)
+    const closing = Math.max(0, Math.min(1, (opened - progress) / collapse))
+    // Each character changes on its own beat, a little out of step with the others.
+    const characters = Array.from({ length: SLOTS }, (_, slot) => scramble(slot, Math.floor(seconds * 18 + slot * .37))).join("")
+    element.textContent = characters
+    element.setAttribute("x", String(point.x)); element.setAttribute("y", String(point.y))
+    element.setAttribute("letter-spacing", String(1.5 * closing - 1.5 * (1 - closing)))
+    element.setAttribute("opacity", String(arriving * (.25 + .75 * closing)))
+  }
+  useMotionValueEvent(clock, "change", paint)
+  useEffect(() => paint(clock.get()))
+  return <text ref={text} className="tunnel-cipher" textAnchor="middle" dominantBaseline="central" opacity={0} />
 }
 
 /** Wires, sockets, pulses and light over the measured frames. */
@@ -107,13 +153,14 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
     const relayIn = { x: relay.x, y: middle(relay) }
     const relayOut = { x: relay.x + relay.width, y: middle(relay) }
     const routeIn = (box: Box) => ({ x: box.x, y: middle(box) })
-    const spine = (relayOut.x + machine.x) / 2
-    // The whole leg is one path: into the relay, straight through it, out the far socket, then an S-curve to the route.
-    const through = `M${browserOut.x} ${browserOut.y}L${relayIn.x} ${relayIn.y}L${relayOut.x} ${relayOut.y}`
+    // One wire into your machine, level with the relay; inside, it fans out to the apps.
+    const entry = { x: machine.x, y: relayOut.y }
+    const through = `M${browserOut.x} ${browserOut.y}L${relayIn.x} ${relayIn.y}L${relayOut.x} ${relayOut.y}L${entry.x} ${entry.y}`
     const hop = (box: Box) => {
       const input = routeIn(box)
-      if (Math.abs(input.y - relayOut.y) < 1) return `H${input.x}`
-      return `C${spine} ${relayOut.y} ${spine} ${input.y} ${input.x} ${input.y}`
+      if (Math.abs(input.y - entry.y) < 1) return `H${input.x}`
+      const spine = (entry.x + input.x) / 2
+      return `C${spine} ${entry.y} ${spine} ${input.y} ${input.x} ${input.y}`
     }
     const legs = routes.map((box, index) => {
       const d = through + hop(box)
@@ -123,9 +170,10 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
       const enter = fractionAtX(path, length, relay.x), leave = fractionAtX(path, length, relay.x + relay.width)
       // Through the relay the bytes move as through something thick: the crossing knows when, and how fast.
       const crossing = legCrossing(index, { enter, leave })
-      return { d, path, length, ease: crossing.ease, crossing }
+      // Until the bytes cross into your machine they are ciphertext.
+      return { d, path, length, ease: crossing.ease, crossing, opened: fractionAtX(path, length, machine.x) }
     })
-    return { browserOut, relayIn, relayOut, routeIn, legs, wires: { request: `M${browserOut.x} ${browserOut.y}L${relayIn.x} ${relayIn.y}`, hops: routes.map(box => `M${relayOut.x} ${relayOut.y}${hop(box)}`) } }
+    return { browserOut, relayIn, relayOut, routeIn, entry, legs, wires: { request: `M${browserOut.x} ${browserOut.y}L${relayIn.x} ${relayIn.y}`, toMachine: `M${relayOut.x} ${relayOut.y}L${entry.x} ${entry.y}`, hops: routes.map(box => `M${entry.x} ${entry.y}${hop(box)}`) } }
   }, [bounds])
 
   // The relay's field follows every dot in flight: each one's position across the card's interior, and scene time.
@@ -150,10 +198,10 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
   if (!bounds || !geometry) return null
 
   const { browser, relay, machine, routes } = bounds
-  const { browserOut, relayIn, relayOut, routeIn, legs, wires } = geometry
+  const { browserOut, relayIn, relayOut, routeIn, entry, legs, wires } = geometry
   const routeLanding = routeIn
-  // Where each wire crosses the machine's left border: a short gap centred on the socket, `thickness` deep.
-  const opening = (box: Box, thickness: number) => ({ x: machine.x - Math.floor(thickness / 2), y: routeIn(box).y - 18, width: thickness, height: 36 })
+  // Where the wire crosses the machine's left border: a short gap centred on it, `thickness` deep.
+  const opening = (thickness: number) => ({ x: machine.x - Math.floor(thickness / 2), y: entry.y - 18, width: thickness, height: 36 })
   const reflection = { borders: [browser, relay, machine, ...routes].map(outlineOf).join(""), strength: .9, radius: 110 }
 
   return <svg className="tunnel-signals" viewBox={`0 0 ${bounds.width} ${bounds.height}`} aria-hidden="true">
@@ -173,13 +221,15 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
       </linearGradient>
       <mask id={`${id}-openings`} maskUnits="userSpaceOnUse" x={0} y={0} width={bounds.width} height={bounds.height}>
         <rect width={bounds.width} height={bounds.height} fill="white" />
-        {routes.map((box, index) => <rect key={index} {...opening(box, 5)} fill={`url(#${id}-opening-dim)`} />)}
+        <rect {...opening(5)} fill={`url(#${id}-opening-dim)`} />
       </mask>
     </defs>
 
     {/* The frame's border opens softly where each wire enters; the wire runs over the gap. */}
-    {routes.map((box, index) => <rect key={index} {...opening(box, 3)} fill={`url(#${id}-opening)`} />)}
+    <rect {...opening(3)} fill={`url(#${id}-opening)`} />
+    <GateLabel machine={machine} entry={entry} />
     <GraphWire d={wires.request} />
+    <GraphWire d={wires.toMachine} />
     {wires.hops.map((d, index) => <GraphWire key={index} d={d} />)}
 
     <GraphSignals ports={<>
@@ -197,8 +247,10 @@ function TunnelSignals({ clock, reduced, panels, onCrossings, fronts, now }: { c
       </g>)}
     </>}>
       {!reduced && <g mask={`url(#${id}-relay-cutout)`}>
-        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
+        {legs.map((leg, index) => <Pulse key={index} d={leg.d} clock={milliseconds} delay={tunnelLegs[index]!.send * 1000 - pulseGatherMs} duration={tunnelTravel} ease={leg.ease} hiddenUntil={leg.opened} reflection={reflection} underlayMask={`url(#${id}-openings)`} />)}
+        {legs.map((leg, index) => <Cipher key={index} clock={clock} path={leg.path} length={leg.length} ease={leg.ease} send={tunnelLegs[index]!.send} opened={leg.opened} />)}
       </g>}
+
     </GraphSignals>
   </svg>
 }

@@ -14,4 +14,11 @@ export interface StoredTunnel {
   readonly certificate?: Certificate.Info;
   readonly certificateCsr?: string;
   readonly certificateIdentifiers?: ReadonlyArray<string>;
+  /** Set on every successful bridge attach; renewals skip tunnels idle longer than a certificate lifetime. */
+  readonly lastConnectedAt?: string;
+  /** A renewal issuing alongside the current certificate, which keeps serving until it completes. */
+  readonly renewal?: {
+    readonly certificateID: Certificate.ID;
+    readonly startedAt: string;
+  };
 }

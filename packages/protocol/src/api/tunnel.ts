@@ -15,6 +15,7 @@ import {
 import { OpenTunnelAuthorization } from "./auth.js";
 
 export const CreateTunnelRequest = Schema.Struct({
+  /** No longer supported; the server rejects requests that set it. */
   name: Schema.String.pipe(Schema.optional),
 });
 

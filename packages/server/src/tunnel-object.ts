@@ -69,6 +69,15 @@ const parseControl = (message: string): Record<string, unknown> | undefined => {
   }
 };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Renew this long before the current certificate expires. */
+const RENEW_BEFORE_MS = 30 * DAY_MS;
+/** Tunnels with no connection in this window are not renewed and expire. */
+const ACTIVE_WINDOW_MS = 90 * DAY_MS;
+const RENEWAL_RETRY_MS = 60 * 60 * 1000;
+/** A renewal still running after this long is treated as lost and restarted. */
+const RENEWAL_STALE_MS = DAY_MS;
+
 const validRoute = (route: string): boolean =>
   route === "@" || /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(route);
 
@@ -120,7 +129,28 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
 
   async updateCertificate(id: string, input: Certificate.State): Promise<boolean> {
     const record = await this.record();
-    if (!record || record.deletedAt || String(record.certificateID) !== id) return false;
+    if (!record || record.deletedAt) return false;
+    if (record.renewal && String(record.renewal.certificateID) === id) {
+      if (input.type === "ready") {
+        const renewed: StoredTunnel = {
+          ...record,
+          certificateID: record.renewal.certificateID,
+          certificate: new Certificate.Info({
+            id: record.renewal.certificateID,
+            state: new Certificate.StateReady(input),
+          }),
+          renewal: undefined,
+        };
+        await this.save(renewed);
+        await this.scheduleRenewal(renewed);
+      } else if (input.type === "failed") {
+        console.error("Certificate renewal failed", { tunnel: record.id, reason: input.reason });
+        await this.save({ ...record, renewal: undefined });
+        await this.ctx.storage.setAlarm(Date.now() + RENEWAL_RETRY_MS);
+      }
+      return true;
+    }
+    if (String(record.certificateID) !== id) return false;
     const state = input.type === "issuing"
       ? new Certificate.StateIssuing(input)
       : input.type === "challenge"
@@ -128,11 +158,85 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         : input.type === "ready"
           ? new Certificate.StateReady(input)
           : new Certificate.StateFailed(input);
-    await this.save({
+    const updated: StoredTunnel = {
       ...record,
       certificate: new Certificate.Info({ id: Certificate.ID.makeUnsafe(id), state }),
-    });
+    };
+    await this.save(updated);
+    await this.scheduleRenewal(updated);
     return true;
+  }
+
+  /** Renews the certificate of active tunnels shortly before it expires. */
+  async alarm(): Promise<void> {
+    const record = await this.record();
+    if (!record || record.deletedAt || record.certificate?.state.type !== "ready") return;
+    if (record.renewal && Date.now() - Date.parse(record.renewal.startedAt) < RENEWAL_STALE_MS) return;
+    if (Date.parse(record.certificate.state.expiry) - RENEW_BEFORE_MS > Date.now()) {
+      await this.scheduleRenewal(record);
+      return;
+    }
+    if (!this.isActive(record)) return;
+    await this.startRenewal(record);
+  }
+
+  private async scheduleRenewal(record: StoredTunnel): Promise<void> {
+    const state = record.certificate?.state;
+    if (record.deletedAt || state?.type !== "ready") return;
+    const renewAt = Date.parse(state.expiry) - RENEW_BEFORE_MS;
+    await this.ctx.storage.setAlarm(Math.max(renewAt, Date.now() + 60_000));
+  }
+
+  private isActive(record: StoredTunnel): boolean {
+    if (this.attachedBridges().length > 0) return true;
+    return record.lastConnectedAt !== undefined &&
+      Date.now() - Date.parse(record.lastConnectedAt) < ACTIVE_WINDOW_MS;
+  }
+
+  private attachedBridges(): WebSocket[] {
+    return this.ctx.getWebSockets("bridge").filter((socket) =>
+      (socket.deserializeAttachment() as BridgeAttachment | null)?.attached === true
+    );
+  }
+
+  /** Issues a new certificate from the stored CSR; the current one serves until it is ready. */
+  private async startRenewal(record: StoredTunnel): Promise<void> {
+    if (!record.certificateCsr) return;
+    const certificateID = Certificate.ID.makeUnsafe(`cert_${crypto.randomUUID()}`);
+    await this.save({ ...record, renewal: { certificateID, startedAt: new Date().toISOString() } });
+    try {
+      await env.CERTIFICATES.create({
+        id: String(certificateID),
+        params: {
+          tunnelID: String(record.id),
+          certificateID: String(certificateID),
+          hostname: String(record.hostname),
+          identifiers: (record.certificateIdentifiers ?? [record.hostname]).map(String),
+          csr: record.certificateCsr,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to start certificate renewal", { tunnel: record.id, error: String(error) });
+      await this.save({ ...record, renewal: undefined });
+      await this.ctx.storage.setAlarm(Date.now() + RENEWAL_RETRY_MS);
+    }
+  }
+
+  /**
+   * Renews on connect when the certificate is close to or past expiry, which
+   * covers tunnels that went idle and come back, and schedules the renewal
+   * alarm for tunnels created before renewals existed.
+   */
+  private async onAttached(record: StoredTunnel): Promise<void> {
+    const state = record.certificate?.state;
+    if (state?.type !== "ready") return;
+    const staleRenewal = record.renewal &&
+      Date.now() - Date.parse(record.renewal.startedAt) >= RENEWAL_STALE_MS;
+    if ((!record.renewal || staleRenewal) && Date.parse(state.expiry) - RENEW_BEFORE_MS <= Date.now()) {
+      await this.startRenewal(record);
+    } else if ((await this.ctx.storage.getAlarm()) === null) {
+      await this.scheduleRenewal(record);
+    }
   }
 
   async bindCertificate(token: string, csr: string): Promise<BindCertificateResult> {
@@ -195,12 +299,13 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       id: certificateID,
       state: new Certificate.StateIssuing({ type: "issuing" }),
     });
-    const issuing = {
+    const issuing: StoredTunnel = {
       ...record,
       certificateID,
       certificate,
       certificateCsr: csr,
       certificateIdentifiers: identifiers,
+      renewal: undefined,
     };
     await this.save(issuing);
     try {
@@ -311,7 +416,12 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         session,
         routes: requestedRoutes,
       } satisfies BridgeAttachment);
-      await this.save({ ...record, state: "online" });
+      const connected: StoredTunnel = {
+        ...record,
+        state: "online",
+        lastConnectedAt: new Date().toISOString(),
+      };
+      await this.save(connected);
       socket.send(
         JSON.stringify({
           type: "attached",
@@ -321,6 +431,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
           idle_timeout_ms: BridgeProtocol.BridgeTiming.IDLE_TIMEOUT_MS,
         }),
       );
+      await this.onAttached(connected);
       return;
     }
 

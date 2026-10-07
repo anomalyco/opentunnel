@@ -40,9 +40,12 @@ type PulseProps = {
   underlayMask?: string
   /** How the flight spends its time along the path; scenes can slow a stretch of it. */
   ease?: PulseEase
+  /** Path fraction before which the dot itself is not drawn (its trail and light still are), for scenes that
+   * carry it as something else until then. */
+  hiddenUntil?: number
 }
 
-export function Pulse({ d, clock, duration, delay, reflection, underlayMask, ease = pulseEase }: PulseProps) {
+export function Pulse({ d, clock, duration, delay, reflection, underlayMask, ease = pulseEase, hiddenUntil = 0 }: PulseProps) {
   const path = useRef<SVGPathElement>(null)
   const dot = useRef<SVGCircleElement>(null)
   const ring = useRef<SVGCircleElement>(null)
@@ -124,19 +127,22 @@ export function Pulse({ d, clock, duration, delay, reflection, underlayMask, eas
         c.setAttribute("cx", String(start.x)); c.setAttribute("cy", String(start.y))
         c.setAttribute("fill", palette.dot); c.setAttribute("stroke", "none")
         c.setAttribute("r", String(RADIUS * g))
-        c.setAttribute("opacity", String(Math.pow(g, 1.5)))
+        c.setAttribute("opacity", String(hiddenUntil > 0 ? 0 : Math.pow(g, 1.5)))
         r.setAttribute("cx", String(start.x)); r.setAttribute("cy", String(start.y))
         r.setAttribute("r", String(RADIUS + 14 * (1 - g)))
         r.setAttribute("opacity", String(0.5 * Math.sin(g * Math.PI)))
         return
       }
       if (t < traveling) {
-        const point = at(ease.at(t / traveling))
+        const progress = ease.at(t / traveling)
+        const point = at(progress)
         reflect(point, 1)
         c.setAttribute("cx", String(point.x)); c.setAttribute("cy", String(point.y))
-        c.setAttribute("r", String(RADIUS))
+        // Appearing: the dot condenses out of whatever carried it, over a few pixels of wire.
+        const shown = hiddenUntil > 0 ? smoothstep((progress - hiddenUntil) / (12 / length)) : 1
+        c.setAttribute("r", String(RADIUS * (.4 + .6 * shown)))
         c.setAttribute("fill", palette.dot); c.setAttribute("stroke", "none")
-        c.setAttribute("opacity", "1")
+        c.setAttribute("opacity", String(shown))
         r.setAttribute("opacity", "0")
       } else if (t < traveling + absorption) {
         const q = (t - traveling) / absorption
@@ -155,7 +161,7 @@ export function Pulse({ d, clock, duration, delay, reflection, underlayMask, eas
     }
     tick(clock.get())
     return clock.on("change", tick)
-  }, [d, clock, duration, delay, bloom, ease, reflection?.borders, reflectionStrength])
+  }, [d, clock, duration, delay, bloom, ease, reflection?.borders, reflectionStrength, hiddenUntil])
 
   return <g className="pulse">
     <defs>

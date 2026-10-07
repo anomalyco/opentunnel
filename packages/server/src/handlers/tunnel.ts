@@ -21,14 +21,14 @@ import { Random } from "../random.js";
 export const TunnelHandlers = HttpApiBuilder.group(Api, "tunnel", (handlers) =>
   handlers
     .handle("tunnel.create", ({ payload }) => {
-      const id = payload.name?.toLowerCase() ?? Random.slug();
-      if (!/^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/.test(id)) {
+      if (payload.name !== undefined) {
         return Effect.gen(function* () {
           return yield* new InvalidRequestError({
-            message: "Tunnel names must be 3-63 lowercase letters, numbers, or hyphens",
+            message: "Custom tunnel names are not supported; omit name to get a random hostname",
           });
         });
       }
+      const id = Random.slug();
       const token = Tunnel.Token.makeUnsafe(randomToken());
       return Effect.tryPromise({
         try: async () =>

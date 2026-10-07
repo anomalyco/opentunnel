@@ -11,14 +11,16 @@ import { Splatter } from "./Splatter"
 const github = "https://github.com/anomalyco/opentunnel"
 
 const installs = {
+  curl: "curl -fsSL https://opentunnel.xyz/install | sh",
+  brew: "brew install anomalyco/tap/opentunnel",
+  arch: "yay -S opentunnel-bin",
   npm: "npm i -g opentunnel",
-  bun: "bun add -g opentunnel",
-  pnpm: "pnpm add -g opentunnel",
+  cargo: "cargo install opentunnel-cli",
 } as const
 type Manager = keyof typeof installs
 
 function Install() {
-  const [manager, setManager] = useState<Manager>("npm")
+  const [manager, setManager] = useState<Manager>("curl")
   return <div className="install">
     <div className="tabs" role="tablist">
       {(Object.keys(installs) as Manager[]).map(name => <button key={name} type="button" role="tab" aria-selected={manager === name} data-current={manager === name || undefined} onClick={() => setManager(name)}>{name}</button>)}
@@ -56,32 +58,29 @@ export function App() {
 
       <section className="usage">
         <h2>cli</h2>
-        <pre>{`$ opentunnel create\n`}{out("created f7a2mx4kq9vn.opentunnel.xyz")}{`\n\n$ opentunnel route add opencode localhost:47365\n`}{out("added route opencode.f7a2mx4kq9vn.opentunnel.xyz -> localhost:47365")}{`\n\n$ curl https://opencode.f7a2mx4kq9vn.opentunnel.xyz\n`}{out("hello from localhost:47365")}</pre>
+        <pre>{`$ opentunnel route add opencode 47365\n`}{out("creating tunnel... tunnel is ready.\nadded route opencode → 127.0.0.1:47365\nhttps://opencode.f7a2mx4kq9vn.opentunnel.xyz")}{`\n\n$ curl https://opencode.f7a2mx4kq9vn.opentunnel.xyz\n`}{out("hello from localhost:47365")}</pre>
       </section>
 
       <section className="sdk">
         <h2>sdk</h2>
-        <pre>{`import { create } from "@opentunnel/client"
+        <pre>{`// bun add @opentunnel/client
+import { create } from "@opentunnel/client"
 
 const client = create()
-
-await client.route.add({
-  name: "opencode",
-  target: "localhost:47365",
+const connection = await client.tunnel.connect({
+  routes: { opencode: "127.0.0.1:47365" },
 })
 
-const connection = await client.tunnel.connect()
-
-console.log(connection.routes[0].hostname)
-`}{out("opencode.f7a2mx4kq9vn.opentunnel.xyz")}</pre>
+console.log(\`https://opencode.\${connection.tunnel.hostname}\`)
+`}{out("https://opencode.f7a2mx4kq9vn.opentunnel.xyz")}</pre>
       </section>
 
       <section className="how">
         <h2>how it works</h2>
         <ol className="steps">
-          <li><Justified text="opentunnel create reserves your hostname and generates a private key on your machine. the key never leaves it." /></li>
-          <li><Justified text="the cli sends a certificate request for that hostname. a certificate is issued and bound to your tunnel name. the relay only ever sees the public half." /></li>
-          <li><Justified text="a service on your machine opens an encrypted bridge to the relay." /></li>
+          <li><Justified text="your first route creates a tunnel: a random hostname, and a private key generated on your machine. the key never leaves it." /></li>
+          <li><Justified text="the cli sends a certificate request for that hostname. a certificate is issued and bound to your tunnel name. the relay only ever sees the public half, and renews the certificate for the same key before it expires." /></li>
+          <li><Justified text="a service on your machine keeps an encrypted bridge open to the relay. apps using the sdk share the same tunnel, each with its own routes." /></li>
           <li><Justified text="visitors hit your public url. the relay reads only the hostname from the tls handshake and forwards the encrypted stream through the bridge." /></li>
           <li><Justified text="your machine terminates tls with its private key and proxies the traffic to your local apps." /></li>
         </ol>
