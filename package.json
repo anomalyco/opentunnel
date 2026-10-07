@@ -10,7 +10,7 @@
     "opentunnel": "cargo run -q -p opentunnel-cli --",
     "ready": "bun run --filter '*' build",
     "changeset": "changeset",
-    "release": "bun --cwd packages/cli run publish && bun packages/client/script/publish.ts && bun packages/cli/script/release.ts",
+    "release": "bun packages/cli/script/publish.ts && bun packages/client/script/publish.ts && bun packages/cli/script/release.ts",
     "test": "cargo test --workspace && bun run --filter '*' test"
   },
   "workspaces": {
