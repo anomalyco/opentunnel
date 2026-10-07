@@ -1,12 +1,8 @@
-import "reflect-metadata";
 import { Cause, Effect, Layer, Queue, ServiceMap, Stream } from "effect";
-import {
-  Pkcs10CertificateRequestGenerator,
-  SubjectAlternativeNameExtension,
-} from "@peculiar/x509";
 import { CSR } from "@opentunnel/protocol/csr";
 import { Tunnel } from "@opentunnel/protocol/tunnel";
 import { OpenTunnelApiClient } from "./api.js";
+import { certificateRequest } from "./csr.js";
 import { OpenTunnelClientError } from "./errors.js";
 import { OpenTunnelStorage, type OpenTunnelStorage as Storage } from "./storage.js";
 import type {
@@ -122,18 +118,7 @@ export class OpenTunnelClient extends ServiceMap.Service<
           });
           yield* Effect.sync(() => options.onProgress?.("generating-csr"));
           const csr = yield* Effect.tryPromise({
-            try: () =>
-              Pkcs10CertificateRequestGenerator.create({
-                name: `CN=${options.hostname}`,
-                extensions: [
-                  new SubjectAlternativeNameExtension([
-                    { type: "dns", value: options.hostname },
-                    { type: "dns", value: `*.${options.hostname}` },
-                  ]),
-                ],
-                signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
-                keys,
-              }),
+            try: () => certificateRequest(options.hostname, keys),
             catch: (cause) => clientError("Failed to generate certificate request", cause),
           });
           const exported = yield* Effect.tryPromise({
@@ -145,7 +130,7 @@ export class OpenTunnelClient extends ServiceMap.Service<
             hostname: options.hostname,
             token: options.token,
             privateKey: privateKeyPem(exported),
-            csr: csr.toString(),
+            csr,
           };
           yield* storage.savePending(options.profile, pending);
           return yield* completePending({

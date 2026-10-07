@@ -87,6 +87,11 @@ import { create, OpenTunnelStorage } from "@opentunnel/client"
 const client = create({ store: OpenTunnelStorage.memory() })
 ```
 
+A memory store loses the tunnel's token when the process exits, and tunnels do
+not expire, so a tunnel it created can no longer be deleted. Call
+`client.tunnel.remove()` before exiting, or use the default store for tunnels
+that should outlive the process.
+
 ## Backpressure
 
 The SDK stops reading from a local socket while more than 1 MiB is queued on

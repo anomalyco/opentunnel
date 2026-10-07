@@ -19,6 +19,14 @@ for (const dir of ["packages/protocol", "packages/client"]) {
   const tarball = `${tmpdir()}/${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`
   await $`bun pm pack --filename ${tarball}`.cwd(cwd)
   try {
+    // `bun pm pack` fills in workspace versions from bun.lock; a stale lockfile once shipped the client
+    // depending on protocol 0.0.0. Refuse to publish unless they match the packages being released.
+    const packed = JSON.parse(await $`tar -xzOf ${tarball} package/package.json`.text())
+    for (const [name, range] of Object.entries<string>(packed.dependencies ?? {})) {
+      if (!name.startsWith("@opentunnel/")) continue
+      const local = await Bun.file(`${root}/packages/${name.slice("@opentunnel/".length)}/package.json`).json()
+      if (range !== local.version) throw new Error(`${pkg.name} would publish depending on ${name}@${range}, not ${local.version}`)
+    }
     await $`npm publish ${tarball} --access public`.cwd(cwd)
   } finally {
     await rm(tarball, { force: true })

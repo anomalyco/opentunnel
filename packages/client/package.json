@@ -29,14 +29,14 @@
   },
   "dependencies": {
     "@opentunnel/protocol": "workspace:*",
-    "@peculiar/x509": "catalog:",
-    "effect": "catalog:",
-    "reflect-metadata": "catalog:"
+    "effect": "catalog:"
   },
   "devDependencies": {
+    "@peculiar/x509": "catalog:",
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
-    "typescript": "catalog:",
-    "@types/bun": "catalog:"
+    "reflect-metadata": "catalog:",
+    "typescript": "catalog:"
   }
 }

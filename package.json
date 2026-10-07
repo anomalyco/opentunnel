@@ -10,7 +10,7 @@
     "ready": "cf workers types && bun run --filter '*' build && vite build",
     "opentunnel": "cargo run -q -p opentunnel-cli --",
     "changeset": "changeset",
-    "version": "changeset version && bun packages/cli/script/version.ts",
+    "version": "changeset version && bun packages/cli/script/version.ts && bun install",
     "release": "bun packages/cli/script/publish.ts && bun packages/client/script/publish.ts && bun packages/cli/script/crates.ts && bun packages/cli/script/release.ts",
     "test": "cargo test --workspace && bun run --filter '*' test"
   },
