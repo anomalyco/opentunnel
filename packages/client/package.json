@@ -1,6 +1,6 @@
 {
   "name": "@opentunnel/client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OpenTunnel SDK for Bun: expose local services through a blind TLS tunnel",
   "license": "MIT",
   "repository": {
