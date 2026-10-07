@@ -1,5 +1,11 @@
 # opentunnel
 
+## 0.1.3
+
+### Patch Changes
+
+- 7464a51: On macOS, fall back to a plain background process when no one is logged in at the console (for example over SSH), instead of failing to start the launchd service.
+
 ## 0.1.2
 
 ### Patch Changes
