@@ -1,5 +1,11 @@
 # opentunnel
 
+## 0.1.4
+
+### Patch Changes
+
+- dee1174: Publish to Homebrew: `brew install anomalyco/tap/opentunnel`.
+
 ## 0.1.3
 
 ### Patch Changes
