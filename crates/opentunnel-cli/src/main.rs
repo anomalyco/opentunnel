@@ -18,7 +18,7 @@ use crate::control::{DaemonStatus, Phase};
 #[derive(Parser)]
 #[command(
     name = "opentunnel",
-    version = option_env!("OPENTUNNEL_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")),
+    version,
     about = "Create and manage blind TLS tunnels"
 )]
 struct Cli {
