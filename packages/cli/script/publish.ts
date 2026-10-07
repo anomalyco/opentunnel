@@ -47,7 +47,7 @@ await Bun.write(
       description: pkg.description,
       license: pkg.license,
       repository,
-      bin: { opentunnel: "./bin/opentunnel" },
+      bin: { opentunnel: "bin/opentunnel" },
       optionalDependencies: binaries,
     },
     null,
