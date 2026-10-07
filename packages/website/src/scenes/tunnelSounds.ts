@@ -5,21 +5,28 @@ import { createFlightVoice } from "../sound/flightVoice"
 import { flightVoice } from "../sound/recipes"
 import { tunnelLegs, tunnelScore } from "./tunnelScore"
 import type { Crossing } from "./tunnelFlight"
+import { choosing, reelTicks } from "./Cipher"
 
 // The tunnel's track, derived from its score and the measured flights. Per leg: the browser dispatches; one
 // voice follows the dot, rising with its speed and going low and muffled inside the relay; the plunge into the
-// relay; and the strike on the route, a different note for each of the three so the loop climbs a triad.
+// relay; and the strike on the route, a different note for each of the three destinations.
 
 export const tunnelSoundCues = (crossings: readonly Crossing[]): readonly SceneSoundCue[] => [
   ...tunnelLegs.flatMap((leg, index) => {
     const crossing = crossings[index]
     return [
+      // The browser chooses: the reel ratchets, settles; the chosen shape breaks up as it leaves; it is opened at your machine.
+      ...reelTicks(leg.send).map(at => ({ at, event: "tick" as const })),
+      { at: leg.send - choosing.slide - choosing.rest, event: "pick" as const },
+      { at: leg.send - choosing.slide * .36, event: "seal" as const },
+      ...(crossing?.gate ? [{ at: crossing.gate.start + (crossing.gate.end - crossing.gate.start) * .15, event: "open" as const }] : []),
       { at: leg.send - .045, event: "dispatch" as const },
       ...(crossing ? [{ at: crossing.enter, event: "plunge" as const }] : []),
-      { at: leg.contact, event: `strike${index}` as SceneSoundEvent },
+      { at: leg.contact, event: `strike${leg.route}` as SceneSoundEvent },
     ]
   }),
-].sort((a, b) => a.at - b.at)
+// The first request chooses across the loop's wrap: cues before zero belong at the end of the loop.
+].map(cue => ({ ...cue, at: ((cue.at % tunnelScore.duration) + tunnelScore.duration) % tunnelScore.duration })).sort((a, b) => a.at - b.at)
 
 const smooth = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t) }
 

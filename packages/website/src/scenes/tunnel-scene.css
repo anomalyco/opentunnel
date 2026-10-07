@@ -5,6 +5,9 @@
 .tunnel-signals { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 /* Sized by the column the diagram sits in, not the viewport. */
 @container (min-width: 900px) { .tunnel-panels { grid-template-columns: 200px 230px minmax(0, 460px); justify-content: space-between; gap: 80px; } }
+.tunnel-relay { position: relative; }
+/* The shield's canvas reaches well past the card: two card heights above and below, nearly half its width either side. */
+.tunnel-shield-field { position: absolute; left: -45%; right: -45%; top: -220%; bottom: -220%; width: 190%; height: 540%; display: block; pointer-events: none; z-index: 3; }
 .tunnel-relay-field { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); display: block; pointer-events: none; }
 
 /* The blog's diagram inks, in the page's own face: plain Plex Mono, lowercase, grey structure, ivory light. */
@@ -38,12 +41,22 @@
   .tunnel-scene .node-card-icon svg { width: 20px; height: 20px; }
   .tunnel-routes { gap: 14px; padding: 14px; }
   .tunnel-machine .tunnel-machine-label { left: auto; right: 0; white-space: nowrap; }
+  .tunnel-visitor .node-card-icon { opacity: calc(1 - var(--choosing, 0)); }
 }
 
-/* Your machine's left border is opentunnel: its name runs up the border, and the apps sit back from it to
-   leave room for the wire to fan out. */
-.tunnel-machine .tunnel-routes { padding-left: 64px; }
-.tunnel-gate-label text { fill: #aaa; font: 400 10px var(--font-text), monospace; letter-spacing: .22em; }
-@container (max-width: 899px) { .tunnel-machine .tunnel-routes { padding-left: 48px; } }
-@container (max-width: 560px) { .tunnel-machine .tunnel-routes { padding-left: 28px; } .tunnel-gate-label { display: none; } }
-.tunnel-cipher { fill: #e8e4dc; font: 500 10px var(--font-text), monospace; paint-order: stroke; stroke: #000; stroke-width: 3px; }
+/* Your machine's left border is the gate: the apps sit back from it, leaving a straight run of wire through the
+   gate before it fans out. */
+.tunnel-machine .tunnel-routes { padding-left: 84px; }
+@container (max-width: 899px) { .tunnel-machine .tunnel-routes { padding-left: 64px; } }
+@container (max-width: 560px) { .tunnel-machine .tunnel-routes { padding-left: 28px; } }
+.tunnel-packet-glyph { fill: #cfcac1; font: 500 10px var(--font-text), monospace; paint-order: stroke; stroke: #000; stroke-width: 3px; }
+.tunnel-packet-glyph.is-plain { fill: #fffaf0; }
+
+/* The sealed packet's canvas, over the wires; and (development) the switch between its treatments. */
+.tunnel-cipher-canvas { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.tunnel-gate-field { position: absolute; z-index: 2; pointer-events: none; }
+.tunnel-cipher-switch { position: absolute; left: 0; bottom: 0; display: flex; gap: 12px; font: 400 11px/1 var(--font-text), monospace; }
+.tunnel-cipher-switch button { font: inherit; color: #666; background: none; border: 0; padding: 0; cursor: pointer; }
+.tunnel-cipher-switch button[aria-pressed=true] { color: #e8e4dc; }
+/* When the app's shape is its slot on the wire, the card carries just the name; a phone's wordless card keeps the shape. */
+@container (min-width: 561px) { .tunnel-scene .node-card[data-slotted] .node-card-icon { display: none; } }

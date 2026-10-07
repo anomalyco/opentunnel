@@ -59,3 +59,37 @@ export function flightVoice({ speed, depth }: FlightState): TravelSoundSettings 
     resonance: .25 * d,
   }
 }
+
+/** The reel's ratchet: a tiny dry click each time a shape passes the centre. */
+export const tick: SoundRecipe = { masterGain: .35, layers: [
+  { kind: "noise", filterType: "highpass", filterFrequency: 3200, attack: .001, decay: .01, peak: .07 },
+  { kind: "tone", waveform: sine, frequency: 2350, attack: .001, decay: .016, peak: .01 },
+] }
+
+/** The reel settles: a firmer click and a small bright note, the destination chosen. */
+export const pick: SoundRecipe = { masterGain: .4, layers: [
+  { kind: "noise", filterType: "bandpass", filterFrequency: 2600, filterQ: 2, attack: .001, decay: .02, peak: .07 },
+  { kind: "tone", waveform: sine, frequency: centre * 3, attack: .002, decay: .14, peak: .018 },
+  { kind: "tone", waveform: sine, frequency: centre * 1.5, offset: .012, attack: .004, decay: .2, peak: .014 },
+] }
+
+// Crackle: a run of short filtered grains, the sound of a signal breaking up. Fixed values, so it is the same every time.
+const grains = (count: number, span: number, from: number, to: number, peak: number) => Array.from({ length: count }, (_, i) => {
+  const jitter = [.3, -.2, .45, -.4, .1, .35, -.3, .2, -.1, .4, -.35, .15][i % 12]!
+  const along = i / Math.max(1, count - 1)
+  return { kind: "noise" as const, filterType: "bandpass" as const, filterFrequency: 1700 + 2800 * ((i * .618) % 1), filterQ: 3,
+    offset: Math.max(0, along * span + jitter * span / count), attack: .001, decay: .018 + .02 * ((i * .37) % 1), peak: peak * (from + (to - from) * along) }
+})
+
+/** Sealed, leaving the browser: the shape breaks into static, a crackle thinning out over the crawl, under a low note sinking away. */
+export const seal: SoundRecipe = { masterGain: .4, layers: [
+  ...grains(11, .8, 1, .25, .05),
+  { kind: "tone", waveform: sine, frequency: centre * .5, glideTo: centre * .36, glideTime: .6, attack: .06, decay: .7, peak: .012 },
+] }
+
+/** Opened, entering your machine: static thickening into a crackle that resolves into a clear note. */
+export const open: SoundRecipe = { masterGain: .4, layers: [
+  ...grains(9, .55, .3, 1, .045),
+  { kind: "tone", waveform: sine, frequency: centre * 2, offset: .58, attack: .02, decay: .7, peak: .03, envelope: "smooth" },
+  { kind: "tone", waveform: sine, frequency: centre * 3, offset: .6, attack: .03, decay: .45, peak: .008 },
+], shimmer: { delay: .11, feedback: .2, wet: .12, lowpass: 3800 } }

@@ -6,6 +6,7 @@
 //
 // The relay's share of each leg's path is measured from the running dev page (window.__tunnel.crossings) when
 // one is up at 127.0.0.1:4190; otherwise the 760px column's fractions are assumed.
+import { tunnelLegs } from "../src/scenes/tunnelScore"
 import { existsSync } from "node:fs"
 import { mkdir, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -26,7 +27,7 @@ const pageScript = await bundle.outputs[0]!.text()
 const executablePath = process.env.BROWSER_EXECUTABLE ?? [chromium.executablePath(), "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"].find(existsSync)
 const browser = await chromium.launch({ executablePath, headless: true, args: ["--autoplay-policy=no-user-gesture-required"] })
 try {
-  let fractions = [fallback, fallback, fallback]
+  let fractions = tunnelLegs.map(() => fallback)
   const given = option("--fractions")
   if (given) { const [enter, leave] = given.split(",").map(Number); fractions = fractions.map(() => ({ enter: enter!, leave: leave! })) }
   else {

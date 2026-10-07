@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useSyncExternalStore, type RefObject } from "react"
 import { cancelFrame, frame, useMotionValue } from "motion/react"
 import { getAudioContext, play, type LiveGain, type SoundRecipe } from "../sfx"
-import { dispatch, plunge, release, strike, strikeRatios } from "./recipes"
+import { dispatch, open, pick, plunge, release, seal, strike, strikeRatios, tick } from "./recipes"
 import { createSoundPreference, soundPreferenceKey } from "./preference"
 import { createSoundActivation } from "./activation"
 import { soundProximity } from "./proximity"
@@ -18,6 +18,10 @@ export const soundPalette = {
   strike0: [{ sound: strike(strikeRatios[0]), volume: .5 }],
   strike1: [{ sound: strike(strikeRatios[1]), volume: .5 }],
   strike2: [{ sound: strike(strikeRatios[2]), volume: .5 }],
+  tick: [{ sound: tick, volume: .45 }],
+  pick: [{ sound: pick, volume: .8 }],
+  seal: [{ sound: seal, volume: .9 }],
+  open: [{ sound: open, volume: .6 }],
 } as const satisfies Record<string, readonly Layer[]>
 export type SceneSoundEvent = keyof typeof soundPalette
 export type SceneSoundCue = { at: number; event: SceneSoundEvent }
