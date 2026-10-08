@@ -151,6 +151,7 @@ export const BridgeErrorCode = {
   ROUTE_CONFLICT: "route_conflict",
   INVALID_ROUTE: "invalid_route",
   UNKNOWN_ROUTE: "unknown_route",
+  TOO_MANY_CONNECTIONS: "too_many_connections",
 } as const;
 
 // Default timing constants from specs.md

@@ -124,7 +124,8 @@ The server keeps accepting older versions so installed clients keep working.
    for that `conn`, starting with the TLS ClientHello.
 4. The client resolves the route from `sni`, terminates TLS with the tunnel
    certificate, and connects to the route target. If no route matches it
-   sends `reset` with `unknown_route`.
+   sends `reset` with `unknown_route`. If it already holds the `max_conns`
+   it advertised on attach, it sends `reset` with `too_many_connections`.
 5. Either side sends `end` to half-close a connection and `reset` to abort it.
 6. The client sends `ping` every `heartbeat_ms` and closes the session when
    nothing is received for `idle_timeout_ms`.

@@ -120,6 +120,7 @@ pub mod codes {
     pub const BAD_TOKEN: &str = "bad_token";
     pub const CERT_NOT_READY: &str = "cert_not_ready";
     pub const UNKNOWN_ROUTE: &str = "unknown_route";
+    pub const TOO_MANY_CONNECTIONS: &str = "too_many_connections";
     pub const UPSTREAM_CONNECT_FAILED: &str = "upstream_connect_failed";
     pub const UPSTREAM_IO_ERROR: &str = "upstream_io_error";
 

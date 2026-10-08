@@ -323,6 +323,34 @@ async fn resets_unknown_routes() {
 }
 
 #[tokio::test]
+async fn resets_connections_beyond_max_conns() {
+    let target = echo_server().await;
+    let (base, mut sessions, _) = fake_relay(attached).await;
+    let (tunnel, _) = connect(&base, &identity(), [("api".into(), target)].into());
+    let (mut bridge, _) = sessions.recv().await.unwrap();
+    for conn in 1..=257 {
+        send_open(&mut bridge, conn, &format!("api.{HOSTNAME}")).await;
+    }
+    let reply = loop {
+        let Some(Ok(Message::Text(text))) = bridge.next().await else {
+            panic!("bridge closed")
+        };
+        let message: ClientMessage = serde_json::from_str(&text).unwrap();
+        if !matches!(message, ClientMessage::Ping { .. }) {
+            break message;
+        }
+    };
+    assert_eq!(
+        reply,
+        ClientMessage::Reset {
+            conn: 257,
+            code: "too_many_connections".into()
+        }
+    );
+    tunnel.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn reconnects_after_bridge_closes() {
     let target = echo_server().await;
     let (base, mut sessions, _) = fake_relay(attached).await;
