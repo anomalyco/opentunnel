@@ -8,19 +8,78 @@
     "directory": "packages/protocol"
   },
   "files": [
-    "src"
+    "src",
+    "dist"
   ],
   "type": "module",
   "exports": {
-    "./*": "./src/*.ts",
-    "./api/*": "./src/api/*.ts",
+    "./bridge-protocol": {
+      "types": "./dist/bridge-protocol.d.ts",
+      "bun": "./src/bridge-protocol.ts",
+      "default": "./dist/bridge-protocol.js"
+    },
+    "./certificate": {
+      "types": "./dist/certificate.d.ts",
+      "bun": "./src/certificate.ts",
+      "default": "./dist/certificate.js"
+    },
+    "./csr": {
+      "types": "./dist/csr.d.ts",
+      "bun": "./src/csr.ts",
+      "default": "./dist/csr.js"
+    },
+    "./index": {
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./names": {
+      "types": "./dist/names.d.ts",
+      "bun": "./src/names.ts",
+      "default": "./dist/names.js"
+    },
+    "./newtype": {
+      "types": "./dist/newtype.d.ts",
+      "bun": "./src/newtype.ts",
+      "default": "./dist/newtype.js"
+    },
+    "./tunnel": {
+      "types": "./dist/tunnel.d.ts",
+      "bun": "./src/tunnel.ts",
+      "default": "./dist/tunnel.js"
+    },
+    "./api/api": {
+      "types": "./dist/api/api.d.ts",
+      "bun": "./src/api/api.ts",
+      "default": "./dist/api/api.js"
+    },
+    "./api/auth": {
+      "types": "./dist/api/auth.d.ts",
+      "bun": "./src/api/auth.ts",
+      "default": "./dist/api/auth.js"
+    },
+    "./api/errors": {
+      "types": "./dist/api/errors.d.ts",
+      "bun": "./src/api/errors.ts",
+      "default": "./dist/api/errors.js"
+    },
+    "./api/index": {
+      "types": "./dist/api/index.d.ts",
+      "bun": "./src/api/index.ts",
+      "default": "./dist/api/index.js"
+    },
+    "./api/tunnel": {
+      "types": "./dist/api/tunnel.d.ts",
+      "bun": "./src/api/tunnel.ts",
+      "default": "./dist/api/tunnel.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsc --build",
+    "build": "tsc --build tsconfig.build.json",
     "test": "bun test"
   },
   "dependencies": {

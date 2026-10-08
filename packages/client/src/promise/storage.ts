@@ -1,8 +1,6 @@
 import { Effect } from "effect";
-import {
-  OpenTunnelStorage as EffectStorage,
-  type OpenTunnelStorage as EffectStorageType,
-} from "../effect/storage.js";
+import * as EffectStorage from "../effect/storage.js";
+import type { OpenTunnelStorage as EffectStorageType } from "../effect/storage.js";
 import type {
   OpenTunnelIdentity,
   OpenTunnelPendingIdentity,

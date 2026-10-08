@@ -10,12 +10,25 @@
   },
   "type": "module",
   "files": [
-    "src"
+    "src",
+    "dist"
   ],
   "exports": {
-    ".": "./src/promise/index.ts",
-    "./promise": "./src/promise/index.ts",
-    "./effect": "./src/effect/index.ts"
+    ".": {
+      "types": "./dist/promise/index.d.ts",
+      "bun": "./src/promise/index.ts",
+      "default": "./dist/promise/index.js"
+    },
+    "./promise": {
+      "types": "./dist/promise/index.d.ts",
+      "bun": "./src/promise/index.ts",
+      "default": "./dist/promise/index.js"
+    },
+    "./effect": {
+      "types": "./dist/effect/index.d.ts",
+      "bun": "./src/effect/index.ts",
+      "default": "./dist/effect/index.js"
+    }
   },
   "publishConfig": {
     "access": "public"
@@ -24,7 +37,7 @@
     "bun": ">=1.4.0"
   },
   "scripts": {
-    "build": "tsc --build",
+    "build": "tsc --build tsconfig.build.json",
     "test": "bun test"
   },
   "dependencies": {
