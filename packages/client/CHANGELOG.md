@@ -1,5 +1,11 @@
 # @opentunnel/client
 
+## 0.3.0
+
+### Patch Changes
+
+- @opentunnel/protocol@0.3.0
+
 ## 0.2.2
 
 ### Patch Changes

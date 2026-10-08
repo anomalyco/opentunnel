@@ -11,7 +11,7 @@ description = "The opentunnel CLI and background service"
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive", "env"] }
 libc = "0.2.190"
-opentunnel = { version = "0.2.2", path = "../opentunnel" }
+opentunnel = { version = "0.3.0", path = "../opentunnel" }
 ring = "0.17.14"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
