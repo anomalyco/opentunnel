@@ -1,5 +1,11 @@
 # @opentunnel/protocol
 
+## 0.2.2
+
+### Patch Changes
+
+- bbce5b7: The CLI, the SDK, the protocol package, and the Rust crates now always share one version number.
+
 ## 0.2.0
 
 ### Minor Changes
