@@ -9,6 +9,22 @@ export { TunnelObject } from "./tunnel-object.js";
 
 let apiHandler: ReturnType<typeof makeApiHandler> | undefined;
 
+// Lets the OpenCode iOS app open its pairing links (https://<route>.<id>.opentunnel.xyz/auth/connect/<code>,
+// which `opencode pair --remote` prints and QR-encodes) instead of the browser. Apple reads the file for
+// `applinks:*.opentunnel.xyz` from the root domain. Only `/auth/connect/*` is claimed: every other path on
+// every tunnel keeps opening in the browser, and devices without the app open these links in the browser too.
+export const APPLE_APP_SITE_ASSOCIATION_PATH = "/.well-known/apple-app-site-association";
+export const APPLE_APP_SITE_ASSOCIATION = {
+  applinks: {
+    details: [
+      {
+        appIDs: ["5NZ4Q7NXJ4.ai.opencode.mobilecode"],
+        components: [{ "/": "/auth/connect/*", comment: "OpenCode pairing links" }],
+      },
+    ],
+  },
+};
+
 const CLIENT_HELLO_LIMIT = 64 * 1024;
 const CLIENT_HELLO_TIMEOUT_MS = 10_000;
 
@@ -163,6 +179,7 @@ export default {
   async fetch(request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return Response.json({ ok: true });
+    if (url.pathname === APPLE_APP_SITE_ASSOCIATION_PATH) return Response.json(APPLE_APP_SITE_ASSOCIATION);
     if (url.pathname === "/api/relay") return relayWebSocket(request);
     const connect = /^\/api\/tunnel\/([^/]+)\/connect$/.exec(url.pathname);
     if (connect && request.method === "GET") {

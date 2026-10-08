@@ -26,7 +26,7 @@ export default defineConfig(({ mode = "production" }) => {
       compatibilityFlags: ["nodejs_compat"],
       workersDev: !production,
       observability: { enabled: true },
-      assets: { runWorkerFirst: ["/api/*"] },
+      assets: { runWorkerFirst: ["/api/*", "/.well-known/apple-app-site-association"] },
       triggers: production ? [triggers.fetch({ pattern: "opentunnel.xyz/*", zone: "opentunnel.xyz" })] : [],
       env: {
         OPENTUNNEL_DOMAIN: bindings.text(domain),
