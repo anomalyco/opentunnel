@@ -59,7 +59,7 @@ export function App() {
 
       <section className="usage">
         <h2>cli</h2>
-        <pre>{`$ opentunnel route add opencode 47365\n`}{out("creating tunnel... tunnel is ready.\nadded route opencode → 127.0.0.1:47365\nhttps://opencode.f7a2mx4kq9vn.opentunnel.xyz")}{`\n\n$ curl https://opencode.f7a2mx4kq9vn.opentunnel.xyz\n`}{out("hello from localhost:47365")}</pre>
+        <pre>{`$ opentunnel route add 47365\n`}{out("creating tunnel... tunnel is ready.\nadded route 3e9b1c07a4d25f86 → 127.0.0.1:47365\nhttps://3e9b1c07a4d25f86.f7a2mx4kq9vn.opentunnel.xyz")}{`\n\n$ curl https://3e9b1c07a4d25f86.f7a2mx4kq9vn.opentunnel.xyz\n`}{out("hello from localhost:47365")}</pre>
       </section>
 
       <section className="sdk">

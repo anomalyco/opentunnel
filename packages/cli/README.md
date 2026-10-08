@@ -18,8 +18,9 @@ Prebuilt binaries are published for Linux and macOS on x64 and arm64.
 ## Commands
 
 ```bash
-opentunnel route add api 3000            # api.<hostname> → 127.0.0.1:3000, brings the tunnel up
-opentunnel route add @ 127.0.0.1:8080    # the hostname itself
+opentunnel route add 3000                       # <random>.<hostname> → 127.0.0.1:3000, brings the tunnel up
+opentunnel route add 3000 --name api            # api.<hostname> instead of a random name
+opentunnel route add 127.0.0.1:8080 --name @    # the hostname itself
 opentunnel route remove api
 opentunnel route list
 opentunnel status                        # tunnel, routes, and connection

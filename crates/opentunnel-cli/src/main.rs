@@ -63,9 +63,20 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum RouteCommand {
-    /// Add or replace a route and bring the tunnel up. Use `@` for the tunnel
-    /// hostname itself; the target is a port or host:port.
-    Add { name: String, target: String },
+    /// Add a route and bring the tunnel up. The target is a port or host:port.
+    /// Without --name the route gets a random 16-character name, so its URL
+    /// can't be guessed; adding the same target again keeps that route.
+    Add {
+        /// The local service: a port (3000) or host:port (127.0.0.1:3000).
+        target: String,
+        /// Name the route yourself instead (one lowercase DNS label), or `@` for
+        /// the tunnel hostname itself. Readable names are guessable.
+        #[arg(long)]
+        name: Option<String>,
+        /// Old form: `route add <name> <target>`.
+        #[arg(hide = true)]
+        legacy_target: Option<String>,
+    },
     /// Remove a route.
     Remove { name: String },
     /// List routes.
@@ -109,7 +120,7 @@ async fn run(cli: Cli) -> Result<()> {
             let hostname = up(&client, profile, api).await?;
             println!("Connected https://{hostname}");
             if config::load(profile)?.routes.is_empty() {
-                println!("Add a route with: opentunnel route add <name> <port>");
+                println!("Add a route with: opentunnel route add <port>");
             }
             Ok(())
         }
@@ -273,14 +284,38 @@ async fn route(
         None => name.to_owned(),
     };
     match command {
-        RouteCommand::Add { name, target } => {
+        RouteCommand::Add {
+            target,
+            name,
+            legacy_target,
+        } => {
+            let (name, target) = match legacy_target {
+                Some(legacy) => {
+                    if name.is_some() {
+                        anyhow::bail!(
+                            "give the route name either with --name or before the target, not both"
+                        );
+                    }
+                    eprintln!(
+                        "note: `route add <name> <target>` is now `route add <target> --name <name>`"
+                    );
+                    (Some(target), legacy)
+                }
+                None => (name, target),
+            };
             let target = config::normalize_target(&target);
-            config::validate(&name, &target)?;
             let mut config = config::load(profile)?;
-            config.routes.insert(name.clone(), target.clone());
-            config::save(profile, &config)?;
+            let (name, existed) = config::choose_route(&config.routes, &target, name.as_deref())?;
+            if !existed {
+                config.routes.insert(name.clone(), target.clone());
+                config::save(profile, &config)?;
+            }
             let hostname = up(client, profile, api).await?;
-            println!("Added route {name} → {target}");
+            if existed {
+                println!("Route {name} → {target} already exists");
+            } else {
+                println!("Added route {name} → {target}");
+            }
             println!("https://{}", config::public_hostname(&name, &hostname));
         }
         RouteCommand::Remove { name } => {

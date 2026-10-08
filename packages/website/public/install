@@ -43,4 +43,4 @@ case ":$PATH:" in
   *) echo "Add $dir to your PATH to run opentunnel, for example:"
      echo "  export PATH=\"$dir:\$PATH\"" ;;
 esac
-echo "Get started: opentunnel route add <name> <port>"
+echo "Get started: opentunnel route add <port>"

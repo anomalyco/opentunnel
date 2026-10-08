@@ -25,12 +25,19 @@ cargo install opentunnel-cli
 Prebuilt binaries for Linux and macOS (x64 and arm64) are attached to each
 [GitHub release](https://github.com/anomalyco/opentunnel/releases).
 
-Then route a subdomain to a local port. This creates the tunnel on first use
-and starts the background service:
+Then route a local port. This creates the tunnel on first use, starts the
+background service, and prints the route's URL:
 
 ```bash
-opentunnel route add api 3000
+opentunnel route add 3000
+# Added route 21992cc9713e5fc5 → 127.0.0.1:3000
+# https://21992cc9713e5fc5.<id>.opentunnel.xyz
 ```
+
+Routes get a random 16-character name by default. Route names never appear in
+public certificate logs, so the URL can't be guessed, but anyone you share it
+with can reach the service: it is not authentication. Pass `--name api` for a
+readable name instead.
 
 See [packages/cli](packages/cli) for the full command reference.
 
@@ -113,7 +120,7 @@ starting a local HTTP application on port 4096:
 
 ```bash
 export OPENTUNNEL_API=http://127.0.0.1:4190
-bun run opentunnel route add api 4096
+bun run opentunnel route add 4096
 ```
 
 Useful commands:

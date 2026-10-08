@@ -953,6 +953,7 @@ dependencies = [
  "clap",
  "libc",
  "opentunnel",
+ "ring",
  "serde",
  "serde_json",
  "tokio",
