@@ -1,5 +1,11 @@
 # @opentunnel/client
 
+## 0.2.1
+
+### Patch Changes
+
+- cdb8954: Identify the client to the server (`opentunnel/<version>` for the CLI, `opentunnel-sdk/<version>` for the SDK), including on the bridge connection.
+
 ## 0.2.0
 
 ### Minor Changes
