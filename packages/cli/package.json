@@ -1,6 +1,6 @@
 {
   "name": "opentunnel",
-  "version": "0.1.5",
+  "version": "0.2.2",
   "description": "Blind TLS tunnels: expose local services without the relay seeing plaintext",
   "license": "MIT",
   "bin": {
