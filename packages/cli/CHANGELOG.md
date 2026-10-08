@@ -1,5 +1,11 @@
 # opentunnel
 
+## 0.3.0
+
+### Minor Changes
+
+- 7ff6c14: `route add` now takes just the target and gives the route a random 16-character name, so its URL can't be guessed (`opentunnel route add 3000`). Adding the same target again keeps that route. Use `--name api` for a readable name, or `--name @` for the tunnel hostname. The old `route add <name> <target>` form still works and prints a note.
+
 ## 0.2.2
 
 ### Patch Changes
