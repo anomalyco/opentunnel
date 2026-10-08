@@ -1,4 +1,4 @@
-import { HttpApi, OpenApi } from "effect/unstable/httpapi";
+import { HttpApi, OpenApi } from "effect/http-api";
 import { TunnelGroup } from "./tunnel.js";
 
 export const Api = HttpApi.make("opentunnel")

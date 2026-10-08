@@ -58,7 +58,7 @@ There are two client implementations that share one protocol:
 | --- | --- |
 | `crates/opentunnel` | Rust client library and wire types, published as `opentunnel` on crates.io |
 | `crates/opentunnel-cli` | The `opentunnel` CLI and per-profile background service |
-| `packages/client` | Pure TypeScript SDK for Bun (`@opentunnel/client`) |
+| `packages/client` | TypeScript SDK (`@opentunnel/client`), compiled to JavaScript for Bun, Node, and Deno |
 | `packages/protocol` | TypeScript schemas, bridge framing, and the HTTP API contract |
 | `packages/server` | The Worker's code: API, Durable Objects, certificate Workflow, and the TCP relay |
 | `packages/website` | The landing page, served as the Worker's static assets |

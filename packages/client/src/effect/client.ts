@@ -4,7 +4,8 @@ import { Tunnel } from "@opentunnel/protocol/tunnel";
 import { OpenTunnelApiClient } from "./api.js";
 import { certificateRequest } from "./csr.js";
 import { OpenTunnelClientError } from "./errors.js";
-import { OpenTunnelStorage, type OpenTunnelStorage as Storage } from "./storage.js";
+import * as OpenTunnelStorage from "./storage.js";
+import type { OpenTunnelStorage as Storage } from "./storage.js";
 import type {
   OpenTunnelClientEvent,
   OpenTunnelConnection,

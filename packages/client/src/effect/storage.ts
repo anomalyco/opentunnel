@@ -1,5 +1,3 @@
-export * as OpenTunnelStorage from "./storage.js";
-
 import { Effect } from "effect";
 import * as Fs from "node:fs/promises";
 import * as Os from "node:os";

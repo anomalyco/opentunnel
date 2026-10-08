@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { env } from "cloudflare:workers";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpApiBuilder } from "effect/http-api";
 import { Certificate } from "@opentunnel/protocol/certificate";
 import { Tunnel } from "@opentunnel/protocol/tunnel";
 import { Api } from "@opentunnel/protocol/api/api";

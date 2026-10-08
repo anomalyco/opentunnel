@@ -10,7 +10,7 @@
 
 ## Clients
 
-- There are two client implementations: Rust (`crates/`) and the TypeScript SDK (`packages/client`, Bun only).
+- There are two client implementations: Rust (`crates/`) and the TypeScript SDK (`packages/client`). The SDK and `@opentunnel/protocol` publish only their built `dist` (JavaScript and declarations), never TypeScript sources, and take `effect` as a peer dependency.
 - The CLI and background service are Rust (`crates/opentunnel-cli`). `packages/cli` only contains the npm launcher and the publish script that generates the per-platform packages.
 - The CLI, the SDK (`@opentunnel/client`), `@opentunnel/protocol`, and the Rust crates always share one version: they are a changesets `fixed` group, and `packages/cli/script/version.ts` copies the version into Cargo.
 - `docs/protocol.md` is the source of truth for the wire protocol and on-disk layout. Protocol changes must update the spec, `spec/vectors`, and both clients.

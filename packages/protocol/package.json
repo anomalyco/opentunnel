@@ -1,37 +1,84 @@
 {
   "name": "@opentunnel/protocol",
   "version": "0.3.0",
+  "description": "OpenTunnel wire protocol: schemas, bridge framing, and the HTTP API contract",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/anomalyco/opentunnel.git",
     "directory": "packages/protocol"
   },
-  "files": [
-    "src"
-  ],
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "exports": {
-    "./*": "./src/*.ts",
-    "./api/*": "./src/api/*.ts",
+    "./bridge-protocol": {
+      "types": "./dist/bridge-protocol.d.ts",
+      "default": "./dist/bridge-protocol.js"
+    },
+    "./certificate": {
+      "types": "./dist/certificate.d.ts",
+      "default": "./dist/certificate.js"
+    },
+    "./csr": {
+      "types": "./dist/csr.d.ts",
+      "default": "./dist/csr.js"
+    },
+    "./index": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./names": {
+      "types": "./dist/names.d.ts",
+      "default": "./dist/names.js"
+    },
+    "./newtype": {
+      "types": "./dist/newtype.d.ts",
+      "default": "./dist/newtype.js"
+    },
+    "./tunnel": {
+      "types": "./dist/tunnel.d.ts",
+      "default": "./dist/tunnel.js"
+    },
+    "./api/api": {
+      "types": "./dist/api/api.d.ts",
+      "default": "./dist/api/api.js"
+    },
+    "./api/auth": {
+      "types": "./dist/api/auth.d.ts",
+      "default": "./dist/api/auth.js"
+    },
+    "./api/errors": {
+      "types": "./dist/api/errors.d.ts",
+      "default": "./dist/api/errors.js"
+    },
+    "./api/index": {
+      "types": "./dist/api/index.d.ts",
+      "default": "./dist/api/index.js"
+    },
+    "./api/tunnel": {
+      "types": "./dist/api/tunnel.d.ts",
+      "default": "./dist/api/tunnel.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsc --build",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && tsc -p tsconfig.json --noEmit",
     "test": "bun test"
   },
-  "dependencies": {
-    "effect": "catalog:"
+  "peerDependencies": {
+    "effect": "^4.0.0"
   },
   "devDependencies": {
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "bumpp": "catalog:",
-    "typescript": "catalog:",
-    "@types/bun": "catalog:"
-  },
-  "description": "OpenTunnel wire protocol: schemas, bridge framing, and the HTTP API contract"
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  }
 }

@@ -10,32 +10,45 @@
   },
   "type": "module",
   "files": [
-    "src"
+    "dist"
   ],
   "exports": {
-    ".": "./src/promise/index.ts",
-    "./promise": "./src/promise/index.ts",
-    "./effect": "./src/effect/index.ts"
+    ".": {
+      "types": "./dist/promise/index.d.ts",
+      "default": "./dist/promise/index.js"
+    },
+    "./promise": {
+      "types": "./dist/promise/index.d.ts",
+      "default": "./dist/promise/index.js"
+    },
+    "./effect": {
+      "types": "./dist/effect/index.d.ts",
+      "default": "./dist/effect/index.js"
+    }
   },
   "publishConfig": {
     "access": "public"
   },
   "engines": {
-    "bun": ">=1.4.0"
+    "bun": ">=1.4.0",
+    "node": ">=22"
   },
   "scripts": {
-    "build": "tsc --build",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && tsc -p tsconfig.json --noEmit",
     "test": "bun test"
   },
   "dependencies": {
-    "@opentunnel/protocol": "workspace:*",
-    "effect": "catalog:"
+    "@opentunnel/protocol": "workspace:*"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.0"
   },
   "devDependencies": {
     "@peculiar/x509": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "effect": "catalog:",
     "reflect-metadata": "catalog:",
     "typescript": "catalog:"
   }

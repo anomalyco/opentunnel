@@ -1,7 +1,9 @@
 # OpenTunnel Client
 
-`@opentunnel/client` is a pure TypeScript SDK for Bun that creates tunnels and
-forwards them to local services from inside your process. TLS terminates in
+`@opentunnel/client` is a TypeScript SDK that creates tunnels and forwards them
+to local services from inside your process. It ships compiled JavaScript with
+type declarations and runs on Bun, Node, and Deno. `effect` is a peer
+dependency, so an app that already uses Effect shares one copy with the SDK. TLS terminates in
 your process, so the relay never sees plaintext or your private key.
 
 It implements the same protocol and on-disk layout as the Rust client and CLI

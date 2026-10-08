@@ -1,7 +1,7 @@
 import { Effect, Layer, Context } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import pkg from "../../package.json" with { type: "json" };
-import { HttpApiClient } from "effect/unstable/httpapi";
+import { HttpApiClient } from "effect/http-api";
 import { Api } from "@opentunnel/protocol/api/api";
 import { Tunnel } from "@opentunnel/protocol/tunnel";
 

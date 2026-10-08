@@ -1,8 +1,7 @@
 import { Effect } from "effect";
-import {
-  OpenTunnelStorage as EffectStorage,
-  type OpenTunnelStorage as EffectStorageType,
-} from "../effect/storage.js";
+import * as EffectStorage from "../effect/storage.js";
+import type { OpenTunnelStorage as EffectStorageType } from "../effect/storage.js";
+import { OpenTunnelStorageError } from "../effect/errors.js";
 import type {
   OpenTunnelIdentity,
   OpenTunnelPendingIdentity,
@@ -40,15 +39,28 @@ export const OpenTunnelStorage = {
     wrap(EffectStorage.xdg(options)),
 };
 
+const attempt = <A>(message: string, run: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (cause) => new OpenTunnelStorageError({ message, cause }),
+  });
+
 export function toEffectStorage(storage: OpenTunnelStorage): EffectStorageType {
   if (EffectStorageSymbol in storage) return (storage as WrappedStorage)[EffectStorageSymbol];
   return {
-    profiles: () => Effect.tryPromise(() => storage.profiles()),
-    load: (profile) => Effect.tryPromise(() => storage.load(profile)),
-    save: (profile, tunnel) => Effect.tryPromise(() => storage.save(profile, tunnel)),
-    loadPending: (profile) => Effect.tryPromise(() => storage.loadPending(profile)),
-    savePending: (profile, tunnel) => Effect.tryPromise(() => storage.savePending(profile, tunnel)),
-    remove: (profile) => Effect.tryPromise(() => storage.remove(profile)),
-    list: () => Effect.tryPromise(() => storage.list()),
+    profiles: () => attempt("Failed to list profiles", () => storage.profiles()),
+    load: (profile) =>
+      attempt(`Failed to load tunnel identity for ${profile}`, () => storage.load(profile)),
+    save: (profile, tunnel) =>
+      attempt(`Failed to save tunnel identity for ${profile}`, () => storage.save(profile, tunnel)),
+    loadPending: (profile) =>
+      attempt(`Failed to load pending tunnel identity for ${profile}`, () =>
+        storage.loadPending(profile)),
+    savePending: (profile, tunnel) =>
+      attempt(`Failed to save pending tunnel identity for ${profile}`, () =>
+        storage.savePending(profile, tunnel)),
+    remove: (profile) =>
+      attempt(`Failed to remove tunnel identity for ${profile}`, () => storage.remove(profile)),
+    list: () => attempt("Failed to list tunnels", () => storage.list()),
   };
 }
