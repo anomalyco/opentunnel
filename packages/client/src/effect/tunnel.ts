@@ -4,6 +4,13 @@ import { Duplex } from "node:stream";
 import * as Tls from "node:tls";
 import { BridgeProtocol } from "@opentunnel/protocol/bridge-protocol";
 import { Names } from "@opentunnel/protocol/names";
+import { USER_AGENT } from "./api.js";
+
+/** Bun's WebSocket also takes options with request headers, which the DOM typings don't know about. */
+const BunWebSocket = WebSocket as unknown as new (
+  url: URL,
+  options: { readonly protocols: string[]; readonly headers: Record<string, string> },
+) => WebSocket;
 import type {
   OpenTunnelClientEvent,
   OpenTunnelIdentity,
@@ -308,7 +315,10 @@ class Session {
         this.options.api,
       );
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-      const socket = new WebSocket(url, BridgeProtocol.WEBSOCKET_SUBPROTOCOL);
+      const socket = new BunWebSocket(url, {
+        protocols: [BridgeProtocol.WEBSOCKET_SUBPROTOCOL],
+        headers: { "user-agent": USER_AGENT },
+      });
       socket.binaryType = "arraybuffer";
       this.socket = socket;
       this.attachTimeout = setTimeout(

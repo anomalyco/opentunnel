@@ -1,8 +1,12 @@
 import { Effect, Layer, Context } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import pkg from "../../package.json" with { type: "json" };
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { Api } from "@opentunnel/protocol/api/api";
 import { Tunnel } from "@opentunnel/protocol/tunnel";
+
+/** How the SDK identifies itself to the server, on API calls and the bridge. */
+export const USER_AGENT = `opentunnel-sdk/${pkg.version}`;
 
 type Client = HttpApiClient.ForApi<typeof Api>;
 
@@ -18,7 +22,9 @@ export class OpenTunnelApiClient extends Context.Service<OpenTunnelApiClient, Op
     return Layer.effect(
       OpenTunnelApiClient,
       Effect.gen(function* () {
-        const httpClient = yield* HttpClient.HttpClient;
+        const httpClient = (yield* HttpClient.HttpClient).pipe(
+          HttpClient.mapRequest(HttpClientRequest.setHeader("user-agent", USER_AGENT)),
+        );
         const client = yield* HttpApiClient.makeWith(Api, {
           baseUrl: options.api,
           httpClient,

@@ -623,6 +623,10 @@ impl Supervisor {
             "sec-websocket-protocol",
             HeaderValue::from_static(bridge::WEBSOCKET_SUBPROTOCOL),
         );
+        request.headers_mut().insert(
+            "user-agent",
+            HeaderValue::from_static(concat!("opentunnel/", env!("CARGO_PKG_VERSION"))),
+        );
         let (mut socket, _) = tokio_tungstenite::connect_async(request)
             .await
             .map_err(|error| Error::Bridge(error.to_string()))?;

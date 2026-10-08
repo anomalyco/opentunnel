@@ -15,12 +15,13 @@ import {
   TunnelNotFoundError,
   UnauthorizedError,
 } from "@opentunnel/protocol/api/errors";
+import { Analytics } from "../analytics.js";
 import { hashToken, randomToken } from "../crypto.js";
 import { Random } from "../random.js";
 
 export const TunnelHandlers = HttpApiBuilder.group(Api, "tunnel", (handlers) =>
   handlers
-    .handle("tunnel.create", ({ payload }) => {
+    .handle("tunnel.create", ({ payload, request }) => {
       if (payload.name !== undefined) {
         return Effect.gen(function* () {
           return yield* new InvalidRequestError({
@@ -40,7 +41,14 @@ export const TunnelHandlers = HttpApiBuilder.group(Api, "tunnel", (handlers) =>
         catch: (cause) => new ServiceUnavailableError({ message: String(cause) }),
       }).pipe(
         Effect.flatMap((tunnel) => Effect.gen(function* () {
-          if (tunnel) return { tunnel: new Tunnel.Info(tunnel), token };
+          if (tunnel) {
+            Analytics.publish("tunnel.created", {
+              tunnel_id: id,
+              ...Analytics.client(request.headers["user-agent"]),
+              ...Analytics.geo(request.source as Request),
+            });
+            return { tunnel: new Tunnel.Info(tunnel), token };
+          }
           return yield* new HostnameUnavailableError({
             name: id,
             message: "Hostname is unavailable",

@@ -7,19 +7,29 @@ import { Tunnel } from "@opentunnel/protocol/tunnel";
 import { concatBytes, parseClientHello } from "./tls-client-hello.js";
 import type { StoredTunnel } from "./stored-tunnel.js";
 import { hashToken } from "./crypto.js";
+import { Analytics } from "./analytics.js";
 
 interface BridgeAttachment {
   readonly kind: "bridge";
   readonly attached: boolean;
   readonly session?: string;
   readonly routes?: ReadonlyArray<string>;
+  /** Analytics context, captured from the upgrade request and on attach. */
+  readonly analytics?: Analytics.Client & {
+    readonly country?: string;
+    readonly colo?: string;
+    readonly tunnel?: string;
+    readonly attachedAt?: number;
+    readonly activeAt?: number;
+  };
 }
 
 interface Channel {
   readonly bridge: WebSocket;
   readonly writer: WritableStreamDefaultWriter<Uint8Array>;
   readonly done: Promise<void>;
-  finish(error?: unknown): void;
+  bytesOut: number;
+  finish(outcome: Analytics.ConnectionOutcome, error?: unknown): void;
 }
 
 interface TunnelInfoResult {
@@ -77,6 +87,8 @@ const RENEWAL_RETRY_MS = 60 * 60 * 1000;
 /** A renewal still running after this long is treated as lost and restarted. */
 const RENEWAL_STALE_MS = DAY_MS;
 
+const BACKPRESSURE = "Bridge backpressure limit";
+
 const validRoute = (route: string): boolean =>
   route === "@" || /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(route);
 
@@ -130,6 +142,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
     const record = await this.record();
     if (!record || record.deletedAt) return false;
     if (record.renewal && String(record.renewal.certificateID) === id) {
+      const duration_ms = Date.now() - Date.parse(record.renewal.startedAt);
       if (input.type === "ready") {
         const renewed: StoredTunnel = {
           ...record,
@@ -142,8 +155,16 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         };
         await this.save(renewed);
         await this.scheduleRenewal(renewed);
+        Analytics.publish("certificate.renewed", { tunnel_id: String(record.id), certificate_id: id, duration_ms });
       } else if (input.type === "failed") {
         console.error("Certificate renewal failed", { tunnel: record.id, reason: input.reason });
+        Analytics.publish("certificate.failed", {
+          tunnel_id: String(record.id),
+          certificate_id: id,
+          renewal: true,
+          reason: Analytics.certificateFailure(input.reason),
+          duration_ms,
+        });
         await this.save({ ...record, renewal: undefined });
         await this.ctx.storage.setAlarm(Date.now() + RENEWAL_RETRY_MS);
       }
@@ -163,6 +184,21 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
     };
     await this.save(updated);
     await this.scheduleRenewal(updated);
+    const previous = record.certificate?.state.type;
+    const duration = record.certificateStartedAt
+      ? { duration_ms: Date.now() - Date.parse(record.certificateStartedAt) }
+      : {};
+    if (input.type === "ready" && previous !== "ready") {
+      Analytics.publish("certificate.issued", { tunnel_id: String(record.id), certificate_id: id, ...duration });
+    } else if (input.type === "failed" && previous !== "failed") {
+      Analytics.publish("certificate.failed", {
+        tunnel_id: String(record.id),
+        certificate_id: id,
+        renewal: false,
+        reason: Analytics.certificateFailure(input.reason),
+        ...duration,
+      });
+    }
     return true;
   }
 
@@ -216,6 +252,12 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       });
     } catch (error) {
       console.error("Failed to start certificate renewal", { tunnel: record.id, error: String(error) });
+      Analytics.publish("certificate.failed", {
+        tunnel_id: String(record.id),
+        certificate_id: String(certificateID),
+        renewal: true,
+        reason: "workflow_start",
+      });
       await this.save({ ...record, renewal: undefined });
       await this.ctx.storage.setAlarm(Date.now() + RENEWAL_RETRY_MS);
     }
@@ -304,6 +346,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       certificate,
       certificateCsr: csr,
       certificateIdentifiers: identifiers,
+      certificateStartedAt: new Date().toISOString(),
       renewal: undefined,
     };
     await this.save(issuing);
@@ -311,6 +354,12 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       await this.ensureCertificateWorkflow(issuing, csr, identifiers);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
+      Analytics.publish("certificate.failed", {
+        tunnel_id: String(record.id),
+        certificate_id: String(certificateID),
+        renewal: false,
+        reason: "workflow_start",
+      });
       await this.save({
         ...issuing,
         certificate: new Certificate.Info({
@@ -328,9 +377,13 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
     if (!record || record.deletedAt) return "not-found";
     if ((await hashToken(token)) !== record.tokenHash) return "unauthorized";
     for (const socket of this.ctx.getWebSockets("bridge")) socket.close(1000, "deleted");
-    for (const channel of this.channels.values()) channel.finish(new Error("Tunnel deleted"));
+    for (const channel of this.channels.values()) channel.finish("deleted", new Error("Tunnel deleted"));
     this.channels.clear();
     await this.save({ ...record, state: "offline", deletedAt: new Date().toISOString() });
+    Analytics.publish("tunnel.deleted", {
+      tunnel_id: String(record.id),
+      age_ms: Date.now() - Date.parse(record.createdAt),
+    });
     return "ok";
   }
 
@@ -351,7 +404,14 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
-    server.serializeAttachment({ kind: "bridge", attached: false } satisfies BridgeAttachment);
+    server.serializeAttachment({
+      kind: "bridge",
+      attached: false,
+      analytics: {
+        ...Analytics.client(request.headers.get("user-agent")),
+        ...Analytics.geo(request),
+      },
+    } satisfies BridgeAttachment);
     this.ctx.acceptWebSocket(server, ["bridge"]);
 
     return new Response(null, {
@@ -370,7 +430,10 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       const frame = BridgeProtocol.parseDataFrame(new Uint8Array(message));
       if (!frame) return;
       const channel = this.channels.get(frame.conn);
-      if (channel?.bridge === socket) await channel.writer.write(frame.payload);
+      if (channel?.bridge === socket) {
+        channel.bytesOut += frame.payload.byteLength;
+        await channel.writer.write(frame.payload);
+      }
       return;
     }
 
@@ -409,11 +472,20 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       }
 
       const session = `sess_${crypto.randomUUID()}`;
+      const now = Date.now();
+      const analytics = {
+        client: "none" as const,
+        ...attachment.analytics,
+        tunnel: String(record.id),
+        attachedAt: now,
+        activeAt: now,
+      };
       socket.serializeAttachment({
         kind: "bridge",
         attached: true,
         session,
         routes: requestedRoutes,
+        analytics,
       } satisfies BridgeAttachment);
       const connected: StoredTunnel = {
         ...record,
@@ -431,29 +503,71 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         }),
       );
       await this.onAttached(connected);
+      const { client, client_version, country, colo } = analytics;
+      const context = { tunnel_id: String(record.id), session_id: session, route_count: requestedRoutes.length };
+      Analytics.publish("bridge.connected", {
+        ...context,
+        client,
+        ...(client_version ? { client_version } : {}),
+        ...(country ? { country } : {}),
+        ...(colo ? { colo } : {}),
+      });
+      Analytics.publish("tunnel.active", { ...context, connected_ms: 0, open_connections: 0 });
       return;
     }
 
     if (control.type === "ping" && typeof control.time_sent === "number") {
       socket.send(JSON.stringify({ type: "pong", time_sent: control.time_sent }));
+      this.reportActive(socket, attachment);
       return;
     }
     if ((control.type === "end" || control.type === "reset") && typeof control.conn === "number") {
       const channel = this.channels.get(control.conn);
       if (channel?.bridge === socket) {
-        channel.finish(
-          control.type === "reset" ? new Error(String(control.code ?? "reset")) : undefined,
-        );
+        if (control.type === "reset") channel.finish("reset", new Error(String(control.code ?? "reset")));
+        else channel.finish("closed");
       }
     }
   }
 
-  async webSocketClose(socket: WebSocket): Promise<void> {
+  /**
+   * Reports `tunnel.active` at most once per interval per bridge. Clients ping every few seconds while
+   * attached, so this needs no alarm (which belongs to certificate renewal) and stops with the bridge.
+   */
+  private reportActive(socket: WebSocket, attachment: BridgeAttachment): void {
+    const analytics = attachment.analytics;
+    if (!analytics?.tunnel || !attachment.session || analytics.attachedAt === undefined) return;
+    const now = Date.now();
+    if (now - (analytics.activeAt ?? 0) < Analytics.ACTIVE_INTERVAL_MS) return;
+    socket.serializeAttachment({ ...attachment, analytics: { ...analytics, activeAt: now } } satisfies BridgeAttachment);
+    let open = 0;
+    for (const channel of this.channels.values()) if (channel.bridge === socket) open++;
+    Analytics.publish("tunnel.active", {
+      tunnel_id: analytics.tunnel,
+      session_id: attachment.session,
+      route_count: attachment.routes?.length ?? 0,
+      connected_ms: now - analytics.attachedAt,
+      open_connections: open,
+    });
+  }
+
+  async webSocketClose(socket: WebSocket, code: number, _reason: string, wasClean: boolean): Promise<void> {
     const attachment = socket.deserializeAttachment() as BridgeAttachment | null;
     const record = await this.record();
     if (!attachment?.session) return;
     for (const channel of this.channels.values()) {
-      if (channel.bridge === socket) channel.finish(new Error("Bridge disconnected"));
+      if (channel.bridge === socket) channel.finish("bridge_disconnected", new Error("Bridge disconnected"));
+    }
+    const analytics = attachment.analytics;
+    if (analytics?.tunnel && analytics.attachedAt !== undefined) {
+      Analytics.publish("bridge.disconnected", {
+        tunnel_id: analytics.tunnel,
+        session_id: attachment.session,
+        route_count: attachment.routes?.length ?? 0,
+        duration_ms: Date.now() - analytics.attachedAt,
+        code,
+        clean: wasClean,
+      });
     }
     const hasAttachedBridge = this.ctx.getWebSockets("bridge").some((candidate) => {
       if (candidate === socket || candidate.readyState !== WebSocket.OPEN) return false;
@@ -469,6 +583,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
   }
 
   async connect(socket: Socket): Promise<void> {
+    const startedAt = Date.now();
     const record = await this.record();
     const info = await socket.opened;
     const reader = socket.readable.getReader();
@@ -518,6 +633,19 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       route.includes(".") ||
       !bridge
     ) {
+      if (record && !record.deletedAt) {
+        Analytics.publish("connection.closed", {
+          tunnel_id: String(record.id),
+          outcome: record.certificate?.state.type !== "ready"
+            ? "certificate_not_ready"
+            : !route || route.includes(".")
+              ? "unknown_route"
+              : "no_bridge",
+          duration_ms: Date.now() - startedAt,
+          bytes_in: initialLength,
+          bytes_out: 0,
+        });
+      }
       reader.releaseLock();
       await socket.close();
       return;
@@ -534,13 +662,17 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       reject = fail;
     });
     let finished = false;
+    let outcome: Analytics.ConnectionOutcome = "closed";
+    let bytesIn = initialLength;
     const channel: Channel = {
       bridge,
       writer,
       done,
-      finish: (error) => {
+      bytesOut: 0,
+      finish: (reason, error) => {
         if (finished) return;
         finished = true;
+        outcome = reason;
         this.channels.delete(conn);
         if (error) {
           void writer.abort(error).catch(() => undefined);
@@ -571,20 +703,31 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         while (true) {
           const item = await reader.read();
           if (item.done) break;
-          if (bridge.bufferedAmount > 16 * 1024 * 1024) throw new Error("Bridge backpressure limit");
+          if (bridge.bufferedAmount > 16 * 1024 * 1024) throw new Error(BACKPRESSURE);
+          bytesIn += item.value.byteLength;
           bridge.send(BridgeProtocol.buildDataFrame(conn, item.value));
         }
         bridge.send(JSON.stringify({ type: "end", conn }));
       } catch (error) {
         bridge.send(JSON.stringify({ type: "reset", conn, code: "client_io_error" }));
-        channel.finish(error);
+        channel.finish(
+          error instanceof Error && error.message === BACKPRESSURE ? "backpressure" : "client_error",
+          error,
+        );
       } finally {
         reader.releaseLock();
       }
     };
 
     await Promise.allSettled([upload(), done]);
-    channel.finish();
+    channel.finish("closed");
+    Analytics.publish("connection.closed", {
+      tunnel_id: String(record.id),
+      outcome,
+      duration_ms: Date.now() - startedAt,
+      bytes_in: bytesIn,
+      bytes_out: channel.bytesOut,
+    });
   }
 
   private async ensureCertificateWorkflow(

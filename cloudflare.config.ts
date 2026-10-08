@@ -39,6 +39,10 @@ export default defineConfig(({ mode = "production" }) => {
         ACME_ACCOUNT_KEY_JWK: bindings.secret(),
         CLOUDFLARE_API_TOKEN: bindings.secret(),
         RELAY_TOKEN: bindings.secret(),
+        // Anomaly's platform event stream, platform_<stack>_event (anomaly/platform src/lake), by stream ID.
+        EVENTS: bindings.pipeline({
+          name: production ? "251a89241c3a461c9007f6b6f345ed8b" : "04809367dc154b469b80b054cc6afa6e",
+        }),
         TUNNELS: bindings.durableObject({ worker: self, exportName: "TunnelObject" }),
         CERTIFICATES: bindings.workflow({ name: certificates, worker: self, exportName: "CertificateWorkflow" }),
       },
