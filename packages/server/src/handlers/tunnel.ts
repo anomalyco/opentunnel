@@ -29,7 +29,7 @@ export const TunnelHandlers = HttpApiBuilder.group(Api, "tunnel", (handlers) =>
         });
       }
       const id = Random.slug();
-      const token = Tunnel.Token.makeUnsafe(randomToken());
+      const token = Tunnel.Token.make(randomToken());
       return Effect.tryPromise({
         try: async () =>
           env.TUNNELS.getByName(id).initialize({
@@ -49,7 +49,7 @@ export const TunnelHandlers = HttpApiBuilder.group(Api, "tunnel", (handlers) =>
       );
     })
     .handle("tunnel.get", ({ params }) =>
-      OpenTunnelAuthorizationToken.asEffect().pipe(
+      OpenTunnelAuthorizationToken.pipe(
         Effect.flatMap((token) =>
           Effect.tryPromise({
             try: async () => await env.TUNNELS.getByName(String(params.id)).info(token),
@@ -69,7 +69,7 @@ export const TunnelHandlers = HttpApiBuilder.group(Api, "tunnel", (handlers) =>
       ),
     )
     .handle("tunnel.bindCertificate", ({ params, payload }) =>
-      OpenTunnelAuthorizationToken.asEffect().pipe(
+      OpenTunnelAuthorizationToken.pipe(
         Effect.flatMap((token) =>
           Effect.tryPromise({
             try: async () =>
@@ -124,7 +124,7 @@ export const TunnelHandlers = HttpApiBuilder.group(Api, "tunnel", (handlers) =>
       ),
     )
     .handle("tunnel.getCertificate", ({ params }) =>
-      OpenTunnelAuthorizationToken.asEffect().pipe(
+      OpenTunnelAuthorizationToken.pipe(
         Effect.flatMap((token) =>
           Effect.tryPromise({
             try: async () => await env.TUNNELS.getByName(String(params.id)).certificate(token),
@@ -165,7 +165,7 @@ export const TunnelHandlers = HttpApiBuilder.group(Api, "tunnel", (handlers) =>
       ),
     )
     .handle("tunnel.remove", ({ params }) =>
-      OpenTunnelAuthorizationToken.asEffect().pipe(
+      OpenTunnelAuthorizationToken.pipe(
         Effect.flatMap((token) =>
           Effect.tryPromise({
             try: async () => await env.TUNNELS.getByName(String(params.id)).remove(token),

@@ -101,8 +101,8 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
     if (existing && !existing.deletedAt) return undefined;
     const record: StoredTunnel = {
       version: 1,
-      id: Tunnel.ID.makeUnsafe(input.id),
-      hostname: CSR.Hostname.makeUnsafe(input.hostname),
+      id: Tunnel.ID.make(input.id),
+      hostname: CSR.Hostname.make(input.hostname),
       tokenHash: input.tokenHash,
       state: "offline",
       createdAt: new Date().toISOString(),
@@ -159,7 +159,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
           : new Certificate.StateFailed(input);
     const updated: StoredTunnel = {
       ...record,
-      certificate: new Certificate.Info({ id: Certificate.ID.makeUnsafe(id), state }),
+      certificate: new Certificate.Info({ id: Certificate.ID.make(id), state }),
     };
     await this.save(updated);
     await this.scheduleRenewal(updated);
@@ -201,7 +201,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
   /** Issues a new certificate from the stored CSR; the current one serves until it is ready. */
   private async startRenewal(record: StoredTunnel): Promise<void> {
     if (!record.certificateCsr) return;
-    const certificateID = Certificate.ID.makeUnsafe(`cert_${crypto.randomUUID()}`);
+    const certificateID = Certificate.ID.make(`cert_${crypto.randomUUID()}`);
     await this.save({ ...record, renewal: { certificateID, startedAt: new Date().toISOString() } });
     try {
       await env.CERTIFICATES.create({
@@ -293,7 +293,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       return { status: "in-progress" };
     }
 
-    const certificateID = Certificate.ID.makeUnsafe(`cert_${crypto.randomUUID()}`);
+    const certificateID = Certificate.ID.make(`cert_${crypto.randomUUID()}`);
     const certificate = new Certificate.Info({
       id: certificateID,
       state: new Certificate.StateIssuing({ type: "issuing" }),

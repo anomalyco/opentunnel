@@ -1,9 +1,9 @@
-import { ServiceMap } from "effect";
+import { Context } from "effect";
 import { HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi";
 import { Tunnel } from "../tunnel.js";
 import { UnauthorizedError } from "./errors.js";
 
-export class OpenTunnelAuthorizationToken extends ServiceMap.Service<
+export class OpenTunnelAuthorizationToken extends Context.Service<
   OpenTunnelAuthorizationToken,
   Tunnel.Token
 >()("@opentunnel/protocol/OpenTunnelAuthorizationToken") {}

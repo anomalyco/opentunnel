@@ -10,20 +10,20 @@ export class ID extends Newtype<ID>()("TunnelID", Schema.String) {}
 export const Token = Schema.String.pipe(Schema.brand("TunnelToken"));
 export type Token = Schema.Schema.Type<typeof Token>;
 
-export class NotFoundError extends Schema.TaggedErrorClass()("NotFound", {
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("NotFound", {
   tunnelID: ID,
 }) {}
 
-export class NoCertificateError extends Schema.TaggedErrorClass()("NoCertificate", {
+export class NoCertificateError extends Schema.TaggedError<NoCertificateError>()("NoCertificate", {
   tunnelID: ID,
 }) {}
 
-export class CertificateNotReadyError extends Schema.TaggedErrorClass()(
+export class CertificateNotReadyError extends Schema.TaggedError<CertificateNotReadyError>()(
   "CertificateNotReady",
   { tunnelID: ID, currentState: Schema.String },
 ) {}
 
-export class InvalidHostnameError extends Schema.TaggedErrorClass()(
+export class InvalidHostnameError extends Schema.TaggedError<InvalidHostnameError>()(
   "InvalidHostname",
   { provided: CSR.Hostname, expected: CSR.Hostname },
 ) {}
