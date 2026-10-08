@@ -78,7 +78,7 @@ export function create(options: OpenTunnelClientOptions = {}): OpenTunnelPromise
   const runtime = ManagedRuntime.make(OpenTunnelClient.layer(effectOptions));
   const withClient = <A, E>(
     f: (client: OpenTunnelClient["Service"]) => Effect.Effect<A, E>,
-  ) => runtime.runPromise(Effect.flatMap(OpenTunnelClient.asEffect(), f));
+  ) => runtime.runPromise(Effect.flatMap(OpenTunnelClient, f));
 
   return {
     profile: { list: () => withClient((client) => client.profile.list()) },
@@ -95,7 +95,7 @@ export function create(options: OpenTunnelClientOptions = {}): OpenTunnelPromise
         const closeScope = () => runtime.runPromise(Scope.close(scope, Exit.void));
         const connection = await runtime
           .runPromise(
-            Effect.flatMap(OpenTunnelClient.asEffect(), (client) => client.tunnel.connect(input)).pipe(
+            Effect.flatMap(OpenTunnelClient, (client) => client.tunnel.connect(input)).pipe(
               Effect.provideService(Scope.Scope, scope),
             ),
           )

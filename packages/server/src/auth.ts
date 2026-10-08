@@ -11,7 +11,7 @@ export const layer = Layer.succeed(
       httpEffect.pipe(
         Effect.provideService(
           OpenTunnelAuthorizationToken,
-          Tunnel.Token.makeUnsafe(Redacted.value(credential)),
+          Tunnel.Token.make(Redacted.value(credential)),
         ),
       ),
   }),

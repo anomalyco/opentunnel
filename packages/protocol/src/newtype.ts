@@ -8,7 +8,7 @@ import { Schema } from "effect";
  * @example
  *   class UserID extends Newtype<UserID>()("UserID", Schema.String) {
  *     static random() {
- *       return this.makeUnsafe(crypto.randomUUID());
+ *       return this.make(crypto.randomUUID());
  *     }
  *   }
  */

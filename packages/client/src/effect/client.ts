@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, Queue, ServiceMap, Stream } from "effect";
+import { Cause, Effect, Layer, Queue, Context, Stream } from "effect";
 import { CSR } from "@opentunnel/protocol/csr";
 import { Tunnel } from "@opentunnel/protocol/tunnel";
 import { OpenTunnelApiClient } from "./api.js";
@@ -33,7 +33,7 @@ export interface OpenTunnelClientOptions {
   readonly storage?: Storage;
 }
 
-export class OpenTunnelClient extends ServiceMap.Service<
+export class OpenTunnelClient extends Context.Service<
   OpenTunnelClient,
   OpenTunnelEffectClient
 >()("@opentunnel/client/OpenTunnelClient") {
@@ -56,10 +56,10 @@ export class OpenTunnelClient extends ServiceMap.Service<
           readonly pending: OpenTunnelPendingIdentity;
           readonly onProgress?: (stage: OpenTunnelProvisionStage) => void;
         }) {
-          const authorized = yield* api.authorized(Tunnel.Token.makeUnsafe(options.pending.token));
+          const authorized = yield* api.authorized(Tunnel.Token.make(options.pending.token));
           yield* Effect.sync(() => options.onProgress?.("requesting-certificate"));
           yield* authorized.tunnel["tunnel.bindCertificate"]({
-            params: { id: Tunnel.ID.makeUnsafe(options.pending.id) },
+            params: { id: Tunnel.ID.make(options.pending.id) },
             payload: { csr: options.pending.csr as CSR.Raw },
           }).pipe(
             // A resumed provision may already have an issuance in flight.
@@ -71,7 +71,7 @@ export class OpenTunnelClient extends ServiceMap.Service<
             while (true) {
               yield* Effect.sync(() => options.onProgress?.("waiting-certificate"));
               const value = yield* authorized.tunnel["tunnel.getCertificate"]({
-                params: { id: Tunnel.ID.makeUnsafe(options.pending.id) },
+                params: { id: Tunnel.ID.make(options.pending.id) },
               }).pipe(
                 Effect.mapError((cause) => clientError("Failed to read certificate", cause)),
               );
@@ -176,9 +176,9 @@ export class OpenTunnelClient extends ServiceMap.Service<
         ) {
           const existing = yield* get(input);
           if (!existing) return yield* create(input);
-          const authorized = yield* api.authorized(Tunnel.Token.makeUnsafe(existing.token));
+          const authorized = yield* api.authorized(Tunnel.Token.make(existing.token));
           const certificate = yield* authorized.tunnel["tunnel.getCertificate"]({
-            params: { id: Tunnel.ID.makeUnsafe(existing.id) },
+            params: { id: Tunnel.ID.make(existing.id) },
           }).pipe(
             Effect.mapError((cause) => clientError("Failed to read certificate", cause)),
           );
@@ -197,9 +197,9 @@ export class OpenTunnelClient extends ServiceMap.Service<
           if (state.type !== "failed") return existing;
           return yield* provision({
             profile: profileName(input),
-            id: Tunnel.ID.makeUnsafe(existing.id),
+            id: Tunnel.ID.make(existing.id),
             hostname: existing.hostname,
-            token: Tunnel.Token.makeUnsafe(existing.token),
+            token: Tunnel.Token.make(existing.token),
           });
         });
 
@@ -235,9 +235,9 @@ export class OpenTunnelClient extends ServiceMap.Service<
               const profile = profileName(input);
               const identity = yield* storage.load(profile);
               if (!identity) return;
-              const authorized = yield* api.authorized(Tunnel.Token.makeUnsafe(identity.token));
+              const authorized = yield* api.authorized(Tunnel.Token.make(identity.token));
               yield* authorized.tunnel["tunnel.remove"]({
-                params: { id: Tunnel.ID.makeUnsafe(identity.id) },
+                params: { id: Tunnel.ID.make(identity.id) },
               }).pipe(
                 Effect.mapError((cause) => clientError("Failed to remove tunnel", cause)),
               );

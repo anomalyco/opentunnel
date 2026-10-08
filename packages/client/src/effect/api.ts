@@ -1,4 +1,4 @@
-import { Effect, Layer, ServiceMap } from "effect";
+import { Effect, Layer, Context } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { Api } from "@opentunnel/protocol/api/api";
@@ -11,7 +11,7 @@ interface OpenTunnelApi {
   readonly authorized: (token: Tunnel.Token) => Effect.Effect<Client>;
 }
 
-export class OpenTunnelApiClient extends ServiceMap.Service<OpenTunnelApiClient, OpenTunnelApi>()(
+export class OpenTunnelApiClient extends Context.Service<OpenTunnelApiClient, OpenTunnelApi>()(
   "@opentunnel/client/OpenTunnelApiClient",
 ) {
   static layer(options: { readonly api: URL | string }) {
