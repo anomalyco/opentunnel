@@ -529,6 +529,14 @@ impl Supervisor {
                                         })).await;
                                         continue;
                                     };
+                                    // max_conns is advertised on attach; refuse before starting another TLS channel.
+                                    if channels.len() >= MAX_CONNS as usize {
+                                        let _ = outbound.send(control(&ClientMessage::Reset {
+                                            conn,
+                                            code: codes::TOO_MANY_CONNECTIONS.into(),
+                                        })).await;
+                                        continue;
+                                    }
                                     let (inbound, inbound_rx) = mpsc::channel(INBOUND_QUEUE);
                                     let acceptor = self.acceptor.read().expect("acceptor lock").clone();
                                     let abort = tasks.spawn(run_channel(

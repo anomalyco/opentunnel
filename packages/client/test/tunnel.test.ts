@@ -86,6 +86,16 @@ describe("tunnel", () => {
     await connection.close();
   });
 
+  test("resets connections beyond the advertised max_conns", async () => {
+    const connection = await client.tunnel.connect({ routes: { api: echo.target } });
+    const session = await relay.next();
+    for (let conn = 1; conn <= 256; conn++) session.open(conn, `api.${HOSTNAME}`);
+    session.open(257, `api.${HOSTNAME}`);
+    expect(await session.next("reset")).toEqual({ type: "reset", conn: 257, code: "too_many_connections" });
+    expect(connection.status().connections).toBe(256);
+    await connection.close();
+  });
+
   test("reconnects after the bridge closes", async () => {
     const connection = await client.tunnel.connect({ routes: { api: echo.target } });
     const events = collect(connection.events);

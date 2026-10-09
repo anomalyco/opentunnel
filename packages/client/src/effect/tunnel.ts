@@ -415,6 +415,11 @@ class Session {
       this.sendControl({ type: "reset", conn, code: BridgeProtocol.BridgeErrorCode.UNKNOWN_ROUTE });
       return;
     }
+    // max_conns is advertised on attach; refuse before allocating TLS state for another connection.
+    if (this.channels.size >= MAX_CONNS) {
+      this.sendControl({ type: "reset", conn, code: BridgeProtocol.BridgeErrorCode.TOO_MANY_CONNECTIONS });
+      return;
+    }
     const channel = new Channel(conn, route, parsed, this.secureContext(), this);
     this.channels.set(conn, channel);
     this.hooks.connections(this.channels.size);
