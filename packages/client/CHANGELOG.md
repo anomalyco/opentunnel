@@ -1,5 +1,13 @@
 # @opentunnel/client
 
+## 0.4.1
+
+### Patch Changes
+
+- f532395: Clients now enforce the `max_conns` they advertise on attach: a connection opened beyond it is reset with `too_many_connections` before any TLS state is allocated.
+- Updated dependencies [f532395]
+  - @opentunnel/protocol@0.4.1
+
 ## 0.4.0
 
 ### Minor Changes
