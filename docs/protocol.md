@@ -149,6 +149,10 @@ its own bridge with the same token and attaches with the routes it handles.
   already held by another is rejected with `route_conflict` and retries with
   backoff, so it takes over once the other bridge goes away (for example when
   an app restarts).
+- The server treats a bridge it has not heard from for `idle_timeout_ms` plus
+  `heartbeat_ms` as gone, even if its socket never closed: it stops routing
+  connections to it, resets the connections it had, closes it with `1001`, and
+  releases its routes.
 - Each client reads the same identity from local storage and terminates TLS
   itself.
 
