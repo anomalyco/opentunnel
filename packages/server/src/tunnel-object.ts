@@ -14,6 +14,8 @@ interface BridgeAttachment {
   readonly attached: boolean;
   readonly session?: string;
   readonly routes?: ReadonlyArray<string>;
+  /** Connection capacity advertised by this bridge, persisted across hibernation. */
+  readonly maxConns?: number;
   /** Analytics context, captured from the upgrade request and on attach. */
   readonly analytics?: Analytics.Client & {
     readonly country?: string;
@@ -88,6 +90,7 @@ const RENEWAL_RETRY_MS = 60 * 60 * 1000;
 const RENEWAL_STALE_MS = DAY_MS;
 
 const BACKPRESSURE = "Bridge backpressure limit";
+const DEFAULT_MAX_CONNS = 256;
 
 const validRoute = (route: string): boolean =>
   route === "@" || /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(route);
@@ -461,6 +464,12 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         socket.send(JSON.stringify({ type: "attach_error", code: "invalid_route" }));
         return socket.close(1008, "invalid route");
       }
+      const capabilities = control.client as { max_conns?: unknown } | null | undefined;
+      const maxConns = capabilities?.max_conns === undefined ? DEFAULT_MAX_CONNS : capabilities.max_conns;
+      if (typeof maxConns !== "number" || !Number.isInteger(maxConns) || maxConns <= 0 || maxConns > 0xffffffff) {
+        socket.send(JSON.stringify({ type: "attach_error", code: "bad_attach" }));
+        return socket.close(1008, "invalid max_conns");
+      }
       const conflict = this.ctx.getWebSockets("bridge").some((candidate) => {
         if (candidate === socket || candidate.readyState !== WebSocket.OPEN) return false;
         const existing = candidate.deserializeAttachment() as BridgeAttachment | null;
@@ -485,6 +494,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         attached: true,
         session,
         routes: requestedRoutes,
+        maxConns,
         analytics,
       } satisfies BridgeAttachment);
       const connected: StoredTunnel = {
@@ -651,6 +661,23 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       return;
     }
 
+    const attachment = bridge.deserializeAttachment() as BridgeAttachment;
+    let openConnections = 0;
+    for (const channel of this.channels.values()) if (channel.bridge === bridge) openConnections++;
+    if (openConnections >= (attachment.maxConns ?? DEFAULT_MAX_CONNS)) {
+      Analytics.publish("connection.closed", {
+        tunnel_id: String(record.id),
+        outcome: "too_many_connections",
+        duration_ms: Date.now() - startedAt,
+        bytes_in: initialLength,
+        bytes_out: 0,
+      });
+      reader.releaseLock();
+      await socket.close();
+      return;
+    }
+    // No await between admission and channels.set(): concurrent connects cannot
+    // reserve the last slot twice. Existing finish() paths release the slot.
     let conn = this.sequence++ >>> 0;
     while (conn === 0 || this.channels.has(conn)) conn = this.sequence++ >>> 0;
 

@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 const sent: unknown[][] = [];
 const pending: Promise<unknown>[] = [];
 const workers = {
+  DurableObject: class {
+    constructor(readonly ctx: unknown, readonly env: unknown) {}
+  },
   env: { EVENTS: { send: async (records: unknown[]) => void sent.push(records) } } as {
     EVENTS?: { send(records: unknown[]): Promise<void> };
   },

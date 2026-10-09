@@ -43,6 +43,7 @@ export type ConnectionOutcome =
   | "bridge_disconnected"
   | "deleted"
   | "backpressure"
+  | "too_many_connections"
   | "client_error"
   | "no_bridge"
   | "unknown_route"

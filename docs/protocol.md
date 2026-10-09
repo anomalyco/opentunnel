@@ -126,6 +126,13 @@ The server keeps accepting older versions so installed clients keep working.
    certificate, and connects to the route target. If no route matches it
    sends `reset` with `unknown_route`. If it already holds the `max_conns`
    it advertised on attach, it sends `reset` with `too_many_connections`.
+   The relay also enforces this capacity per bridge before forwarding `open`
+   or ClientHello data: excess public TCP connections are closed locally.
+   A declared `max_conns` must be a positive unsigned 32-bit integer; invalid
+   values reject attachment with `bad_attach`. Older clients or persisted bridge
+   attachments without the field use a default capacity of 256.
+   Capacity is released on connection end/reset, I/O failure, deletion or bridge
+   disconnect; another route's bridge has its own independent capacity.
 5. Either side sends `end` to half-close a connection and `reset` to abort it.
 6. The client sends `ping` every `heartbeat_ms` and closes the session when
    nothing is received for `idle_timeout_ms`.
