@@ -14,6 +14,8 @@ interface BridgeAttachment {
   readonly attached: boolean;
   readonly session?: string;
   readonly routes?: ReadonlyArray<string>;
+  /** Server time this bridge last sent anything, recorded at most once per heartbeat. */
+  readonly seenAt?: number;
   /** Analytics context, captured from the upgrade request and on attach. */
   readonly analytics?: Analytics.Client & {
     readonly country?: string;
@@ -88,6 +90,12 @@ const RENEWAL_RETRY_MS = 60 * 60 * 1000;
 const RENEWAL_STALE_MS = DAY_MS;
 
 const BACKPRESSURE = "Bridge backpressure limit";
+
+/**
+ * A bridge silent for this long is gone. Its client pings every heartbeat and gives up after the idle timeout
+ * itself; one heartbeat more covers `seenAt` being recorded at most once per heartbeat.
+ */
+const STALE_BRIDGE_MS = BridgeProtocol.BridgeTiming.IDLE_TIMEOUT_MS + BridgeProtocol.BridgeTiming.HEARTBEAT_MS;
 
 const validRoute = (route: string): boolean =>
   route === "@" || /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(route);
@@ -226,6 +234,68 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
     if (this.attachedBridges().length > 0) return true;
     return record.lastConnectedAt !== undefined &&
       Date.now() - Date.parse(record.lastConnectedAt) < ACTIVE_WINDOW_MS;
+  }
+
+  /** Records that an attached bridge is alive, at most once per heartbeat rather than once per frame. */
+  private touch(socket: WebSocket, attachment: BridgeAttachment): BridgeAttachment {
+    const now = Date.now();
+    if (attachment.seenAt !== undefined && now - attachment.seenAt < BridgeProtocol.BridgeTiming.HEARTBEAT_MS) {
+      return attachment;
+    }
+    const touched = { ...attachment, seenAt: now } satisfies BridgeAttachment;
+    socket.serializeAttachment(touched);
+    return touched;
+  }
+
+  /**
+   * Retires attached bridges whose client is gone. A client that vanishes without a close (sleep, a network
+   * change) leaves its socket open here until Cloudflare notices, which can take over an hour. Until then the
+   * bridge would keep its routes, so the client's reconnects get `route_conflict`, and it would swallow every
+   * public connection routed to it. The bridge is detached before closing because the close handshake may never
+   * complete.
+   */
+  private async retireStaleBridges(): Promise<void> {
+    const now = Date.now();
+    let retired = false;
+    for (const socket of this.ctx.getWebSockets("bridge")) {
+      const attachment = socket.deserializeAttachment() as BridgeAttachment | null;
+      if (attachment?.kind !== "bridge" || !attachment.attached) continue;
+      if (socket.readyState === WebSocket.OPEN) {
+        // Bridges attached before `seenAt` existed get one idle period from now.
+        if (attachment.seenAt === undefined) {
+          socket.serializeAttachment({ ...attachment, seenAt: now } satisfies BridgeAttachment);
+          continue;
+        }
+        if (now - attachment.seenAt <= STALE_BRIDGE_MS) continue;
+      }
+      socket.serializeAttachment({ ...attachment, attached: false } satisfies BridgeAttachment);
+      for (const channel of this.channels.values()) {
+        if (channel.bridge === socket) channel.finish("bridge_disconnected", new Error("Bridge idle timeout"));
+      }
+      try {
+        socket.close(1001, "idle timeout");
+      } catch {
+        // Already closing.
+      }
+      this.publishDisconnected(attachment, 1001, false);
+      retired = true;
+    }
+    if (!retired || this.attachedBridges().length > 0) return;
+    const record = await this.record();
+    if (record && !record.deletedAt) await this.save({ ...record, state: "offline" });
+  }
+
+  private publishDisconnected(attachment: BridgeAttachment, code: number, clean: boolean): void {
+    const analytics = attachment.analytics;
+    if (!attachment.session || !analytics?.tunnel || analytics.attachedAt === undefined) return;
+    Analytics.publish("bridge.disconnected", {
+      tunnel_id: analytics.tunnel,
+      session_id: attachment.session,
+      route_count: attachment.routes?.length ?? 0,
+      duration_ms: Date.now() - analytics.attachedAt,
+      code,
+      clean,
+    });
   }
 
   private attachedBridges(): WebSocket[] {
@@ -427,6 +497,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
 
     if (typeof message !== "string") {
       if (!attachment.attached) return socket.close(1008, "attach required");
+      this.touch(socket, attachment);
       const frame = BridgeProtocol.parseDataFrame(new Uint8Array(message));
       if (!frame) return;
       const channel = this.channels.get(frame.conn);
@@ -461,6 +532,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         socket.send(JSON.stringify({ type: "attach_error", code: "invalid_route" }));
         return socket.close(1008, "invalid route");
       }
+      await this.retireStaleBridges();
       const conflict = this.ctx.getWebSockets("bridge").some((candidate) => {
         if (candidate === socket || candidate.readyState !== WebSocket.OPEN) return false;
         const existing = candidate.deserializeAttachment() as BridgeAttachment | null;
@@ -485,6 +557,7 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
         attached: true,
         session,
         routes: requestedRoutes,
+        seenAt: now,
         analytics,
       } satisfies BridgeAttachment);
       const connected: StoredTunnel = {
@@ -516,9 +589,10 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       return;
     }
 
+    const current = this.touch(socket, attachment);
     if (control.type === "ping" && typeof control.time_sent === "number") {
       socket.send(JSON.stringify({ type: "pong", time_sent: control.time_sent }));
-      this.reportActive(socket, attachment);
+      this.reportActive(socket, current);
       return;
     }
     if ((control.type === "end" || control.type === "reset") && typeof control.conn === "number") {
@@ -554,21 +628,12 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
   async webSocketClose(socket: WebSocket, code: number, _reason: string, wasClean: boolean): Promise<void> {
     const attachment = socket.deserializeAttachment() as BridgeAttachment | null;
     const record = await this.record();
-    if (!attachment?.session) return;
+    // Bridges that never attached have nothing to clean up; retired ones were cleaned up when retired.
+    if (!attachment?.session || !attachment.attached) return;
     for (const channel of this.channels.values()) {
       if (channel.bridge === socket) channel.finish("bridge_disconnected", new Error("Bridge disconnected"));
     }
-    const analytics = attachment.analytics;
-    if (analytics?.tunnel && analytics.attachedAt !== undefined) {
-      Analytics.publish("bridge.disconnected", {
-        tunnel_id: analytics.tunnel,
-        session_id: attachment.session,
-        route_count: attachment.routes?.length ?? 0,
-        duration_ms: Date.now() - analytics.attachedAt,
-        code,
-        clean: wasClean,
-      });
-    }
+    this.publishDisconnected(attachment, code, wasClean);
     const hasAttachedBridge = this.ctx.getWebSockets("bridge").some((candidate) => {
       if (candidate === socket || candidate.readyState !== WebSocket.OPEN) return false;
       return (candidate.deserializeAttachment() as BridgeAttachment | null)?.attached === true;
@@ -609,9 +674,11 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
       : sni?.endsWith(`.${record?.hostname}`)
         ? sni.slice(0, -String(record?.hostname).length - 1)
         : undefined;
+    await this.retireStaleBridges();
     const bridge = this.ctx
       .getWebSockets("bridge")
       .find((candidate) => {
+        if (candidate.readyState !== WebSocket.OPEN) return false;
         const attached = candidate.deserializeAttachment() as BridgeAttachment | null;
         return attached?.attached && route !== undefined && attached.routes?.includes(route);
       });
