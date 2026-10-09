@@ -69,6 +69,10 @@ The wire protocol and on-disk layout are specified in
 shared vectors in `spec/vectors`, so a change to the protocol must update the
 spec, the vectors, and both clients.
 
+## Trust boundary
+
+The local client terminates TLS and forwards the decrypted byte stream to the route target unchanged, so the target sees a connection from loopback and the request headers exactly as the public client sent them — including `Host`, and with no `Forwarded`, `X-Forwarded-For`, or `X-Real-IP` added. A request that arrived through OpenTunnel is therefore indistinguishable, by peer address and `Host`, from one made by a process on the same machine. Do not treat either as authentication. See [docs/trust-boundary.md](docs/trust-boundary.md).
+
 ## Configuration
 
 Everything hosted is one Cloudflare Worker, described by `cloudflare.config.ts`

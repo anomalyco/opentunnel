@@ -10,6 +10,8 @@ It implements the same protocol and on-disk layout as the Rust client and CLI
 (see `docs/protocol.md`), so a tunnel created by the CLI can be used here and
 vice versa.
 
+Because TLS terminates in your process and the decrypted stream is forwarded unchanged, your target sees a loopback peer and the visitor's own headers, including `Host`. Read [the trust boundary](https://github.com/anomalyco/opentunnel/blob/master/docs/trust-boundary.md) before relying on either.
+
 ## Quick start
 
 ```ts
