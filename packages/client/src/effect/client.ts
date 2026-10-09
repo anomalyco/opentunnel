@@ -264,6 +264,7 @@ export class OpenTunnelClient extends Context.Service<
                     onRenewed: (renewed) => {
                       Effect.runFork(storage.save(profileName(input), renewed).pipe(Effect.ignore));
                     },
+                    forwardHeaders: input.forwardHeaders,
                   })
                 ),
                 (tunnel) =>

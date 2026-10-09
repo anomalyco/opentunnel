@@ -5,6 +5,7 @@ import * as Tls from "node:tls";
 import { BridgeProtocol } from "@opentunnel/protocol/bridge-protocol";
 import { Names } from "@opentunnel/protocol/names";
 import { USER_AGENT } from "./api.js";
+import { ForwardedHeaders } from "./forwarded-headers.js";
 
 /** Bun's WebSocket also takes options with request headers, which the DOM typings don't know about. */
 const BunWebSocket = WebSocket as unknown as new (
@@ -87,6 +88,8 @@ export interface TunnelOptions {
   readonly onEvent: (event: OpenTunnelClientEvent) => void;
   /** Called with the identity after the server renews its certificate. */
   readonly onRenewed?: (identity: OpenTunnelIdentity) => void;
+  /** Adds forwarding headers to HTTP/1.x requests; see `OpenTunnelConnectOptions`. */
+  readonly forwardHeaders?: boolean;
 }
 
 /**
@@ -420,7 +423,10 @@ class Session {
       this.sendControl({ type: "reset", conn, code: BridgeProtocol.BridgeErrorCode.TOO_MANY_CONNECTIONS });
       return;
     }
-    const channel = new Channel(conn, route, parsed, this.secureContext(), this);
+    const channel = new Channel(conn, route, parsed, this.secureContext(), this, {
+      peer,
+      forwardHeaders: this.options.forwardHeaders === true,
+    });
     this.channels.set(conn, channel);
     this.hooks.connections(this.channels.size);
     this.hooks.emit({ type: "connection-opened", conn, route, peer });
@@ -481,6 +487,8 @@ class Channel {
     target: { readonly host: string; readonly port: number },
     secureContext: Tls.SecureContext,
     private readonly session: Session,
+    /** How the public side of this connection is presented to the target. */
+    private readonly forwarding: { readonly peer: string; readonly forwardHeaders: boolean },
   ) {
     this.raw = new Duplex({
       allowHalfOpen: true,
@@ -508,7 +516,12 @@ class Channel {
           error.message,
         ),
       );
-      this.tls.pipe(upstream);
+      if (this.forwarding.forwardHeaders) {
+        // Forwarding headers are added on the way in only; the reply is untouched.
+        this.tls.pipe(new ForwardedHeaders(this.forwarding.peer)).pipe(upstream);
+      } else {
+        this.tls.pipe(upstream);
+      }
       upstream.pipe(this.tls);
     });
     this.tls.on("error", (error) =>

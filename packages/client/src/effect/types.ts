@@ -64,6 +64,17 @@ export interface OpenTunnelStatus {
 
 export interface OpenTunnelConnectOptions extends OpenTunnelProfileOptions {
   readonly routes: OpenTunnelRoutes;
+  /**
+   * Adds `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host` to
+   * HTTP/1.x requests before they reach the target, replacing any the visitor
+   * sent, so the target can see the visitor instead of the tunnel client.
+   *
+   * Off by default. It is meant for HTTP routes: anything else is forwarded
+   * byte-for-byte, at the cost of buffering the opening bytes until they can be
+   * ruled out. `Host` is left alone, so the original authority arrives in
+   * `X-Forwarded-Host`.
+   */
+  readonly forwardHeaders?: boolean;
 }
 
 export interface OpenTunnelConnection {

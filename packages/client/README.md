@@ -47,6 +47,18 @@ await connection.setRoutes({ api: "127.0.0.1:4000", "@": "127.0.0.1:8080" })
 Changing only targets applies to new connections immediately. Adding or
 removing names re-attaches the bridge.
 
+## Forwarding headers
+
+By default a target sees the tunnel client's loopback address, and the request headers are the visitor's own, `Host` included. Pass `forwardHeaders: true` to add `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host` to HTTP/1.x requests before they reach the target:
+
+```ts
+await client.tunnel.connect({ routes: { api: "127.0.0.1:3000" }, forwardHeaders: true })
+```
+
+The headers replace the visitor's own copies, so a target can read them without knowing how many proxies to skip, and `Host` arrives unchanged with the public authority in `X-Forwarded-Host`. The flag applies to the connection it is passed to and is not stored in the profile.
+
+Use it for HTTP routes only. Anything the SDK cannot recognize as an HTTP/1.x request — a nested TLS session, an SSH banner, a cleartext HTTP/2 preface — is forwarded byte-for-byte, but its opening bytes are buffered until they can be ruled out.
+
 ## API
 
 ```ts
