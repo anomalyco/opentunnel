@@ -14,14 +14,14 @@
     },
     "packages/cli": {
       "name": "opentunnel",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "bin": {
         "opentunnel": "./bin/opentunnel.cjs",
       },
     },
     "packages/client": {
       "name": "@opentunnel/client",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "dependencies": {
         "@opentunnel/protocol": "workspace:*",
       },
@@ -40,7 +40,7 @@
     },
     "packages/protocol": {
       "name": "@opentunnel/protocol",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
