@@ -20,7 +20,7 @@ const env = {
     },
   },
 };
-mock.module("cloudflare:workers", () => ({ env, waitUntil: () => {} }));
+mock.module("cloudflare:workers", () => ({ DurableObject: class {}, env, waitUntil: () => {} }));
 
 const { handleAdmin } = await import("../src/admin-export.js");
 

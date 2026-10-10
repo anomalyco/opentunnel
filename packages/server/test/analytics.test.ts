@@ -8,7 +8,7 @@ const workers = {
   },
   waitUntil: (promise: Promise<unknown>) => void pending.push(promise),
 };
-mock.module("cloudflare:workers", () => workers);
+mock.module("cloudflare:workers", () => ({ ...workers, DurableObject: class {} }));
 
 const { Analytics } = await import("../src/analytics.js");
 
