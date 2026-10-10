@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import * as Net from "node:net";
 import { Duplex } from "node:stream";
 import * as Tls from "node:tls";
 import type { ServerWebSocket } from "bun";
@@ -72,7 +73,7 @@ export class RelaySession {
   ) {}
 
   /** Opens a public connection and returns its plaintext side for a TLS client. */
-  open(conn: number, sni: string): Duplex {
+  open(conn: number, sni: string, peer = "203.0.113.9"): Duplex {
     const socket = this.socket;
     const publicSide = new Duplex({
       read() {},
@@ -86,13 +87,13 @@ export class RelaySession {
       },
     });
     this.pipes.set(conn, publicSide);
-    socket.send(JSON.stringify({ type: "open", conn, peer: "203.0.113.9", sni, alpn: "" }));
+    socket.send(JSON.stringify({ type: "open", conn, peer, sni, alpn: "" }));
     return publicSide;
   }
 
   /** Opens a public TLS connection to a route. */
-  connectTls(conn: number, sni: string, ca: string): Promise<Tls.TLSSocket> {
-    const socket = Tls.connect({ socket: this.open(conn, sni), servername: sni, ca });
+  connectTls(conn: number, sni: string, ca: string, peer?: string): Promise<Tls.TLSSocket> {
+    const socket = Tls.connect({ socket: this.open(conn, sni, peer), servername: sni, ca });
     return new Promise((resolve, reject) => {
       socket.once("secureConnect", () => resolve(socket));
       socket.once("error", reject);
@@ -222,6 +223,42 @@ export function echoServer(): { readonly target: string; readonly stop: () => vo
     },
   });
   return { target: `127.0.0.1:${server.port}`, stop: () => server.stop(true) };
+}
+
+/** A target that records what its first connection sends. */
+export async function recordingServer(): Promise<{
+  readonly target: string;
+  /** Resolves once the target has received at least `bytes` bytes. */
+  readonly received: (bytes: number) => Promise<Buffer>;
+  /** Everything received so far. */
+  readonly data: () => Buffer;
+  readonly stop: () => void;
+}> {
+  const chunks: Buffer[] = [];
+  let wanted: { bytes: number; resolve: (data: Buffer) => void } | undefined;
+  const check = () => {
+    const data = Buffer.concat(chunks);
+    if (wanted && data.length >= wanted.bytes) wanted.resolve(data);
+  };
+  const server = Net.createServer((socket) => {
+    socket.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
+      check();
+    });
+    socket.on("error", () => undefined);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as Net.AddressInfo;
+  return {
+    target: `127.0.0.1:${port}`,
+    received: (bytes) =>
+      new Promise((resolve) => {
+        wanted = { bytes, resolve };
+        check();
+      }),
+    data: () => Buffer.concat(chunks),
+    stop: () => server.close(),
+  };
 }
 
 if (import.meta.main) {

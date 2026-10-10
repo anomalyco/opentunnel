@@ -2,5 +2,6 @@ export { BridgeProtocol } from "./bridge-protocol.js";
 export { Certificate } from "./certificate.js";
 export { CSR } from "./csr.js";
 export { Names } from "./names.js";
+export { ProxyProtocol } from "./proxy-protocol.js";
 export { Tunnel } from "./tunnel.js";
 export * from "./api/index.js";

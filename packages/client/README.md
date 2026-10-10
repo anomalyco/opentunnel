@@ -47,9 +47,26 @@ await connection.setRoutes({ api: "127.0.0.1:4000", "@": "127.0.0.1:8080" })
 Changing only targets applies to new connections immediately. Adding or
 removing names re-attaches the bridge.
 
+A route can also be an object with options:
+
+```ts
+await connection.setRoutes({
+  web: "127.0.0.1:3000",
+  api: { target: "127.0.0.1:4000", proxyProtocol: "v2" },
+})
+```
+
+`proxyProtocol` (`"v1"` or `"v2"`) writes a PROXY protocol header with the
+visitor's address and port, and (v2) the requested hostname, before each
+connection's data, then forwards the data unchanged. Enable it only for a
+target that expects the header, listening on loopback. Unknown keys and values
+are rejected. Routes are not stored; they are the ones you pass to `connect`
+and `setRoutes`.
+
 A target receives the decrypted bytes unchanged from a loopback connection, so
 it cannot tell a tunneled request from a local one by peer address or `Host`.
-The visitor's address is the `peer` field of each `connection-opened` event.
+The visitor's address is the `peer` field of each `connection-opened` event,
+and is delivered to the target only with `proxyProtocol`.
 See `docs/trust-boundary.md` in the repository for what a target can trust.
 
 ## API

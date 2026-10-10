@@ -38,7 +38,7 @@ fn client(server: &TestServer, storage: &std::path::Path) -> Client {
 fn routes(pairs: &[(&str, &str)]) -> Routes {
     pairs
         .iter()
-        .map(|(name, target)| ((*name).to_owned(), (*target).to_owned()))
+        .map(|(name, target)| ((*name).to_owned(), (*target).into()))
         .collect()
 }
 

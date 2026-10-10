@@ -8,6 +8,8 @@ export type {
   OpenTunnelPendingIdentity,
   OpenTunnelProfileOptions,
   OpenTunnelProvisionStage,
+  OpenTunnelProxyProtocol,
+  OpenTunnelRoute,
   OpenTunnelRoutes,
   OpenTunnelStatus,
   OpenTunnelStoredTunnel,

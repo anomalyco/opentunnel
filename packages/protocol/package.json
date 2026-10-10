@@ -37,6 +37,10 @@
       "types": "./dist/newtype.d.ts",
       "default": "./dist/newtype.js"
     },
+    "./proxy-protocol": {
+      "types": "./dist/proxy-protocol.d.ts",
+      "default": "./dist/proxy-protocol.js"
+    },
     "./tunnel": {
       "types": "./dist/tunnel.d.ts",
       "default": "./dist/tunnel.js"

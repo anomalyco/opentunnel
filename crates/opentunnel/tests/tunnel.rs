@@ -4,7 +4,9 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use opentunnel::protocol::bridge::{decode_data_frame, encode_data_frame};
 use opentunnel::protocol::{ClientMessage, ServerMessage};
-use opentunnel::{Client, ClientOptions, Event, Identity, Routes, Storage, Tunnel};
+use opentunnel::{
+    Client, ClientOptions, Event, Identity, ProxyProtocol, Route, Routes, Storage, Tunnel,
+};
 use rcgen::{CertificateParams, KeyPair};
 use rustls_pki_types::pem::PemObject;
 use rustls_pki_types::{CertificateDer, ServerName};
@@ -172,9 +174,13 @@ fn rand_suffix() -> u64 {
 }
 
 async fn send_open(bridge: &mut Bridge, conn: u32, sni: &str) {
+    send_open_from(bridge, conn, sni, "203.0.113.9").await;
+}
+
+async fn send_open_from(bridge: &mut Bridge, conn: u32, sni: &str, peer: &str) {
     let open = ServerMessage::Open {
         conn,
-        peer: "203.0.113.9".into(),
+        peer: peer.into(),
         sni: sni.into(),
         alpn: String::new(),
     };
@@ -246,7 +252,7 @@ async fn forwards_tls_to_route_target() {
     let target = echo_server().await;
     let (base, mut sessions, _) = fake_relay(attached).await;
     let identity = identity();
-    let routes: Routes = [("api".into(), target)].into();
+    let routes: Routes = [("api".into(), target.into())].into();
     let (tunnel, _) = connect(&base, &identity, routes);
 
     let (mut bridge, attached_routes) = sessions.recv().await.unwrap();
@@ -300,7 +306,7 @@ async fn forwards_tls_to_route_target() {
 async fn resets_unknown_routes() {
     let target = echo_server().await;
     let (base, mut sessions, _) = fake_relay(attached).await;
-    let (tunnel, _) = connect(&base, &identity(), [("api".into(), target)].into());
+    let (tunnel, _) = connect(&base, &identity(), [("api".into(), target.into())].into());
     let (mut bridge, _) = sessions.recv().await.unwrap();
     send_open(&mut bridge, 3, &format!("admin.{HOSTNAME}")).await;
     let reply = loop {
@@ -326,7 +332,7 @@ async fn resets_unknown_routes() {
 async fn resets_connections_beyond_max_conns() {
     let target = echo_server().await;
     let (base, mut sessions, _) = fake_relay(attached).await;
-    let (tunnel, _) = connect(&base, &identity(), [("api".into(), target)].into());
+    let (tunnel, _) = connect(&base, &identity(), [("api".into(), target.into())].into());
     let (mut bridge, _) = sessions.recv().await.unwrap();
     for conn in 1..=257 {
         send_open(&mut bridge, conn, &format!("api.{HOSTNAME}")).await;
@@ -354,7 +360,7 @@ async fn resets_connections_beyond_max_conns() {
 async fn reconnects_after_bridge_closes() {
     let target = echo_server().await;
     let (base, mut sessions, _) = fake_relay(attached).await;
-    let (tunnel, _) = connect(&base, &identity(), [("api".into(), target)].into());
+    let (tunnel, _) = connect(&base, &identity(), [("api".into(), target.into())].into());
     let mut events = tunnel.subscribe();
     let (mut bridge, _) = sessions.recv().await.unwrap();
     bridge.close(None).await.unwrap();
@@ -374,7 +380,11 @@ async fn reconnects_after_bridge_closes() {
 async fn reattaches_when_route_names_change() {
     let target = echo_server().await;
     let (base, mut sessions, _) = fake_relay(attached).await;
-    let (tunnel, _) = connect(&base, &identity(), [("api".into(), target.clone())].into());
+    let (tunnel, _) = connect(
+        &base,
+        &identity(),
+        [("api".into(), target.clone().into())].into(),
+    );
     let (_first, routes) = sessions.recv().await.unwrap();
     assert_eq!(routes, vec!["api".to_string()]);
 
@@ -389,7 +399,13 @@ async fn reattaches_when_route_names_change() {
     );
 
     tunnel
-        .set_routes([("api".into(), target.clone()), ("@".into(), target)].into())
+        .set_routes(
+            [
+                ("api".into(), target.clone().into()),
+                ("@".into(), target.into()),
+            ]
+            .into(),
+        )
         .unwrap();
     let (_second, routes) = tokio::time::timeout(Duration::from_secs(5), sessions.recv())
         .await
@@ -429,7 +445,7 @@ async fn picks_up_renewed_certificates() {
     let renewed = params.self_signed(&key).unwrap().pem();
     *served.lock().unwrap() = Some((renewed.clone(), String::new()));
 
-    let (tunnel, storage) = connect(&base, &original, [("api".into(), target)].into());
+    let (tunnel, storage) = connect(&base, &original, [("api".into(), target.into())].into());
     let mut events = tunnel.subscribe();
     let mut bridge = sessions.recv().await.unwrap().0;
     let expiry = tokio::time::timeout(Duration::from_secs(5), async {
@@ -465,4 +481,79 @@ async fn picks_up_renewed_certificates() {
         CertificateDer::from_pem_slice(renewed.as_bytes()).unwrap()
     );
     tunnel.close().await.unwrap();
+}
+
+/// A target that records everything each connection sends until it closes.
+async fn recording_server() -> (String, mpsc::Receiver<Vec<u8>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let (received, receiver) = mpsc::channel(8);
+    tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let received = received.clone();
+            tokio::spawn(async move {
+                let mut bytes = Vec::new();
+                let _ = socket.read_to_end(&mut bytes).await;
+                let _ = received.send(bytes).await;
+            });
+        }
+    });
+    (address, receiver)
+}
+
+/// Sends `payload` through a public TLS connection to `route` and returns what the target got.
+async fn deliver(route: Route, peer: &str, payload: &[u8]) -> Vec<u8> {
+    let (target, mut received) = recording_server().await;
+    let (base, mut sessions, _) = fake_relay(attached).await;
+    let identity = identity();
+    let route = Route { target, ..route };
+    let (tunnel, _) = connect(&base, &identity, [("api".into(), route)].into());
+    let (mut bridge, _) = sessions.recv().await.unwrap();
+    let (public, relay_side) = tokio::io::duplex(64 * 1024);
+    send_open_from(&mut bridge, 5, &format!("api.{HOSTNAME}"), peer).await;
+    tokio::spawn(pump(bridge, 5, relay_side));
+    let name = ServerName::try_from(format!("api.{HOSTNAME}")).unwrap();
+    let mut tls = connector(&identity).connect(name, public).await.unwrap();
+    tls.write_all(payload).await.unwrap();
+    tls.shutdown().await.unwrap();
+    let bytes = tokio::time::timeout(Duration::from_secs(5), received.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    drop(tls);
+    tunnel.close().await.unwrap();
+    bytes
+}
+
+#[tokio::test]
+async fn default_routes_forward_bytes_unchanged() {
+    let payload = b"GET / HTTP/1.1\r\nHost: x\r\n\r\n";
+    let received = deliver(Route::new(""), "203.0.113.9:51234", payload).await;
+    assert_eq!(received, payload);
+}
+
+#[tokio::test]
+async fn writes_a_proxy_v1_header_before_the_payload() {
+    let route = Route::new("").with_proxy_protocol(Some(ProxyProtocol::V1));
+    let received = deliver(route, "203.0.113.9:51234", b"hello").await;
+    assert_eq!(
+        received,
+        b"PROXY TCP4 203.0.113.9 0.0.0.0 51234 443\r\nhello".as_slice()
+    );
+}
+
+#[tokio::test]
+async fn writes_a_proxy_v2_header_before_the_payload() {
+    let route = Route::new("").with_proxy_protocol(Some(ProxyProtocol::V2));
+    let received = deliver(route, "[2001:db8::1]:443", b"hello").await;
+    let header = opentunnel::protocol::proxy::header(
+        ProxyProtocol::V2,
+        "[2001:db8::1]:443",
+        &format!("api.{HOSTNAME}"),
+    );
+    assert_eq!(&received[..12], b"\r\n\r\n\0\r\nQUIT\n");
+    assert_eq!(&received[12..14], &[0x21, 0x21]);
+    assert_eq!(&received[..header.len()], header.as_slice());
+    assert!(received.ends_with(format!("\x02\x00\x0dapi.{HOSTNAME}hello").as_bytes()));
 }

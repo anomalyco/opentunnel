@@ -66,6 +66,8 @@ enum RouteCommand {
     /// Add a route and bring the tunnel up. The target is a port or host:port.
     /// Without --name the route gets a random 16-character name, so its URL
     /// can't be guessed; adding the same target again keeps that route.
+    /// Adding an existing route again with different options (or, with
+    /// --name, a different target) updates it.
     Add {
         /// The local service: a port (3000) or host:port (127.0.0.1:3000).
         target: String,
@@ -73,6 +75,11 @@ enum RouteCommand {
         /// the tunnel hostname itself. Readable names are guessable.
         #[arg(long)]
         name: Option<String>,
+        /// Send a PROXY protocol header (v1 text or v2 binary) with the
+        /// visitor's address before each connection's data. Only enable it if
+        /// the target expects one: it rejects or misreads connections otherwise.
+        #[arg(long, value_name = "v1|v2", value_parser = config::parse_proxy_protocol)]
+        proxy_protocol: Option<opentunnel::ProxyProtocol>,
         /// Old form: `route add <name> <target>`.
         #[arg(hide = true)]
         legacy_target: Option<String>,
@@ -221,7 +228,7 @@ fn print_routes(profile: &str, hostname: Option<&str>) -> Result<()> {
         println!("No routes configured.");
         return Ok(());
     }
-    let display: Vec<(String, &String)> = routes
+    let display: Vec<(String, &opentunnel::Route)> = routes
         .iter()
         .map(|(name, target)| {
             let public = match hostname {
@@ -287,6 +294,7 @@ async fn route(
         RouteCommand::Add {
             target,
             name,
+            proxy_protocol,
             legacy_target,
         } => {
             let (name, target) = match legacy_target {
@@ -303,18 +311,21 @@ async fn route(
                 }
                 None => (name, target),
             };
-            let target = config::normalize_target(&target);
+            let route = opentunnel::Route::new(config::normalize_target(&target))
+                .with_proxy_protocol(proxy_protocol);
             let mut config = config::load(profile)?;
-            let (name, existed) = config::choose_route(&config.routes, &target, name.as_deref())?;
-            if !existed {
-                config.routes.insert(name.clone(), target.clone());
+            let (name, change) = config::choose_route(&config.routes, &route, name.as_deref())?;
+            if change != config::Change::Unchanged {
+                config.routes.insert(name.clone(), route.clone());
                 config::save(profile, &config)?;
             }
             let hostname = up(client, profile, api).await?;
-            if existed {
-                println!("Route {name} → {target} already exists");
-            } else {
-                println!("Added route {name} → {target}");
+            match change {
+                config::Change::Added => println!("Added route {name} → {route}"),
+                config::Change::Unchanged => println!("Route {name} → {route} already exists"),
+                config::Change::Updated(previous) => {
+                    println!("Updated route {name} → {route} (was {previous})");
+                }
             }
             println!("https://{}", config::public_hostname(&name, &hostname));
         }

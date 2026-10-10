@@ -1,0 +1,37 @@
+{
+  "peers": [
+    {"peer": "203.0.113.9:51234", "address": "203.0.113.9", "port": 51234},
+    {"peer": "[2001:db8::1]:443", "address": "2001:db8::1", "port": 443},
+    {"peer": "[::ffff:203.0.113.9]:8080", "address": "203.0.113.9", "port": 8080},
+    {"peer": "203.0.113.9", "address": "203.0.113.9", "port": 0},
+    {"peer": "2001:db8::1", "address": "2001:db8::1", "port": 0},
+    {"peer": "[2001:0DB8:0000:0000:0001:0000:0000:0001]:1", "address": "2001:db8::1:0:0:1", "port": 1},
+    {"peer": "[fe80::1:0:0:0:1]:65535", "address": "fe80:0:0:1::1", "port": 65535},
+    {"peer": "[::]:0", "address": "::", "port": 0},
+    {"peer": "1.2.3.4:65536", "address": null, "port": null},
+    {"peer": "1.2.3.4:+1", "address": null, "port": null},
+    {"peer": "01.2.3.4:80", "address": null, "port": null},
+    {"peer": "[2001:db8::1]", "address": null, "port": null},
+    {"peer": "[2001:db8::1%eth0]:80", "address": null, "port": null},
+    {"peer": "[1:2:3:4:5:6:7:8:9]:1", "address": null, "port": null},
+    {"peer": "example.com:80", "address": null, "port": null},
+    {"peer": "", "address": null, "port": null},
+    {"peer": ":80", "address": null, "port": null},
+    {"peer": "1.2.3.4:", "address": null, "port": null},
+    {"peer": "[::1]:", "address": null, "port": null}
+  ],
+  "headers": [
+    {"version": "v1", "peer": "203.0.113.9:51234", "sni": "api.demo.opentunnel.xyz", "header": "50524f58592054435034203230332e302e3131332e3920302e302e302e30203531323334203434330d0a", "text": "PROXY TCP4 203.0.113.9 0.0.0.0 51234 443\r\n"},
+    {"version": "v1", "peer": "[2001:db8::1]:443", "sni": "api.demo.opentunnel.xyz", "header": "50524f5859205443503620323030313a6462383a3a31203a3a20343433203434330d0a", "text": "PROXY TCP6 2001:db8::1 :: 443 443\r\n"},
+    {"version": "v1", "peer": "[::ffff:203.0.113.9]:8080", "sni": "demo.opentunnel.xyz", "header": "50524f58592054435034203230332e302e3131332e3920302e302e302e302038303830203434330d0a", "text": "PROXY TCP4 203.0.113.9 0.0.0.0 8080 443\r\n"},
+    {"version": "v1", "peer": "[2001:0DB8:0:0:1:0:0:1]:1", "sni": "demo.opentunnel.xyz", "header": "50524f5859205443503620323030313a6462383a3a313a303a303a31203a3a2031203434330d0a", "text": "PROXY TCP6 2001:db8::1:0:0:1 :: 1 443\r\n"},
+    {"version": "v1", "peer": "203.0.113.9", "sni": "demo.opentunnel.xyz", "header": "50524f58592054435034203230332e302e3131332e3920302e302e302e302030203434330d0a", "text": "PROXY TCP4 203.0.113.9 0.0.0.0 0 443\r\n"},
+    {"version": "v1", "peer": "unknown", "sni": "demo.opentunnel.xyz", "header": "50524f585920554e4b4e4f574e0d0a", "text": "PROXY UNKNOWN\r\n"},
+    {"version": "v2", "peer": "203.0.113.9:51234", "sni": "api.demo.opentunnel.xyz", "header": "0d0a0d0a000d0a515549540a21110026cb00710900000000c82201bb0200176170692e64656d6f2e6f70656e74756e6e656c2e78797a"},
+    {"version": "v2", "peer": "[2001:db8::1]:443", "sni": "api.demo.opentunnel.xyz", "header": "0d0a0d0a000d0a515549540a2121003e20010db80000000000000000000000010000000000000000000000000000000001bb01bb0200176170692e64656d6f2e6f70656e74756e6e656c2e78797a"},
+    {"version": "v2", "peer": "[::ffff:203.0.113.9]:8080", "sni": "demo.opentunnel.xyz", "header": "0d0a0d0a000d0a515549540a21110022cb007109000000001f9001bb02001364656d6f2e6f70656e74756e6e656c2e78797a"},
+    {"version": "v2", "peer": "203.0.113.9:51234", "sni": "", "header": "0d0a0d0a000d0a515549540a2111000ccb00710900000000c82201bb"},
+    {"version": "v2", "peer": "unknown", "sni": "api.demo.opentunnel.xyz", "header": "0d0a0d0a000d0a515549540a2000001a0200176170692e64656d6f2e6f70656e74756e6e656c2e78797a"},
+    {"version": "v2", "peer": "", "sni": "", "header": "0d0a0d0a000d0a515549540a20000000"}
+  ]
+}

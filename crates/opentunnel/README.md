@@ -7,7 +7,15 @@ sees plaintext or the private key.
 ```rust
 let client = opentunnel::Client::default();
 client.ensure("default").await?;
-let routes = [("api".to_string(), "127.0.0.1:3000".to_string())].into();
+let routes = [
+    ("web".to_string(), "127.0.0.1:3000".into()),
+    (
+        "api".to_string(),
+        opentunnel::Route::new("127.0.0.1:4000")
+            .with_proxy_protocol(Some(opentunnel::ProxyProtocol::V2)),
+    ),
+]
+.into();
 let mut tunnel = client.connect("default", routes)?;
 let mut events = tunnel.subscribe();
 tunnel.wait().await?;

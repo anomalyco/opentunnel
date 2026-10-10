@@ -4,6 +4,7 @@ import { Duplex } from "node:stream";
 import * as Tls from "node:tls";
 import { BridgeProtocol } from "@opentunnel/protocol/bridge-protocol";
 import { Names } from "@opentunnel/protocol/names";
+import { ProxyProtocol } from "@opentunnel/protocol/proxy-protocol";
 import { USER_AGENT } from "./api.js";
 
 /** Bun's WebSocket also takes options with request headers, which the DOM typings don't know about. */
@@ -14,6 +15,7 @@ const BunWebSocket = WebSocket as unknown as new (
 import type {
   OpenTunnelClientEvent,
   OpenTunnelIdentity,
+  OpenTunnelProxyProtocol,
   OpenTunnelRoutes,
   OpenTunnelStatus,
 } from "./types.js";
@@ -51,14 +53,48 @@ const fatalAttachCodes = new Set<string>([
   BridgeProtocol.BridgeErrorCode.CERT_NOT_READY,
 ]);
 
-export const validateRoutes = (routes: OpenTunnelRoutes): void => {
-  for (const [name, target] of Object.entries(routes)) {
-    if (!Names.isValidRoute(name)) throw new Error(`Invalid route name '${name}'`);
-    if (!Names.parseTarget(target)) {
-      throw new Error(`Invalid target '${target}' for route '${name}': use host:port`);
+/** A validated route: its parsed target and options. */
+export interface ResolvedRoute {
+  readonly target: { readonly host: string; readonly port: number };
+  readonly proxyProtocol?: OpenTunnelProxyProtocol;
+}
+
+const ROUTE_KEYS = new Set(["target", "proxyProtocol"]);
+
+/** Validates one route value, a `host:port` string or `{ target, proxyProtocol? }`. */
+export const resolveRoute = (name: string, value: unknown): ResolvedRoute => {
+  if (!Names.isValidRoute(name)) throw new Error(`Invalid route name '${name}'`);
+  let target: unknown = value;
+  let proxyProtocol: OpenTunnelProxyProtocol | undefined;
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    for (const key of Object.keys(value)) {
+      if (!ROUTE_KEYS.has(key)) {
+        throw new Error(`Unknown option '${key}' for route '${name}': expected target or proxyProtocol`);
+      }
+    }
+    const options = value as { readonly target?: unknown; readonly proxyProtocol?: unknown };
+    if (options.target === undefined) throw new Error(`Route '${name}' has no target`);
+    target = options.target;
+    if (options.proxyProtocol !== undefined) {
+      if (!ProxyProtocol.isVersion(options.proxyProtocol)) {
+        throw new Error(
+          `Invalid proxyProtocol '${String(options.proxyProtocol)}' for route '${name}': use "v1" or "v2"`,
+        );
+      }
+      proxyProtocol = options.proxyProtocol;
     }
   }
+  const parsed = typeof target === "string" ? Names.parseTarget(target) : undefined;
+  if (!parsed) throw new Error(`Invalid target '${String(target)}' for route '${name}': use host:port`);
+  return proxyProtocol === undefined ? { target: parsed } : { target: parsed, proxyProtocol };
 };
+
+export const validateRoutes = (routes: OpenTunnelRoutes): void => {
+  for (const [name, value] of Object.entries(routes)) resolveRoute(name, value);
+};
+
+const resolveRoutes = (routes: OpenTunnelRoutes): ReadonlyMap<string, ResolvedRoute> =>
+  new Map(Object.entries(routes).map(([name, value]) => [name, resolveRoute(name, value)]));
 
 const secureContextFor = (identity: OpenTunnelIdentity) =>
   Tls.createSecureContext({
@@ -95,6 +131,7 @@ export interface TunnelOptions {
  */
 export class Tunnel {
   private routes: OpenTunnelRoutes;
+  private resolved: ReadonlyMap<string, ResolvedRoute>;
   private identity: OpenTunnelIdentity;
   private secureContext: Tls.SecureContext;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -108,7 +145,7 @@ export class Tunnel {
   readonly closed: Promise<void>;
 
   constructor(private readonly options: TunnelOptions) {
-    validateRoutes(options.routes);
+    this.resolved = resolveRoutes(options.routes);
     this.routes = { ...options.routes };
     this.identity = options.identity;
     this.secureContext = secureContextFor(options.identity);
@@ -191,8 +228,9 @@ export class Tunnel {
    * immediately; adding or removing names re-attaches the bridge.
    */
   setRoutes(routes: OpenTunnelRoutes): void {
-    validateRoutes(routes);
+    const resolved = resolveRoutes(routes);
     const previous = this.routes;
+    this.resolved = resolved;
     this.routes = { ...routes };
     this.status.routes = this.routes;
     if (!sameNames(previous, this.routes)) this.session?.end({ type: "routes-changed" });
@@ -237,7 +275,7 @@ export class Tunnel {
         this.emit({ type: "connecting", attempt });
         const session = new Session(this.options, this.routes, () => this.secureContext, {
           emit: (event) => this.emit(event),
-          target: (route) => this.routes[route],
+          route: (route) => this.resolved.get(route),
           attached: (sessionID) => {
             this.status.state = "connected";
             this.status.session = sessionID;
@@ -284,7 +322,7 @@ export class Tunnel {
 
 interface SessionHooks {
   readonly emit: (event: OpenTunnelClientEvent) => void;
-  readonly target: (route: string) => string | undefined;
+  readonly route: (route: string) => ResolvedRoute | undefined;
   readonly attached: (session: string) => void;
   readonly connections: (count: number) => void;
 }
@@ -409,9 +447,8 @@ class Session {
 
   private open(conn: number, sni: string, peer: string) {
     const route = Names.routeForSni(sni, this.options.identity.hostname);
-    const target = route === undefined ? undefined : this.hooks.target(route);
-    const parsed = target === undefined ? undefined : Names.parseTarget(target);
-    if (route === undefined || !parsed) {
+    const resolved = route === undefined ? undefined : this.hooks.route(route);
+    if (route === undefined || !resolved) {
       this.sendControl({ type: "reset", conn, code: BridgeProtocol.BridgeErrorCode.UNKNOWN_ROUTE });
       return;
     }
@@ -420,7 +457,9 @@ class Session {
       this.sendControl({ type: "reset", conn, code: BridgeProtocol.BridgeErrorCode.TOO_MANY_CONNECTIONS });
       return;
     }
-    const channel = new Channel(conn, route, parsed, this.secureContext(), this);
+    const preamble =
+      resolved.proxyProtocol === undefined ? undefined : ProxyProtocol.header(resolved.proxyProtocol, peer, sni);
+    const channel = new Channel(conn, route, resolved.target, preamble, this.secureContext(), this);
     this.channels.set(conn, channel);
     this.hooks.connections(this.channels.size);
     this.hooks.emit({ type: "connection-opened", conn, route, peer });
@@ -468,7 +507,10 @@ class Session {
   }
 }
 
-/** Terminates TLS for one public connection and forwards it to the target. */
+/**
+ * Terminates TLS for one public connection and forwards it to the target,
+ * after writing `preamble` (a PROXY protocol header) when the route has one.
+ */
 class Channel {
   private readonly raw: Duplex;
   private readonly tls: Tls.TLSSocket;
@@ -479,6 +521,7 @@ class Channel {
     readonly conn: number,
     readonly route: string,
     target: { readonly host: string; readonly port: number },
+    preamble: Uint8Array | undefined,
     secureContext: Tls.SecureContext,
     private readonly session: Session,
   ) {
@@ -499,6 +542,7 @@ class Channel {
       const upstream = Net.connect({ host: target.host, port: target.port, allowHalfOpen: true });
       this.upstream = upstream;
       upstream.setNoDelay(true);
+      if (preamble) upstream.write(preamble);
       upstream.on("error", (error) =>
         this.destroy(
           upstream.connecting

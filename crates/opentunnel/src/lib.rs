@@ -6,7 +6,7 @@
 //! # async fn run() -> opentunnel::Result<()> {
 //! let client = opentunnel::Client::default();
 //! client.ensure("default").await?;
-//! let routes = [("api".to_string(), "127.0.0.1:3000".to_string())].into();
+//! let routes = [("api".to_string(), "127.0.0.1:3000".into())].into();
 //! let mut tunnel = client.connect("default", routes)?;
 //! tunnel.wait().await
 //! # }
@@ -25,6 +25,8 @@ pub use client::{Client, ClientOptions, ProvisionStage};
 pub use error::{Error, Result};
 pub use identity::{Identity, PendingIdentity};
 pub mod protocol;
+pub use protocol::proxy::ProxyProtocol;
+pub use protocol::routes::Route;
 pub use storage::Storage;
 pub use tunnel::{Event, Routes, State, Status, Tunnel};
 

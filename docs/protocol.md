@@ -139,6 +139,47 @@ uses route `api`; SNI `<hostname>` uses route `@`. Deeper names never match.
 
 Route targets are `host:port` without a scheme.
 
+### Route options
+
+A route is either its target alone or a target with options. Without options
+the client copies the decrypted bytes unchanged in both directions. Options are
+local to the client: they change nothing on the bridge or the server.
+
+| Option | Profile config | SDK | Values |
+| --- | --- | --- | --- |
+| PROXY protocol | `proxy_protocol` | `proxyProtocol` | `"v1"` or `"v2"` |
+
+Clients reject unknown option keys, unknown values, and a missing `target`.
+
+#### PROXY protocol
+
+With `proxy_protocol`, the client writes a [PROXY protocol][proxy-protocol]
+header to the new TCP connection to the target, before any payload, then copies
+the decrypted bytes unchanged in both directions. It never reads or alters the
+payload, so this works for every protocol inside TLS. The header is built from
+the `open` frame:
+
+- **Source**: the visitor, parsed from `peer`. `peer` is `ipv4:port`,
+  `[ipv6]:port`, or a bare address (taken as port 0). IPv4-mapped IPv6
+  addresses (`::ffff:a.b.c.d`) are sent as IPv4.
+- **Destination**: the unspecified address of the source's family (`0.0.0.0`
+  or `::`) on port `443`, the public port every visitor connected to. The
+  client does not know which public address the visitor reached, and the
+  target is often a hostname, so neither is used.
+- **v1**: one text line, IPv6 written in RFC 5952 form:
+  `PROXY TCP4 203.0.113.9 0.0.0.0 51234 443\r\n` or
+  `PROXY TCP6 2001:db8::1 :: 51234 443\r\n`. When `peer` does not parse:
+  `PROXY UNKNOWN\r\n`.
+- **v2**: the binary header with the `PROXY` command over `TCP4` or `TCP6`
+  (`0x21 0x11` / `0x21 0x21`), followed by a `PP2_TYPE_AUTHORITY` (`0x02`) TLV
+  holding `sni`, the hostname the visitor asked for (omitted when empty or
+  longer than 255 bytes). When `peer` does not parse: the `LOCAL` command with
+  family `UNSPEC` (`0x20 0x00`), no addresses, and the same TLV.
+
+`spec/vectors/proxy-protocol.json` lists peer parsing and exact headers.
+
+[proxy-protocol]: https://www.haproxy.org/download/2.9/doc/proxy-protocol.txt
+
 ### Multiple clients
 
 A tunnel is one hostname per device, shared by every client on it: the CLI's
@@ -184,3 +225,27 @@ $XDG_DATA_HOME/opentunnel/<profile>/    (0700)
 ```
 
 Profile names match `^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`.
+
+### Route config
+
+The CLI keeps each profile's routes in `$XDG_CONFIG_HOME/opentunnel/<profile>.toml`.
+A route is a `host:port` string, or a table with `target` and options
+([Route options](#route-options)):
+
+```toml
+[routes]
+web = "127.0.0.1:3000"
+api = { target = "127.0.0.1:4000", proxy_protocol = "v2" }
+```
+
+A `[routes.api]` sub-table is read the same way. Unknown keys and values are
+errors. Writers emit one line per route, sorted by name: the plain string when
+a route has no options, otherwise an inline table with `target` first, so a
+config without options is written exactly as before. CLIs older than 0.5.0
+cannot read the table form. `spec/vectors/route-options.json` lists valid and
+invalid routes and configs.
+
+The SDK takes routes from the app in the same shape (`proxyProtocol` instead of
+`proxy_protocol`) and does not read or write this file: the CLI's service
+claims the routes listed there, so an app writing to it would compete with the
+service for them.

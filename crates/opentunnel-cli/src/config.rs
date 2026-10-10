@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use anyhow::{Context, Result, bail};
-use opentunnel::Routes;
 use opentunnel::protocol::names;
+use opentunnel::{ProxyProtocol, Route, Routes};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -26,10 +26,14 @@ pub fn load(profile: &str) -> Result<Config> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Config::default()),
         Err(error) => return Err(error).with_context(|| format!("reading {}", path.display())),
     };
-    let config: Config =
-        toml::from_str(&content).with_context(|| format!("parsing {}", path.display()))?;
-    for (name, target) in &config.routes {
-        validate(name, target).with_context(|| format!("in {}", path.display()))?;
+    parse(&content).with_context(|| format!("in {}", path.display()))
+}
+
+/// Parses and validates a profile config.
+pub fn parse(content: &str) -> Result<Config> {
+    let config: Config = toml::from_str(content)?;
+    for (name, route) in &config.routes {
+        validate(name, &route.target)?;
     }
     Ok(config)
 }
@@ -40,8 +44,31 @@ pub fn save(profile: &str, config: &Config) -> Result<()> {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("creating {}", parent.display()))?;
     }
-    let content = toml::to_string(config).context("serializing config")?;
-    std::fs::write(&path, content).with_context(|| format!("writing {}", path.display()))
+    std::fs::write(&path, render(config)).with_context(|| format!("writing {}", path.display()))
+}
+
+/// Writes the config with one line per route: the plain `host:port` string, or an inline
+/// table when the route has options.
+pub fn render(config: &Config) -> String {
+    let mut content = String::from("[routes]\n");
+    for (name, route) in &config.routes {
+        let bare = !name.is_empty()
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_');
+        let key = if bare {
+            name.clone()
+        } else {
+            toml::Value::String(name.clone()).to_string()
+        };
+        let target = toml::Value::String(route.target.clone());
+        let value = match route.proxy_protocol {
+            None => target.to_string(),
+            Some(version) => format!("{{ target = {target}, proxy_protocol = \"{version}\" }}"),
+        };
+        content.push_str(&format!("{key} = {value}\n"));
+    }
+    content
 }
 
 pub fn modified(profile: &str) -> Option<SystemTime> {
@@ -95,25 +122,56 @@ pub fn random_route_name(routes: &Routes) -> Result<String> {
     bail!("could not generate an unused route name")
 }
 
-/// The route that `route add` should write: the explicit name if one was given; otherwise the
-/// existing route already pointing at `target` (so repeating the command keeps the same URL),
-/// or a new random name. Returns the name and whether the route already existed as is.
-pub fn choose_route(routes: &Routes, target: &str, name: Option<&str>) -> Result<(String, bool)> {
-    if let Some(name) = name {
-        validate(name, target)?;
-        return Ok((
-            name.to_owned(),
-            routes.get(name).is_some_and(|existing| existing == target),
-        ));
-    }
-    validate(names::ROOT_ROUTE, target)?;
-    if let Some((existing, _)) = routes
-        .iter()
-        .find(|(_, existing)| existing.as_str() == target)
-    {
-        return Ok((existing.clone(), true));
-    }
-    Ok((random_route_name(routes)?, false))
+/// What `route add` did to the route it wrote.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Change {
+    Added,
+    /// The route already pointed at the same target with the same options.
+    Unchanged,
+    /// The route existed with a different target or options; holds the old value.
+    Updated(Route),
+}
+
+/// The name `route add` should write `route` under: the explicit name if one was given;
+/// otherwise the existing route already pointing at the same target (so repeating the command
+/// keeps the same URL, and can change its options), or a new random name.
+pub fn choose_route(
+    routes: &Routes,
+    route: &Route,
+    name: Option<&str>,
+) -> Result<(String, Change)> {
+    let name = match name {
+        Some(name) => {
+            validate(name, &route.target)?;
+            name.to_owned()
+        }
+        None => {
+            validate(names::ROOT_ROUTE, &route.target)?;
+            match routes
+                .iter()
+                .find(|(_, existing)| existing.target == route.target)
+            {
+                Some((existing, _)) => existing.clone(),
+                None => random_route_name(routes)?,
+            }
+        }
+    };
+    let change = match routes.get(&name) {
+        None => Change::Added,
+        Some(existing) if existing == route => Change::Unchanged,
+        Some(existing) => Change::Updated(existing.clone()),
+    };
+    Ok((name, change))
+}
+
+/// Parses `--proxy-protocol`.
+pub fn parse_proxy_protocol(value: &str) -> Result<ProxyProtocol, String> {
+    ProxyProtocol::parse(value).ok_or_else(|| {
+        format!(
+            "invalid PROXY protocol version '{value}': use {}",
+            ProxyProtocol::VALUES.join(" or ")
+        )
+    })
 }
 
 pub fn public_hostname(route: &str, hostname: &str) -> String {
@@ -131,8 +189,12 @@ mod tests {
     fn routes(entries: &[(&str, &str)]) -> Routes {
         entries
             .iter()
-            .map(|(name, target)| (name.to_string(), target.to_string()))
+            .map(|(name, target)| (name.to_string(), Route::new(*target)))
             .collect()
+    }
+
+    fn plain(target: &str) -> Route {
+        Route::new(target)
     }
 
     #[test]
@@ -153,17 +215,131 @@ mod tests {
     #[test]
     fn a_new_target_gets_a_random_name() {
         let existing = routes(&[("api", "127.0.0.1:3000")]);
-        let (name, existed) = choose_route(&existing, "127.0.0.1:4000", None).unwrap();
+        let (name, change) = choose_route(&existing, &plain("127.0.0.1:4000"), None).unwrap();
         assert_eq!(name.len(), RANDOM_ROUTE_LENGTH);
-        assert!(!existed);
+        assert_eq!(change, Change::Added);
     }
 
     #[test]
     fn repeating_a_target_keeps_its_route() {
         let existing = routes(&[("0123456789abcdef", "127.0.0.1:3000")]);
         assert_eq!(
-            choose_route(&existing, "127.0.0.1:3000", None).unwrap(),
-            ("0123456789abcdef".to_owned(), true)
+            choose_route(&existing, &plain("127.0.0.1:3000"), None).unwrap(),
+            ("0123456789abcdef".to_owned(), Change::Unchanged)
+        );
+    }
+
+    #[test]
+    fn repeating_a_target_with_other_options_updates_its_route() {
+        let existing = routes(&[("0123456789abcdef", "127.0.0.1:3000")]);
+        let proxied = plain("127.0.0.1:3000").with_proxy_protocol(Some(ProxyProtocol::V2));
+        assert_eq!(
+            choose_route(&existing, &proxied, None).unwrap(),
+            (
+                "0123456789abcdef".to_owned(),
+                Change::Updated(plain("127.0.0.1:3000"))
+            )
+        );
+        assert_eq!(
+            choose_route(&existing, &proxied, Some("other")).unwrap(),
+            ("other".to_owned(), Change::Added)
+        );
+    }
+
+    #[test]
+    fn profile_vectors() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../spec/vectors/route-options.json"
+        );
+        let vectors: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        for case in vectors["profiles"].as_array().unwrap() {
+            let parsed = parse(case["toml"].as_str().unwrap());
+            if case["error"].as_bool() == Some(true) {
+                assert!(parsed.is_err(), "{case}");
+                continue;
+            }
+            let config = parsed.unwrap_or_else(|error| panic!("{case}: {error:#}"));
+            let expected: Routes = case["routes"]
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(name, route)| {
+                    let version = route["proxyProtocol"]
+                        .as_str()
+                        .map(|version| ProxyProtocol::parse(version).unwrap());
+                    let route =
+                        Route::new(route["target"].as_str().unwrap()).with_proxy_protocol(version);
+                    (name.clone(), route)
+                })
+                .collect();
+            assert_eq!(config.routes, expected, "{case}");
+            let written = render(&config);
+            assert_eq!(parse(&written).unwrap().routes, expected);
+            if let Some(expected) = case["written"].as_str() {
+                assert_eq!(written, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_route_keys_clearly() {
+        let error =
+            parse("[routes]\napi = { target = \"127.0.0.1:1\", proxy = \"v2\" }\n").unwrap_err();
+        assert!(
+            format!("{error:#}").contains("unknown field `proxy`"),
+            "{error:#}"
+        );
+        let error =
+            parse("[routes]\napi = { target = \"127.0.0.1:1\", proxy_protocol = \"v3\" }\n")
+                .unwrap_err();
+        assert!(
+            format!("{error:#}").contains(r#""v1" or "v2""#),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn parses_proxy_protocol_versions() {
+        assert_eq!(parse_proxy_protocol("v1"), Ok(ProxyProtocol::V1));
+        assert_eq!(parse_proxy_protocol("v2"), Ok(ProxyProtocol::V2));
+        assert!(parse_proxy_protocol("V2").is_err());
+        assert!(parse_proxy_protocol("2").is_err());
+    }
+
+    #[test]
+    fn writes_plain_routes_unchanged_and_options_as_tables() {
+        let mut config = Config::default();
+        config.routes.insert("@".into(), plain("127.0.0.1:8080"));
+        config.routes.insert("web".into(), plain("127.0.0.1:3000"));
+        let before = render(&config);
+        assert_eq!(before, toml::to_string(&config).unwrap());
+        assert_eq!(
+            before,
+            "[routes]\n\"@\" = \"127.0.0.1:8080\"\nweb = \"127.0.0.1:3000\"\n"
+        );
+        assert_eq!(
+            toml::from_str::<Config>(&before).unwrap().routes,
+            config.routes
+        );
+
+        config.routes.insert(
+            "api".into(),
+            plain("127.0.0.1:4000").with_proxy_protocol(Some(ProxyProtocol::V1)),
+        );
+        let written = render(&config);
+        assert_eq!(
+            written,
+            "[routes]\n\"@\" = \"127.0.0.1:8080\"\napi = { target = \"127.0.0.1:4000\", proxy_protocol = \"v1\" }\nweb = \"127.0.0.1:3000\"\n"
+        );
+        assert_eq!(
+            toml::from_str::<Config>(&written).unwrap().routes,
+            config.routes
+        );
+        assert_eq!(
+            render(&Config::default()),
+            toml::to_string(&Config::default()).unwrap()
         );
     }
 
@@ -171,18 +347,18 @@ mod tests {
     fn an_explicit_name_is_validated_and_used() {
         let existing = routes(&[("api", "127.0.0.1:3000")]);
         assert_eq!(
-            choose_route(&existing, "127.0.0.1:3000", Some("api")).unwrap(),
-            ("api".to_owned(), true)
+            choose_route(&existing, &plain("127.0.0.1:3000"), Some("api")).unwrap(),
+            ("api".to_owned(), Change::Unchanged)
         );
         assert_eq!(
-            choose_route(&existing, "127.0.0.1:4000", Some("api")).unwrap(),
-            ("api".to_owned(), false)
+            choose_route(&existing, &plain("127.0.0.1:4000"), Some("api")).unwrap(),
+            ("api".to_owned(), Change::Updated(plain("127.0.0.1:3000")))
         );
         assert_eq!(
-            choose_route(&existing, "127.0.0.1:4000", Some("@")).unwrap(),
-            ("@".to_owned(), false)
+            choose_route(&existing, &plain("127.0.0.1:4000"), Some("@")).unwrap(),
+            ("@".to_owned(), Change::Added)
         );
-        assert!(choose_route(&existing, "127.0.0.1:4000", Some("Not_Valid")).is_err());
-        assert!(choose_route(&existing, "not a target", None).is_err());
+        assert!(choose_route(&existing, &plain("127.0.0.1:4000"), Some("Not_Valid")).is_err());
+        assert!(choose_route(&existing, &plain("not a target"), None).is_err());
     }
 }

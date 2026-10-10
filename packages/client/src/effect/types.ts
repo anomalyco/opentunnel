@@ -15,8 +15,26 @@ export type OpenTunnelProvisionStage =
   | "saving-identity"
   | "ready";
 
-/** Route name (`@` for the tunnel hostname, or a subdomain label) to `host:port`. */
-export type OpenTunnelRoutes = Readonly<Record<string, string>>;
+/** PROXY protocol version a route sends to its target before any payload. */
+export type OpenTunnelProxyProtocol = "v1" | "v2";
+
+/** A route target with options. */
+export interface OpenTunnelRoute {
+  /** `host:port` of the local service. */
+  readonly target: string;
+  /**
+   * Writes a PROXY protocol header carrying the visitor's address to the
+   * target before each connection's data. Only enable it for targets that
+   * expect one.
+   */
+  readonly proxyProtocol?: OpenTunnelProxyProtocol;
+}
+
+/**
+ * Route name (`@` for the tunnel hostname, or a subdomain label) to its
+ * `host:port` target, or to a target with options.
+ */
+export type OpenTunnelRoutes = Readonly<Record<string, string | OpenTunnelRoute>>;
 
 export interface OpenTunnelIdentity {
   readonly id: string;

@@ -2,7 +2,18 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type * as Tls from "node:tls";
 import { create, OpenTunnelStorage, type OpenTunnelClientEvent, type OpenTunnelPromiseClient } from "../src/promise/index.js";
 import { X509Certificate } from "node:crypto";
-import { echoServer, fakeRelay, HOSTNAME, renewedCertificate, testIdentity, type FakeRelay } from "./fake-relay.js";
+import {
+  echoServer,
+  fakeRelay,
+  HOSTNAME,
+  recordingServer,
+  renewedCertificate,
+  testIdentity,
+  type FakeRelay,
+} from "./fake-relay.js";
+import { resolveRoute } from "../src/effect/tunnel.js";
+import { Names } from "@opentunnel/protocol/names";
+import { ProxyProtocol } from "@opentunnel/protocol/proxy-protocol";
 
 let identity: Awaited<ReturnType<typeof testIdentity>>;
 let relay: FakeRelay;
@@ -123,6 +134,78 @@ describe("tunnel", () => {
 
   test("rejects invalid routes before connecting", async () => {
     await expect(client.tunnel.connect({ routes: { api: "http://x" } })).rejects.toThrow("Invalid target");
+    await expect(
+      client.tunnel.connect({ routes: { api: { target: echo.target, proxyProtocol: "v3" as "v2" } } }),
+    ).rejects.toThrow("Invalid proxyProtocol");
+  });
+
+  describe("route options", () => {
+    const deliver = async (
+      route: (target: string) => string | { target: string; proxyProtocol?: "v1" | "v2" },
+      peer: string,
+      payload: string,
+      expected: number,
+    ) => {
+      const recorder = await recordingServer();
+      try {
+        const connection = await client.tunnel.connect({ routes: { api: route(recorder.target) } });
+        const session = await relay.next();
+        const socket = await session.connectTls(5, `api.${HOSTNAME}`, identity.certificate, peer);
+        socket.write(payload);
+        await recorder.received(expected);
+        // Anything beyond what was expected would arrive within a moment.
+        await Bun.sleep(50);
+        await connection.close();
+        return recorder.data();
+      } finally {
+        recorder.stop();
+      }
+    };
+
+    test("default routes forward bytes unchanged", async () => {
+      const payload = "GET / HTTP/1.1\r\nHost: x\r\n\r\n";
+      for (const route of [(target: string) => target, (target: string) => ({ target })]) {
+        const received = await deliver(route, "203.0.113.9:51234", payload, payload.length);
+        expect(received.toString("latin1")).toBe(payload);
+      }
+    });
+
+    test("writes a PROXY v1 header before the payload", async () => {
+      const received = await deliver(
+        (target) => ({ target, proxyProtocol: "v1" }),
+        "203.0.113.9:51234",
+        "hello",
+        47,
+      );
+      expect(received.toString("latin1")).toBe("PROXY TCP4 203.0.113.9 0.0.0.0 51234 443\r\nhello");
+    });
+
+    test("writes a PROXY v2 header before the payload", async () => {
+      const received = await deliver(
+        (target) => ({ target, proxyProtocol: "v2" }),
+        "[2001:db8::1]:443",
+        "hello",
+        16 + 36 + 3 + 13 + 5,
+      );
+      const header = ProxyProtocol.header("v2", "[2001:db8::1]:443", `api.${HOSTNAME}`);
+      expect(received.subarray(0, 14)).toEqual(Buffer.from("0d0a0d0a000d0a515549540a2121", "hex"));
+      expect(received.subarray(0, header.length)).toEqual(Buffer.from(header));
+      expect(received.subarray(header.length).toString("latin1")).toBe("hello");
+      expect(received.subarray(header.length - 13, header.length).toString("latin1")).toBe(`api.${HOSTNAME}`);
+    });
+
+    test("match the shared vectors", async () => {
+      const vectors = await Bun.file(new URL("../../../spec/vectors/route-options.json", import.meta.url)).json();
+      for (const { name, sdk, route, error } of vectors.routes) {
+        if (error) {
+          expect(() => resolveRoute(name, sdk)).toThrow();
+          continue;
+        }
+        const resolved = resolveRoute(name, sdk);
+        const target = Names.parseTarget(route.target)!;
+        expect(resolved).toEqual(route.proxyProtocol ? { target, proxyProtocol: route.proxyProtocol } : { target });
+      }
+    });
   });
 
   test("fails on fatal attach errors", async () => {

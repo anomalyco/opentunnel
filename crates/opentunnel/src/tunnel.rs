@@ -7,7 +7,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use crate::protocol::bridge::{
     self, ClientInfo, ClientMessage, ConnId, ServerMessage, Transport, codes,
 };
-use crate::protocol::names::{parse_target, route_for_sni};
+use crate::protocol::names::route_for_sni;
+use crate::protocol::proxy;
+use crate::protocol::routes::Route;
 use futures_util::{SinkExt, StreamExt};
 use rustls_pki_types::pem::PemObject;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
@@ -28,8 +30,8 @@ use crate::identity::Identity;
 use crate::protocol::api::CertificateState;
 use crate::storage::Storage;
 
-/// Route name (`@` or a subdomain label) to `host:port` target.
-pub type Routes = BTreeMap<String, String>;
+/// Route name (`@` or a subdomain label) to its target and options.
+pub type Routes = BTreeMap<String, Route>;
 
 const MAX_CONNS: u32 = 256;
 /// Frames queued for the WebSocket before local sockets stop being read.
@@ -122,9 +124,7 @@ impl Tunnel {
         routes: Routes,
         storage: Option<(Storage, String)>,
     ) -> Result<Self> {
-        for (name, target) in &routes {
-            validate_route(name, target)?;
-        }
+        validate_routes(&routes)?;
         let acceptor = Arc::new(RwLock::new(acceptor(&identity)?));
         let (routes_tx, routes_rx) = watch::channel(routes.clone());
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -167,9 +167,7 @@ impl Tunnel {
     /// Replaces the routes. Changing only targets applies to new connections
     /// immediately; adding or removing names re-attaches the bridge.
     pub fn set_routes(&self, routes: Routes) -> Result<()> {
-        for (name, target) in &routes {
-            validate_route(name, target)?;
-        }
+        validate_routes(&routes)?;
         self.routes.send_replace(routes);
         Ok(())
     }
@@ -208,14 +206,9 @@ impl Drop for Tunnel {
     }
 }
 
-fn validate_route(name: &str, target: &str) -> Result<()> {
-    if !crate::protocol::names::is_valid_route(name) {
-        return Err(Error::Invalid(format!("invalid route name '{name}'")));
-    }
-    if parse_target(target).is_none() {
-        return Err(Error::Invalid(format!(
-            "invalid target '{target}' for route '{name}': use host:port"
-        )));
+fn validate_routes(routes: &Routes) -> Result<()> {
+    for (name, route) in routes {
+        route.validate(name).map_err(Error::Invalid)?;
     }
     Ok(())
 }
@@ -522,7 +515,7 @@ impl Supervisor {
                                     let target = route.as_ref().and_then(|route| {
                                         targets.read().expect("targets lock").get(route).cloned()
                                     });
-                                    let (Some(route), Some(target)) = (route, target) else {
+                                    let (Some(route), Some(Route { target, proxy_protocol })) = (route, target) else {
                                         let _ = outbound.send(control(&ClientMessage::Reset {
                                             conn,
                                             code: codes::UNKNOWN_ROUTE.into(),
@@ -539,9 +532,11 @@ impl Supervisor {
                                     }
                                     let (inbound, inbound_rx) = mpsc::channel(INBOUND_QUEUE);
                                     let acceptor = self.acceptor.read().expect("acceptor lock").clone();
+                                    let preamble = proxy_protocol.map(|version| proxy::header(version, &peer, &sni));
                                     let abort = tasks.spawn(run_channel(
                                         conn,
                                         target,
+                                        preamble,
                                         acceptor,
                                         inbound_rx,
                                         outbound.clone(),
@@ -708,10 +703,12 @@ fn control(message: &ClientMessage) -> Message {
     Message::text(serde_json::to_string(message).expect("control messages serialize"))
 }
 
-/// Terminates TLS for one public connection and forwards it to the target.
+/// Terminates TLS for one public connection and forwards it to the target,
+/// after writing `preamble` (a PROXY protocol header) when the route has one.
 async fn run_channel(
     conn: ConnId,
     target: String,
+    preamble: Option<Vec<u8>>,
     acceptor: TlsAcceptor,
     mut inbound: mpsc::Receiver<Inbound>,
     outbound: mpsc::Sender<Message>,
@@ -759,6 +756,12 @@ async fn run_channel(
             .await
             .map_err(ChannelError::Connect)?;
         upstream.set_nodelay(true).ok();
+        if let Some(preamble) = preamble {
+            upstream
+                .write_all(&preamble)
+                .await
+                .map_err(ChannelError::Io)?;
+        }
         tokio::io::copy_bidirectional(&mut tls, &mut upstream)
             .await
             .map_err(ChannelError::Io)?;

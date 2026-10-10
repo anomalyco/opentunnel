@@ -33,6 +33,12 @@ public certificate logs, so the URL can't be guessed, but anyone you share it
 with can reach the service: it is not authentication. Pass `--name api` for a
 readable name instead.
 
+To let the application see each visitor's address, pass `--proxy-protocol v1`
+or `--proxy-protocol v2`: the client then sends a PROXY protocol header with
+the visitor's address before each connection's data. Enable it only if the
+application expects that header; see
+[docs/trust-boundary.md](docs/trust-boundary.md#proxy-protocol).
+
 See [packages/cli](packages/cli) for the full command reference.
 
 ## Architecture
@@ -54,7 +60,8 @@ The hosted service is one Rust binary, `crates/opentunnel-server`, on Fly.io
   forwards decrypted traffic to the local application unchanged. The
   application sees a loopback peer and the visitor's own headers, so it must
   not treat tunneled requests as local; see
-  [docs/trust-boundary.md](docs/trust-boundary.md).
+  [docs/trust-boundary.md](docs/trust-boundary.md). A route can opt in to a
+  PROXY protocol header carrying the visitor's address.
 
 There are two client implementations that share one protocol:
 

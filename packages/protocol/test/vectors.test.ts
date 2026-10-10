@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Option, Schema } from "effect";
 import { BridgeProtocol } from "../src/bridge-protocol.js";
 import { Names } from "../src/names.js";
+import { ProxyProtocol } from "../src/proxy-protocol.js";
 
 const vector = (name: string) =>
   Bun.file(new URL(`../../../spec/vectors/${name}`, import.meta.url)).json();
@@ -13,6 +14,7 @@ describe("spec vectors", async () => {
   const frames = await vector("frames.json");
   const routes = await vector("routes.json");
   const names = await vector("names.json");
+  const proxy = await vector("proxy-protocol.json");
 
   test("client control messages", () => {
     for (const message of control.client) {
@@ -51,6 +53,22 @@ describe("spec vectors", async () => {
     for (const { value, valid } of names.profile) expect([value, Names.isValidProfile(value)]).toEqual([value, valid]);
     for (const { value, valid } of names.target) {
       expect([value, Names.parseTarget(value) !== undefined]).toEqual([value, valid]);
+    }
+  });
+
+  test("PROXY protocol peers", () => {
+    for (const { peer, address, port } of proxy.peers) {
+      const parsed = ProxyProtocol.parsePeer(peer);
+      const actual = parsed ? { address: ProxyProtocol.formatAddress(parsed), port: parsed.port } : null;
+      expect([peer, actual]).toEqual([peer, address === null ? null : { address, port }]);
+    }
+  });
+
+  test("PROXY protocol headers", () => {
+    for (const { version, peer, sni, header, text } of proxy.headers) {
+      const encoded = ProxyProtocol.header(version, peer, sni);
+      expect([peer, Buffer.from(encoded).toString("hex")]).toEqual([peer, header]);
+      if (text !== undefined) expect(new TextDecoder().decode(encoded)).toBe(text);
     }
   });
 });

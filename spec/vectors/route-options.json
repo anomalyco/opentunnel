@@ -1,0 +1,45 @@
+{
+  "routes": [
+    { "name": "web", "profile": "127.0.0.1:3000", "sdk": "127.0.0.1:3000", "route": { "target": "127.0.0.1:3000" }, "written": "127.0.0.1:3000" },
+    { "name": "api", "profile": { "target": "127.0.0.1:4000", "proxy_protocol": "v2" }, "sdk": { "target": "127.0.0.1:4000", "proxyProtocol": "v2" }, "route": { "target": "127.0.0.1:4000", "proxyProtocol": "v2" }, "written": { "target": "127.0.0.1:4000", "proxy_protocol": "v2" } },
+    { "name": "@", "profile": { "target": "[::1]:5000", "proxy_protocol": "v1" }, "sdk": { "target": "[::1]:5000", "proxyProtocol": "v1" }, "route": { "target": "[::1]:5000", "proxyProtocol": "v1" }, "written": { "target": "[::1]:5000", "proxy_protocol": "v1" } },
+    { "name": "api", "profile": { "target": "127.0.0.1:4000" }, "sdk": { "target": "127.0.0.1:4000" }, "route": { "target": "127.0.0.1:4000" }, "written": "127.0.0.1:4000" },
+    { "name": "api", "profile": { "target": "127.0.0.1:4000", "proxy_protocol": "v3" }, "sdk": { "target": "127.0.0.1:4000", "proxyProtocol": "v3" }, "error": true },
+    { "name": "api", "profile": { "target": "127.0.0.1:4000", "proxy_protocol": "V2" }, "sdk": { "target": "127.0.0.1:4000", "proxyProtocol": "V2" }, "error": true },
+    { "name": "api", "profile": { "target": "127.0.0.1:4000", "proxy_protocol": true }, "sdk": { "target": "127.0.0.1:4000", "proxyProtocol": true }, "error": true },
+    { "name": "api", "profile": { "target": "127.0.0.1:4000", "forward_headers": true }, "sdk": { "target": "127.0.0.1:4000", "forwardHeaders": true }, "error": true },
+    { "name": "api", "profile": { "proxy_protocol": "v2" }, "sdk": { "proxyProtocol": "v2" }, "error": true },
+    { "name": "api", "profile": { "target": "localhost", "proxy_protocol": "v2" }, "sdk": { "target": "localhost", "proxyProtocol": "v2" }, "error": true },
+    { "name": "api", "profile": "http://127.0.0.1:3000", "sdk": "http://127.0.0.1:3000", "error": true },
+    { "name": "api", "profile": 3000, "sdk": 3000, "error": true },
+    { "name": "Api", "profile": "127.0.0.1:3000", "sdk": "127.0.0.1:3000", "error": true }
+  ],
+  "profiles": [
+    {
+      "toml": "[routes]\n\"@\" = \"127.0.0.1:8080\"\nweb = \"127.0.0.1:3000\"\n",
+      "routes": { "@": { "target": "127.0.0.1:8080" }, "web": { "target": "127.0.0.1:3000" } },
+      "written": "[routes]\n\"@\" = \"127.0.0.1:8080\"\nweb = \"127.0.0.1:3000\"\n"
+    },
+    {
+      "toml": "[routes]\nweb = \"127.0.0.1:3000\"\napi = { target = \"127.0.0.1:4000\", proxy_protocol = \"v2\" }\n",
+      "routes": { "web": { "target": "127.0.0.1:3000" }, "api": { "target": "127.0.0.1:4000", "proxyProtocol": "v2" } }
+    },
+    {
+      "toml": "[routes]\nweb = \"127.0.0.1:3000\"\n\n[routes.api]\ntarget = \"127.0.0.1:4000\"\nproxy_protocol = \"v1\"\n",
+      "routes": { "web": { "target": "127.0.0.1:3000" }, "api": { "target": "127.0.0.1:4000", "proxyProtocol": "v1" } }
+    },
+    {
+      "toml": "[routes]\napi = { target = \"127.0.0.1:4000\" }\n",
+      "routes": { "api": { "target": "127.0.0.1:4000" } },
+      "written": "[routes]\napi = \"127.0.0.1:4000\"\n"
+    },
+    {
+      "toml": "",
+      "routes": {}
+    },
+    { "toml": "[routes]\napi = { target = \"127.0.0.1:4000\", proxy = \"v2\" }\n", "error": true },
+    { "toml": "[routes]\napi = { target = \"127.0.0.1:4000\", proxy_protocol = \"v4\" }\n", "error": true },
+    { "toml": "[routes]\napi = { proxy_protocol = \"v2\" }\n", "error": true },
+    { "toml": "[routes]\napi = { target = \"nope\" }\n", "error": true }
+  ]
+}

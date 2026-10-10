@@ -21,6 +21,7 @@ Prebuilt binaries are published for Linux and macOS on x64 and arm64.
 opentunnel route add 3000                       # <random>.<hostname> → 127.0.0.1:3000, brings the tunnel up
 opentunnel route add 3000 --name api            # api.<hostname> instead of a random name
 opentunnel route add 127.0.0.1:8080 --name @    # the hostname itself
+opentunnel route add 3000 --proxy-protocol v2   # send a PROXY protocol header (v1 or v2) to the target
 opentunnel route remove api
 opentunnel route list
 opentunnel status                        # tunnel, routes, and connection
@@ -33,6 +34,15 @@ opentunnel delete --yes                  # delete the tunnel for good, losing it
 Every command takes `--profile <name>` (or `OPENTUNNEL_PROFILE`) and defaults to
 the `default` profile. A profile is one tunnel, so one URL per device is the
 norm; apps using `@opentunnel/client` add their own routes to the same tunnel.
+
+Adding the same target again (or the same `--name`) with different options
+updates that route; for example, `opentunnel route add 3000` after the line
+above turns the PROXY protocol off again.
+
+`--proxy-protocol` writes a PROXY protocol header with the visitor's address
+and port before each connection's data, and leaves the data unchanged. Use it
+only with a target configured to expect the header, listening on loopback; see
+`docs/trust-boundary.md` in the repository.
 
 ## Background service
 
@@ -58,7 +68,12 @@ a dotfiles repository. The filename is the profile name:
 [routes]
 api = "127.0.0.1:3000"
 "@" = "127.0.0.1:8080"
+db = { target = "127.0.0.1:4000", proxy_protocol = "v2" }
 ```
+
+A route with options is a table with `target`; `proxy_protocol` (`"v1"` or
+`"v2"`) is the only option. Routes without options are written as plain
+strings. CLIs older than 0.5.0 cannot read the table form.
 
 Generated identity and credentials are stored separately, readable only by
 you, and must not be committed. This layout is shared with
