@@ -185,6 +185,7 @@ pub fn percent_decode(value: &str) -> String {
 
 /// Reads a JSON payload the way the Worker's API did: a non-JSON content type is 415, an unreadable or
 /// mistyped body a bare 400.
+#[allow(clippy::result_large_err)] // the error is the response itself, returned once per request
 async fn payload(request: Request<Incoming>) -> Result<Value, Response<Body>> {
     if let Some(content_type) = request.headers().get(header::CONTENT_TYPE) {
         let content_type = content_type.to_str().unwrap_or_default();
