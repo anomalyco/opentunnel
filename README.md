@@ -114,3 +114,8 @@ bun run opentunnel route add 4096
 
 `bun run dev` serves the website with hot reload on `http://127.0.0.1:4190`
 and proxies `/api` to that server.
+
+## Contributing
+
+We don't accept pull requests. If you've found a bug or have an idea,
+[open an issue](https://github.com/anomalyco/opentunnel/issues/new) instead.

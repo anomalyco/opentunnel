@@ -78,7 +78,8 @@ impl Server {
                 http.clone(),
                 url.clone(),
                 config.analytics_token.clone(),
-            ),
+            )
+            .with_region(config.region.clone()),
             _ => Analytics::disabled(clock.clone()),
         };
         let service = Service::new(

@@ -31,6 +31,7 @@ pub struct Event {
 pub struct Analytics {
     clock: Clock,
     sender: Option<mpsc::Sender<Event>>,
+    region: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -57,6 +58,7 @@ impl Analytics {
         Self {
             clock,
             sender: None,
+            region: None,
         }
     }
 
@@ -67,7 +69,14 @@ impl Analytics {
         Self {
             clock,
             sender: Some(sender),
+            region: None,
         }
+    }
+
+    /// Tags every event with the region of the machine that sent it.
+    pub fn with_region(mut self, region: String) -> Self {
+        self.region = Some(region);
+        self
     }
 
     /// Collects events in memory, for tests.
@@ -77,6 +86,7 @@ impl Analytics {
             Self {
                 clock,
                 sender: Some(sender),
+                region: None,
             },
             receiver,
         )
@@ -87,6 +97,9 @@ impl Analytics {
         let Some(sender) = &self.sender else { return };
         let mut fields = Map::new();
         fields.insert("schema_version".into(), 1.into());
+        if let Some(region) = &self.region {
+            fields.insert("region".into(), region.clone().into());
+        }
         if let Value::Object(payload) = payload {
             fields.extend(payload);
         }
