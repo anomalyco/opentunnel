@@ -1,11 +1,23 @@
 name: Deploy to Fly
 
-# Deploys crates/opentunnel-server and the website (Dockerfile, fly.toml) to the `opentunnel` Fly app.
-# Manual only until the cutover from the Cloudflare Worker is done (docs/cutover.md); then add a `push` trigger
-# for master. Uses the FLY_API_TOKEN repository secret (`fly tokens create deploy -a opentunnel`). Runtime
-# secrets persist on the app and are not set here.
+# Deploys crates/opentunnel-server and the website (Dockerfile, fly.toml) to the `opentunnel` Fly app on every
+# push to master that changes them, rolling one machine at a time. Uses the FLY_API_TOKEN repository secret
+# (`fly tokens create deploy -a opentunnel`). Runtime secrets persist on the app and are not set here.
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - "crates/opentunnel/**"
+      - "crates/opentunnel-server/**"
+      - "packages/website/**"
+      - "index.html"
+      - "vite.config.ts"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "Dockerfile"
+      - "fly.toml"
+      - ".github/workflows/fly-deploy.yml"
   workflow_dispatch:
 
 concurrency:
