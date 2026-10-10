@@ -7,6 +7,7 @@ pub mod admin;
 pub mod analytics;
 pub mod bridge;
 pub mod clock;
+pub mod cluster;
 pub mod config;
 pub mod crypto;
 pub mod csr;

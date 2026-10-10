@@ -168,23 +168,66 @@ async fn fake_worker() -> (String, Arc<Worker>) {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hands_connections_without_a_local_bridge_to_the_worker() {
+    relays_to_the_worker(&[], "stillonwrkr").await;
+}
+
+/// With other machines, the Worker gets what no machine has a bridge for, even when the registry still names a
+/// machine that is gone.
+#[tokio::test(flavor = "multi_thread")]
+async fn hands_connections_no_machine_serves_to_the_worker() {
+    relays_to_the_worker(
+        &[
+            "--internal-listen=127.0.0.1:0",
+            "--internal-token=cluster-secret",
+        ],
+        "migratedhere",
+    )
+    .await;
+}
+
+async fn relays_to_the_worker(extra: &[&str], id: &str) {
     let (url, worker) = fake_worker().await;
     let dir = tempfile::tempdir().unwrap();
     let legacy = format!("--legacy-worker-url={url}");
-    let Some(server) = TestServer::start(
-        dir.path(),
-        &[
-            &legacy,
-            "--relay-token=relay-secret",
-            "--legacy-export-token=export-secret",
-        ],
-    )
-    .await
-    else {
+    let mut args = vec![
+        legacy.as_str(),
+        "--relay-token=relay-secret",
+        "--legacy-export-token=export-secret",
+    ];
+    args.extend_from_slice(extra);
+    let Some(server) = TestServer::start(dir.path(), &args).await else {
         return;
     };
 
-    let hello = client_hello("api.stillonwrkr.opentunnel.test");
+    if server.server.cluster.is_some() {
+        // Imported here, but its client is still on the Worker; a crashed machine's row remains.
+        let record = serde_json::from_value(serde_json::json!({
+            "version": 1,
+            "id": id,
+            "hostname": format!("{id}.opentunnel.test"),
+            "tokenHash": opentunnel_server::crypto::hash_token(TOKEN),
+            "state": "online",
+            "createdAt": "2026-10-09T00:00:00.000Z",
+            "certificateID": "cert_1",
+            "certificate": { "id": "cert_1", "state": {
+                "type": "ready", "certificate": "C", "chain": "C", "expiry": "2099-01-01T00:00:00.000Z"
+            } }
+        }))
+        .unwrap();
+        let store = &server.service().store;
+        store.put_tunnel(&record, 1).await.unwrap();
+        let gone = opentunnel_server::store::BridgeLocation {
+            tunnel_id: id.into(),
+            route: String::new(),
+            machine_id: "crashed".into(),
+            bridge_id: 1,
+            region: "sin".into(),
+            address: "127.0.0.1:1".into(),
+            updated_at: server.service().now(),
+        };
+        store.put_bridge(&gone, &["api".into()]).await.unwrap();
+    }
+    let hello = client_hello(&format!("api.{id}.opentunnel.test"));
     let mut visitor = TcpStream::connect(server.tls).await.unwrap();
     visitor.write_all(&hello).await.unwrap();
     let mut reply = String::new();
@@ -203,6 +246,15 @@ async fn hands_connections_without_a_local_bridge_to_the_worker() {
             .load(std::sync::atomic::Ordering::Relaxed),
         1
     );
+    if server.server.cluster.is_some() {
+        let stats = &server.server.app.stats;
+        assert_eq!(
+            stats
+                .forward_failures
+                .load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+    }
     server.stop().await;
 }
 

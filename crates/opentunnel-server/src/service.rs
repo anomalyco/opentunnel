@@ -2,7 +2,7 @@
 //! serializes its record changes, as the Durable Object's single thread did, and which holds its live bridges.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -16,6 +16,7 @@ use tracing::{error, warn};
 
 use crate::analytics::{self, Analytics, ClientInfo};
 use crate::clock::{Clock, DAY_MS, HOUR_MS, MINUTE_MS, iso, parse_iso};
+use crate::cluster::Cluster;
 use crate::crypto::{token_matches, uuid};
 use crate::record::{Renewal, StoredTunnel, TunnelView};
 use crate::store::{Conflict, Job, JobKind, Store};
@@ -31,6 +32,8 @@ pub const RENEWAL_STALE_MS: u64 = DAY_MS;
 pub const ORPHAN_MAX_AGE_MS: u64 = 2 * DAY_MS;
 /// A bridge silent for this long is gone: its client pings every heartbeat and gives up after the idle timeout.
 pub const STALE_BRIDGE_MS: u64 = IDLE_TIMEOUT_MS + HEARTBEAT_MS;
+/// After a failed refresh, cached records are used without asking the database for this long.
+const REFRESH_BACKOFF_MS: u64 = 5_000;
 
 #[derive(Clone)]
 pub struct Service(Arc<Inner>);
@@ -48,6 +51,10 @@ pub struct Inner {
     next_bridge: AtomicU64,
     /// TEMPORARY (migration): imports tunnels this server has not seen from the Worker.
     pull_through: std::sync::OnceLock<crate::migration::SharedPullThrough>,
+    /// The other machines, when this is one of many.
+    cluster: std::sync::OnceLock<Arc<Cluster>>,
+    /// When refreshing a cached record last failed, Unix ms.
+    refresh_failed_at: AtomicU64,
 }
 
 impl std::ops::Deref for Service {
@@ -98,6 +105,8 @@ pub struct Bridge {
     pub client: ClientInfo,
     /// Server time this bridge last sent anything, Unix ms.
     pub seen_at: AtomicU64,
+    /// Recorded in the cluster registry; retried by the heartbeat when the database was unavailable.
+    pub published: AtomicBool,
     pub state: Mutex<BridgeState>,
     pub channels: Mutex<HashMap<u32, ChannelHandle>>,
 }
@@ -309,7 +318,17 @@ impl Service {
             tunnels: Mutex::new(HashMap::new()),
             next_bridge: AtomicU64::new(1),
             pull_through: std::sync::OnceLock::new(),
+            cluster: std::sync::OnceLock::new(),
+            refresh_failed_at: AtomicU64::new(0),
         }))
+    }
+
+    pub fn set_cluster(&self, cluster: Arc<Cluster>) {
+        let _ = self.cluster.set(cluster);
+    }
+
+    pub fn cluster(&self) -> Option<&Arc<Cluster>> {
+        self.cluster.get()
     }
 
     pub fn set_pull_through(&self, pull: crate::migration::SharedPullThrough) {
@@ -354,6 +373,71 @@ impl Service {
             state.loaded = true;
         }
         Ok(state)
+    }
+
+    /// Locks a tunnel with its current record. With other machines writing to the same database, a cached
+    /// record may be stale, so it is read again; when that fails, the cached copy is used (a database outage).
+    /// A single machine is the only writer, so it keeps using its cache.
+    pub async fn lock_fresh<'a>(
+        &self,
+        entry: &'a Entry,
+    ) -> Result<tokio::sync::MutexGuard<'a, EntryState>> {
+        if self.cluster().is_none() {
+            return self.lock(entry).await;
+        }
+        let state = entry.state.lock().await;
+        if !state.loaded {
+            drop(state);
+            return self.lock(entry).await;
+        }
+        Ok(self.refresh(entry, state).await)
+    }
+
+    /// Locks a tunnel for routing. A cached record that is live with a ready certificate cannot be wrong about
+    /// routing (deletes elsewhere close bridges here), so only a missing or not yet ready one is read again.
+    pub async fn lock_routable<'a>(
+        &self,
+        entry: &'a Entry,
+    ) -> Result<tokio::sync::MutexGuard<'a, EntryState>> {
+        if self.cluster().is_none() {
+            return self.lock(entry).await;
+        }
+        let state = entry.state.lock().await;
+        if !state.loaded {
+            drop(state);
+            return self.lock(entry).await;
+        }
+        if state
+            .record()
+            .is_some_and(|record| record.certificate_ready())
+        {
+            return Ok(state);
+        }
+        Ok(self.refresh(entry, state).await)
+    }
+
+    async fn refresh<'a>(
+        &self,
+        entry: &'a Entry,
+        mut state: tokio::sync::MutexGuard<'a, EntryState>,
+    ) -> tokio::sync::MutexGuard<'a, EntryState> {
+        let now = self.now();
+        if now.saturating_sub(self.refresh_failed_at.load(Ordering::Relaxed)) < REFRESH_BACKOFF_MS {
+            return state;
+        }
+        match self.store.tunnel(&entry.id).await {
+            Ok(loaded) => {
+                (state.record, state.revision) = match loaded {
+                    Some(loaded) => (Some(loaded.record), loaded.revision),
+                    None => (None, 0),
+                };
+            }
+            Err(error) => {
+                self.refresh_failed_at.store(now, Ordering::Relaxed);
+                warn!(tunnel = %entry.id, error = %format!("{error:#}"), "using a cached record");
+            }
+        }
+        state
     }
 
     /// Drops cached entries nobody is using and that have no bridges.
@@ -431,7 +515,7 @@ impl Service {
     /// Creates a tunnel unless the ID is taken by a live one.
     pub async fn create(&self, id: &str, token_hash: String) -> Result<Option<TunnelView>> {
         let entry = self.entry(id);
-        let mut state = self.lock(&entry).await?;
+        let mut state = self.lock_fresh(&entry).await?;
         if state.record().is_some() {
             return Ok(None);
         }
@@ -459,19 +543,27 @@ impl Service {
 
     pub async fn info(&self, id: &str, token: &str) -> Result<Lookup<TunnelView>> {
         let entry = self.entry(id);
-        let state = self.lock(&entry).await?;
+        let state = self.lock_fresh(&entry).await?;
         let Some(record) = state.record() else {
             return Ok(Lookup::NotFound);
         };
         if !token_matches(token, &record.token_hash) {
             return Ok(Lookup::Unauthorized);
         }
-        Ok(Lookup::Ok(self.view(&state, record)))
+        let mut view = self.view(&state, record);
+        // A bridge on another machine counts too.
+        if view.state == TunnelState::Offline
+            && let Some(cluster) = self.cluster()
+            && cluster.online_elsewhere(id).await
+        {
+            view.state = TunnelState::Online;
+        }
+        Ok(Lookup::Ok(view))
     }
 
     pub async fn certificate(&self, id: &str, token: &str) -> Result<CertificateLookup> {
         let entry = self.entry(id);
-        let state = self.lock(&entry).await?;
+        let state = self.lock_fresh(&entry).await?;
         let Some(record) = state.record() else {
             return Ok(CertificateLookup::NotFound);
         };
@@ -486,7 +578,7 @@ impl Service {
 
     pub async fn bind_certificate(&self, id: &str, token: &str, csr: &str) -> Result<Bind> {
         let entry = self.entry(id);
-        let mut state = self.lock(&entry).await?;
+        let mut state = self.lock_fresh(&entry).await?;
         let Some(record) = state.record().cloned() else {
             return Ok(Bind::NotFound);
         };
@@ -569,7 +661,7 @@ impl Service {
 
     pub async fn remove(&self, id: &str, token: &str) -> Result<Lookup<()>> {
         let entry = self.entry(id);
-        let mut state = self.lock(&entry).await?;
+        let mut state = self.lock_fresh(&entry).await?;
         let Some(record) = state.record().cloned() else {
             return Ok(Lookup::NotFound);
         };
@@ -593,6 +685,11 @@ impl Service {
             "tunnel.deleted",
             json!({ "tunnel_id": record.id, "age_ms": age }),
         );
+        drop(state);
+        // Bridges attached to other machines close too.
+        if let Some(cluster) = self.cluster() {
+            cluster.close_elsewhere(id).await;
+        }
         Ok(Lookup::Ok(()))
     }
 
@@ -647,7 +744,7 @@ impl Service {
         input: CertificateState,
     ) -> Result<bool> {
         let entry = self.entry(tunnel_id);
-        let mut state = self.lock(&entry).await?;
+        let mut state = self.lock_fresh(&entry).await?;
         let Some(record) = state.record().cloned() else {
             return Ok(false);
         };
@@ -769,7 +866,7 @@ impl Service {
     /// The renewal alarm: renews the certificate of active tunnels shortly before it expires.
     pub async fn alarm(&self, id: &str) -> Result<()> {
         let entry = self.entry(id);
-        let mut state = self.lock(&entry).await?;
+        let mut state = self.lock_fresh(&entry).await?;
         let Some(record) = state.record().cloned() else {
             return Ok(());
         };
@@ -846,7 +943,7 @@ impl Service {
         let mut resumed = 0;
         for candidate in self.store.issuing_tunnels().await? {
             let entry = self.entry(&candidate.id);
-            let state = self.lock(&entry).await?;
+            let state = self.lock_fresh(&entry).await?;
             let Some(record) = state.record().cloned() else {
                 continue;
             };
@@ -888,7 +985,7 @@ impl Service {
     /// Whether the tunnel exists, for the WebSocket upgrade.
     pub async fn exists(&self, id: &str) -> Result<bool> {
         let entry = self.entry(id);
-        let state = self.lock(&entry).await?;
+        let state = self.lock_routable(&entry).await?;
         Ok(state.record().is_some())
     }
 
@@ -900,7 +997,7 @@ impl Service {
         client: ClientInfo,
     ) -> Result<Option<Arc<Bridge>>> {
         let entry = self.entry(id);
-        let mut state = self.lock(&entry).await?;
+        let mut state = self.lock_routable(&entry).await?;
         if state.record().is_none() {
             return Ok(None);
         }
@@ -910,6 +1007,7 @@ impl Service {
             cancel: CancellationToken::new(),
             client,
             seen_at: AtomicU64::new(self.now()),
+            published: AtomicBool::new(false),
             state: Mutex::new(BridgeState::default()),
             channels: Mutex::new(HashMap::new()),
         });
@@ -927,7 +1025,7 @@ impl Service {
         max_conns: Option<u64>,
     ) -> Result<Attach> {
         let entry = self.entry(id);
-        let mut state = self.lock(&entry).await?;
+        let mut state = self.lock_fresh(&entry).await?;
         let Some(record) = state.record().cloned() else {
             return Ok(Attach::Error("bad_token", "bad token"));
         };
@@ -949,6 +1047,13 @@ impl Service {
             candidate.id != bridge.id && routes.iter().any(|route| candidate.claims(route))
         });
         if conflict {
+            return Ok(Attach::Error("route_conflict", "route conflict"));
+        }
+        // Routes are exclusive across machines too. Two machines attaching the same route in the same instant
+        // may both succeed; visitors then reach the newer one, and the older keeps its own region's visitors.
+        if let Some(cluster) = self.cluster()
+            && cluster.held_elsewhere(id, &routes).await
+        {
             return Ok(Attach::Error("route_conflict", "route conflict"));
         }
         let now = self.now();
@@ -979,6 +1084,11 @@ impl Service {
             Err(error) => {
                 warn!(tunnel = %record.id, error = %format!("{error:#}"), "could not record the connection");
             }
+        }
+        if let Some(cluster) = self.cluster()
+            && cluster.publish(id, bridge.id, &routes).await
+        {
+            bridge.published.store(true, Ordering::Relaxed);
         }
         let mut connected_payload = json!({
             "tunnel_id": record.id,
@@ -1054,7 +1164,7 @@ impl Service {
         clean: bool,
     ) -> Result<()> {
         let entry = self.entry(id);
-        let mut state = self.lock(&entry).await?;
+        let mut state = self.lock_fresh(&entry).await?;
         state.bridges.retain(|candidate| candidate.id != bridge.id);
         let snapshot = bridge.snapshot();
         // Bridges that never attached have nothing to clean up; retired ones were cleaned up when retired.
@@ -1064,6 +1174,9 @@ impl Service {
         bridge.state.lock().expect("bridge lock").detached = true;
         bridge.finish_channels(Outcome::BridgeDisconnected);
         self.publish_disconnected(id, &snapshot, code, clean);
+        if let Some(cluster) = self.cluster() {
+            cluster.unpublish(id, bridge.id).await;
+        }
         if state.attached().next().is_none()
             && let Some(record) = state.record().cloned()
         {
@@ -1104,6 +1217,9 @@ impl Service {
             bridge.close(1001, "idle timeout");
             if let Some(id) = &id {
                 self.publish_disconnected(id, &snapshot, 1001, false);
+                if let Some(cluster) = self.cluster() {
+                    cluster.unpublish(id, bridge.id).await;
+                }
             }
             retired = true;
         }
@@ -1143,7 +1259,7 @@ impl Service {
     /// Picks the bridge for a public connection and registers the connection on it.
     pub async fn route(&self, id: &str, sni: &str) -> Result<Route> {
         let entry = self.entry(id);
-        let mut state = self.lock(&entry).await?;
+        let mut state = self.lock_routable(&entry).await?;
         let Some(record) = state.record().cloned() else {
             return Ok(Route::Rejected {
                 tunnel_exists: false,
@@ -1214,6 +1330,58 @@ impl Service {
             inbound,
             bytes_out,
         })
+    }
+
+    /// Closes this machine's bridges of a tunnel deleted elsewhere, and forgets its cached record.
+    pub async fn close_deleted(&self, id: &str) {
+        let entry = self.entry(id);
+        let mut state = entry.state.lock().await;
+        for bridge in &state.bridges {
+            bridge.finish_channels(Outcome::Deleted);
+            bridge.close(1000, "deleted");
+        }
+        state.loaded = false;
+        state.record = None;
+        state.revision = 0;
+    }
+
+    /// The routes this machine's live bridges hold for a tunnel, for another machine's attach.
+    pub async fn held_routes(&self, id: &str) -> Result<Vec<String>> {
+        let entry = self.entry(id);
+        let mut state = entry.state.lock().await;
+        if state.bridges.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.retire_stale(&mut state).await?;
+        Ok(state
+            .attached()
+            .filter(|bridge| !bridge.is_closing())
+            .flat_map(|bridge| bridge.snapshot().routes)
+            .collect())
+    }
+
+    /// Records bridges the registry is missing (attached while the database was unavailable) and returns the
+    /// tunnels with live bridges here.
+    pub async fn republish(&self, cluster: &Cluster) -> Vec<String> {
+        let mut live = Vec::new();
+        for entry in self.entries() {
+            let state = entry.state.lock().await;
+            let mut any = false;
+            for bridge in state.attached().filter(|bridge| !bridge.is_closing()) {
+                any = true;
+                if !bridge.published.load(Ordering::Relaxed)
+                    && cluster
+                        .publish(&entry.id, bridge.id, &bridge.snapshot().routes)
+                        .await
+                {
+                    bridge.published.store(true, Ordering::Relaxed);
+                }
+            }
+            if any {
+                live.push(entry.id.clone());
+            }
+        }
+        live
     }
 
     /// Closes every bridge, for shutdown. Clients treat `drain` as a reason to reconnect.

@@ -195,6 +195,16 @@ impl Jobs {
                 }
             }
         };
+        // A server that lost its lease (it could not extend it in time) leaves the results to the one that
+        // took the job over.
+        if let Ok(false) = service
+            .store
+            .extend_lease(&job.certificate_id, owner, service.now())
+            .await
+        {
+            warn!(certificate = %job.certificate_id, "lost the lease on a certificate job; not recording its result");
+            return Ok(());
+        }
         let now = service.now();
         match result {
             Ok(issued) => {
@@ -444,11 +454,20 @@ impl ServerCertificates {
 
     pub async fn run(self: Arc<Self>) {
         loop {
+            // Another machine may have issued or renewed it.
+            if let Err(error) = self.load().await {
+                error!(%error, "loading the API domain certificate failed");
+            }
             if let Err(error) = self.ensure().await {
                 error!(%error, "ensuring the API domain certificate failed");
             }
-            // Hourly, which also spaces out retries after a failed issuance.
-            tokio::time::sleep(Duration::from_millis(HOUR_MS.min(DAY_MS))).await;
+            // Hourly, which also spaces out retries after a failed issuance; often while there is none.
+            let wait = if self.resolver.is_installed() {
+                HOUR_MS.min(DAY_MS)
+            } else {
+                10_000
+            };
+            tokio::time::sleep(Duration::from_millis(wait)).await;
         }
     }
 }

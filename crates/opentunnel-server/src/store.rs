@@ -18,7 +18,7 @@ use tracing::warn;
 use crate::record::StoredTunnel;
 
 /// The schema version this server writes. A database at a newer version is refused.
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA: &[&str] = &[
     r#"CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -77,6 +77,22 @@ const SCHEMA: &[&str] = &[
     r#"CREATE TABLE IF NOT EXISTS meta (
   name VARCHAR(191) NOT NULL PRIMARY KEY,
   value MEDIUMTEXT NOT NULL
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin"#,
+    // Version 2: where bridges are attached, so any machine can forward visitors to the one holding the bridge.
+    r#"CREATE TABLE IF NOT EXISTS bridges (
+  tunnel_id VARCHAR(191) NOT NULL,
+  route VARCHAR(63) NOT NULL,
+  machine_id VARCHAR(191) NOT NULL,
+  -- The bridge on that machine, so a late removal cannot delete a newer bridge's row.
+  bridge_id BIGINT NOT NULL,
+  region VARCHAR(32) NOT NULL,
+  -- The machine's internal listener on the private network, host:port.
+  address VARCHAR(191) NOT NULL,
+  -- Refreshed by the machine's heartbeat; readers ignore rows that stopped being refreshed.
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (tunnel_id, route, machine_id),
+  KEY bridges_machine (machine_id),
+  KEY bridges_updated (updated_at)
 ) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin"#,
 ];
 
@@ -153,6 +169,45 @@ pub struct ServerCertificate {
     pub certificate: Option<String>,
     pub chain: Option<String>,
     pub expiry: Option<String>,
+}
+
+/// A route a bridge serves on some machine (a `bridges` row).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeLocation {
+    pub tunnel_id: String,
+    pub route: String,
+    pub machine_id: String,
+    pub bridge_id: u64,
+    pub region: String,
+    pub address: String,
+    pub updated_at: u64,
+}
+
+/// What one machine holds, from the `bridges` table.
+#[derive(Debug, Clone, Serialize)]
+pub struct MachineBridges {
+    pub machine_id: String,
+    pub region: String,
+    pub address: String,
+    pub bridges: u64,
+    pub tunnels: u64,
+    pub routes: u64,
+    pub updated_at: u64,
+}
+
+type BridgeRow = (String, String, String, i64, String, String, i64);
+
+fn bridge_from_row(row: BridgeRow) -> BridgeLocation {
+    let (tunnel_id, route, machine_id, bridge_id, region, address, updated_at) = row;
+    BridgeLocation {
+        tunnel_id,
+        route,
+        machine_id,
+        bridge_id: bridge_id as u64,
+        region,
+        address,
+        updated_at: updated_at as u64,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1004,6 +1059,191 @@ impl Store {
         })
         .await
     }
+
+    // --- Bridge locations (the cluster registry) -------------------------------------------------------------
+
+    /// Records that `machine_id` serves `routes` of a tunnel with one bridge, replacing older rows for them.
+    pub async fn put_bridge(&self, location: &BridgeLocation, routes: &[String]) -> Result<()> {
+        if routes.is_empty() {
+            return Ok(());
+        }
+        timed(async {
+            let mut query = sqlx::QueryBuilder::new(
+                "INSERT INTO bridges (tunnel_id, route, machine_id, bridge_id, region, address, updated_at) ",
+            );
+            query.push_values(routes, |mut row, route| {
+                row.push_bind(&location.tunnel_id)
+                    .push_bind(route)
+                    .push_bind(&location.machine_id)
+                    .push_bind(location.bridge_id as i64)
+                    .push_bind(&location.region)
+                    .push_bind(&location.address)
+                    .push_bind(location.updated_at as i64);
+            });
+            query.push(
+                " ON DUPLICATE KEY UPDATE bridge_id = VALUES(bridge_id), region = VALUES(region),
+                   address = VALUES(address), updated_at = VALUES(updated_at)",
+            );
+            query.build().execute(&self.pool).await.map_err(db)?;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Removes one bridge's rows; a newer bridge that took the same routes on the machine keeps its rows.
+    pub async fn delete_bridge(
+        &self,
+        tunnel_id: &str,
+        machine_id: &str,
+        bridge_id: u64,
+    ) -> Result<()> {
+        timed(async {
+            sqlx::query(
+                "DELETE FROM bridges WHERE tunnel_id = ? AND machine_id = ? AND bridge_id = ?",
+            )
+            .bind(tunnel_id)
+            .bind(machine_id)
+            .bind(bridge_id as i64)
+            .execute(&self.pool)
+            .await
+            .map_err(db)?;
+            Ok(())
+        })
+        .await
+    }
+
+    pub async fn delete_tunnel_bridges(&self, tunnel_id: &str) -> Result<()> {
+        timed(async {
+            sqlx::query("DELETE FROM bridges WHERE tunnel_id = ?")
+                .bind(tunnel_id)
+                .execute(&self.pool)
+                .await
+                .map_err(db)?;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Removes every row of a machine, at its startup and clean shutdown.
+    pub async fn delete_machine_bridges(&self, machine_id: &str) -> Result<u64> {
+        timed(async {
+            let deleted = sqlx::query("DELETE FROM bridges WHERE machine_id = ?")
+                .bind(machine_id)
+                .execute(&self.pool)
+                .await
+                .map_err(db)?;
+            Ok(deleted.rows_affected())
+        })
+        .await
+    }
+
+    /// Removes rows nobody refreshed since `before`, left behind by machines that are gone.
+    pub async fn delete_expired_bridges(&self, before: u64) -> Result<u64> {
+        timed(async {
+            let deleted = sqlx::query("DELETE FROM bridges WHERE updated_at < ?")
+                .bind(before as i64)
+                .execute(&self.pool)
+                .await
+                .map_err(db)?;
+            Ok(deleted.rows_affected())
+        })
+        .await
+    }
+
+    /// The machine's heartbeat: marks its rows current.
+    pub async fn refresh_bridges(&self, machine_id: &str, now: u64) -> Result<u64> {
+        timed(async {
+            let refreshed = sqlx::query("UPDATE bridges SET updated_at = ? WHERE machine_id = ?")
+                .bind(now as i64)
+                .bind(machine_id)
+                .execute(&self.pool)
+                .await
+                .map_err(db)?;
+            Ok(refreshed.rows_affected())
+        })
+        .await
+    }
+
+    /// Rows for a tunnel (one route, or all) refreshed since `since`, newest first.
+    pub async fn bridge_locations(
+        &self,
+        tunnel_id: &str,
+        route: Option<&str>,
+        since: u64,
+    ) -> Result<Vec<BridgeLocation>> {
+        timed(async {
+            let rows: Vec<BridgeRow> = sqlx::query_as(
+                "SELECT tunnel_id, route, machine_id, bridge_id, region, address, updated_at FROM bridges
+                 WHERE tunnel_id = ? AND (? IS NULL OR route = ?) AND updated_at >= ?
+                 ORDER BY updated_at DESC",
+            )
+            .bind(tunnel_id)
+            .bind(route)
+            .bind(route)
+            .bind(since as i64)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db)?;
+            Ok(rows.into_iter().map(bridge_from_row).collect())
+        })
+        .await
+    }
+
+    /// Bridges per machine, from rows refreshed since `since`.
+    pub async fn machine_bridges(&self, since: u64) -> Result<Vec<MachineBridges>> {
+        timed(async {
+            let rows: Vec<(String, String, String, i64, i64, i64, i64)> = sqlx::query_as(
+                "SELECT machine_id, MAX(region), MAX(address), COUNT(DISTINCT tunnel_id, bridge_id),
+                   COUNT(DISTINCT tunnel_id), COUNT(*), MAX(updated_at)
+                 FROM bridges WHERE updated_at >= ? GROUP BY machine_id ORDER BY MAX(region), machine_id",
+            )
+            .bind(since as i64)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db)?;
+            Ok(rows
+                .into_iter()
+                .map(
+                    |(machine_id, region, address, bridges, tunnels, routes, updated_at)| {
+                        MachineBridges {
+                            machine_id,
+                            region,
+                            address,
+                            bridges: bridges as u64,
+                            tunnels: tunnels as u64,
+                            routes: routes as u64,
+                            updated_at: updated_at as u64,
+                        }
+                    },
+                )
+                .collect())
+        })
+        .await
+    }
+
+    /// Which of `ids` are deleted.
+    pub async fn deleted_tunnels(&self, ids: &[String]) -> Result<Vec<String>> {
+        let mut deleted = Vec::new();
+        for chunk in ids.chunks(500) {
+            let found: Vec<String> = timed(async {
+                let mut query =
+                    sqlx::QueryBuilder::new("SELECT id FROM tunnels WHERE deleted = 1 AND id IN (");
+                let mut separated = query.separated(", ");
+                for id in chunk {
+                    separated.push_bind(id);
+                }
+                query.push(")");
+                query
+                    .build_query_scalar()
+                    .fetch_all(&self.pool)
+                    .await
+                    .map_err(db)
+            })
+            .await?;
+            deleted.extend(found);
+        }
+        Ok(deleted)
+    }
 }
 
 /// The database was migrated by a newer server.
@@ -1203,6 +1443,106 @@ mod tests {
         for outcome in futures_util::future::join_all(imports).await {
             assert_eq!(outcome.unwrap(), ImportOutcome::Inserted);
         }
+
+        // Machines importing the same record at once (the pull-through on first use) insert it once.
+        let same = (0..8).map(|_| {
+            let store = store.clone();
+            async move {
+                store
+                    .import_tunnel(record("pulledthrugh"), Some(9), false, 1)
+                    .await
+            }
+        });
+        let mut outcomes: Vec<ImportOutcome> = futures_util::future::join_all(same)
+            .await
+            .into_iter()
+            .map(Result::unwrap)
+            .collect();
+        outcomes.sort_by_key(|outcome| *outcome != ImportOutcome::Inserted);
+        assert_eq!(outcomes[0], ImportOutcome::Inserted);
+        assert!(
+            outcomes[1..]
+                .iter()
+                .all(|outcome| *outcome == ImportOutcome::Unchanged)
+        );
+        let loaded = store.tunnel("pulledthrugh").await.unwrap().unwrap();
+        assert_eq!(loaded.revision, 1);
+    }
+
+    #[tokio::test]
+    async fn registry_rows_expire_and_belong_to_one_bridge() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let location = |machine: &str, bridge_id, updated_at| BridgeLocation {
+            tunnel_id: "abcdefghijkl".into(),
+            route: String::new(),
+            machine_id: machine.into(),
+            bridge_id,
+            region: "iad".into(),
+            address: "[fdaa::1]:9000".into(),
+            updated_at,
+        };
+        let routes = vec!["api".to_owned(), "@".to_owned()];
+        store
+            .put_bridge(&location("a", 1, 100), &routes)
+            .await
+            .unwrap();
+        store
+            .put_bridge(&location("b", 7, 150), &routes[..1])
+            .await
+            .unwrap();
+        let api = store
+            .bridge_locations("abcdefghijkl", Some("api"), 0)
+            .await
+            .unwrap();
+        assert_eq!(api.len(), 2);
+        assert_eq!(api[0].machine_id, "b");
+        assert_eq!(
+            store
+                .bridge_locations("abcdefghijkl", None, 120)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        // A newer bridge on the machine takes the rows; the old one's late removal leaves them.
+        store
+            .put_bridge(&location("a", 2, 160), &routes)
+            .await
+            .unwrap();
+        store.delete_bridge("abcdefghijkl", "a", 1).await.unwrap();
+        assert_eq!(
+            store
+                .bridge_locations("abcdefghijkl", None, 0)
+                .await
+                .unwrap()
+                .len(),
+            3
+        );
+        assert_eq!(store.refresh_bridges("a", 500).await.unwrap(), 2);
+        let machines = store.machine_bridges(400).await.unwrap();
+        assert_eq!(machines.len(), 1);
+        assert_eq!((machines[0].bridges, machines[0].routes), (1, 2));
+        assert_eq!(store.delete_expired_bridges(400).await.unwrap(), 1);
+        assert_eq!(store.delete_machine_bridges("a").await.unwrap(), 2);
+
+        store.put_tunnel(&record("abcdefghijkl"), 1).await.unwrap();
+        let mut deleted = record("deletedtunnl");
+        deleted.deleted_at = Some(iso(1));
+        store.put_tunnel(&deleted, 1).await.unwrap();
+        assert_eq!(
+            store
+                .deleted_tunnels(&[
+                    "abcdefghijkl".into(),
+                    "deletedtunnl".into(),
+                    "unknown".into()
+                ])
+                .await
+                .unwrap(),
+            vec!["deletedtunnl".to_owned()]
+        );
+        assert!(store.deleted_tunnels(&[]).await.unwrap().is_empty());
     }
 
     #[tokio::test]

@@ -44,6 +44,12 @@ pub struct Stats {
     /// Public connections handed to the legacy Worker because nothing here served them.
     pub legacy_forwarded: AtomicU64,
     pub tunnel_connections: AtomicU64,
+    /// Visitors carried to the machine holding their bridge.
+    pub forwarded_out: AtomicU64,
+    /// Visitors other machines carried here.
+    pub forwarded_in: AtomicU64,
+    /// Forwarding attempts the other machine refused or that could not reach it.
+    pub forward_failures: AtomicU64,
 }
 
 /// The server's own admin endpoints under `/api/admin/*`, behind a bearer secret.

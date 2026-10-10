@@ -14,6 +14,7 @@ use tokio::sync::watch;
 use tracing::debug;
 
 use crate::bridge::{ServerControl, data_frame};
+use crate::cluster::{Cluster, FORWARD_ACCEPTED, FORWARD_REFUSED};
 use crate::proxy_protocol;
 use crate::service::{Inbound, Outcome, Route, Service};
 use crate::sni::{CLIENT_HELLO_LIMIT, Hello, parse_client_hello};
@@ -33,13 +34,18 @@ pub struct Accepted {
 }
 
 /// Reads the optional PROXY header and the ClientHello, within the ClientHello timeout.
-pub async fn accept(
+pub async fn accept(stream: TcpStream, peer: SocketAddr, proxy_protocol: bool) -> Result<Accepted> {
+    accept_with(stream, peer, proxy_protocol, Vec::with_capacity(4096)).await
+}
+
+/// [`accept`], after `buffer` was already read from the stream.
+pub async fn accept_with(
     mut stream: TcpStream,
     peer: SocketAddr,
     proxy_protocol: bool,
+    mut buffer: Vec<u8>,
 ) -> Result<Accepted> {
     tokio::time::timeout(CLIENT_HELLO_TIMEOUT, async move {
-        let mut buffer = Vec::with_capacity(4096);
         let mut peer = peer;
         let mut start = 0;
         if proxy_protocol {
@@ -100,19 +106,39 @@ pub fn tunnel_id(hostname: &str, domain: &str) -> Option<String> {
     (!id.is_empty()).then(|| id.to_owned())
 }
 
+/// The route in `<id>.<domain>` (`@`) or `<route>.<id>.<domain>`.
+pub fn route_name(hostname: &str, id: &str, domain: &str) -> Option<String> {
+    let labels = hostname.strip_suffix(domain)?.strip_suffix('.')?;
+    if labels == id {
+        return Some("@".into());
+    }
+    let route = labels.strip_suffix(id)?.strip_suffix('.')?;
+    (!route.is_empty() && !route.contains('.')).then(|| route.to_owned())
+}
+
 /// What to do with a tunnel connection nothing serves here.
 pub trait Fallback: Send + Sync {
     /// Takes the connection, or gives it back.
     fn forward(&self, accepted: Accepted) -> Option<Accepted>;
 }
 
+/// Where a tunnel connection came from.
+#[derive(Clone, Copy)]
+pub enum Origin<'a> {
+    /// A visitor on the public port. Without a bridge here it goes to the machine holding one, then to the
+    /// legacy fallback.
+    Public {
+        cluster: Option<&'a Arc<Cluster>>,
+        fallback: Option<&'a Arc<dyn Fallback>>,
+    },
+    /// Forwarded by another machine, which waits for one byte: [`FORWARD_ACCEPTED`] before the stream, or
+    /// [`FORWARD_REFUSED`]. Never forwarded again.
+    Forwarded,
+}
+
 /// Carries a public connection to a tunnel client over its bridge, until both directions end or one side
 /// aborts.
-pub async fn route_tunnel(
-    service: &Service,
-    accepted: Accepted,
-    fallback: Option<&Arc<dyn Fallback>>,
-) -> Result<()> {
+pub async fn route_tunnel(service: &Service, accepted: Accepted, origin: Origin<'_>) -> Result<()> {
     let started = service.now();
     let Some(id) = tunnel_id(&accepted.sni, &service.domain) else {
         bail!("SNI is not an OpenTunnel hostname");
@@ -132,6 +158,27 @@ pub async fn route_tunnel(
             tunnel_exists,
             outcome,
         } => {
+            let (cluster, fallback) = match origin {
+                Origin::Public { cluster, fallback } => (cluster, fallback),
+                Origin::Forwarded => {
+                    // The forwarding machine retries elsewhere or rejects it, and reports it.
+                    let mut stream = accepted.stream;
+                    let _ = stream.write_all(&[FORWARD_REFUSED]).await;
+                    debug!(tunnel = %id, outcome, "forwarded connection refused");
+                    return Ok(());
+                }
+            };
+            let mut accepted = accepted;
+            if outcome == "no_bridge"
+                && tunnel_exists
+                && let Some(cluster) = cluster
+                && let Some(route) = route_name(&accepted.sni, &id, &service.domain)
+            {
+                match cluster.forward(accepted, &id, &route).await {
+                    None => return Ok(()),
+                    Some(returned) => accepted = returned,
+                }
+            }
             if outcome == "no_bridge"
                 && let Some(fallback) = fallback
             {
@@ -154,6 +201,11 @@ pub async fn route_tunnel(
         sni,
         alpn,
     } = accepted;
+    let mut stream = stream;
+    if matches!(origin, Origin::Forwarded) && stream.write_all(&[FORWARD_ACCEPTED]).await.is_err() {
+        bridge.channels.lock().expect("channels lock").remove(&conn);
+        return Ok(());
+    }
     let peer = peer.to_string();
     let _ = bridge
         .tx
@@ -172,7 +224,6 @@ pub async fn route_tunnel(
     }
     let bytes_in = initial.len() as u64;
 
-    let mut stream = stream;
     let _ = stream.set_nodelay(true);
     let (read, write) = stream.split();
     let upload = upload(read, &bridge, conn, &finish, abort.clone());
@@ -306,5 +357,35 @@ async fn download(
                 return;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_routes() {
+        let domain = "opentunnel.xyz";
+        assert_eq!(
+            tunnel_id("api.abcdefghijkl.opentunnel.xyz", domain).as_deref(),
+            Some("abcdefghijkl")
+        );
+        assert_eq!(
+            route_name("abcdefghijkl.opentunnel.xyz", "abcdefghijkl", domain).as_deref(),
+            Some("@")
+        );
+        assert_eq!(
+            route_name("api.abcdefghijkl.opentunnel.xyz", "abcdefghijkl", domain).as_deref(),
+            Some("api")
+        );
+        assert_eq!(
+            route_name("a.b.abcdefghijkl.opentunnel.xyz", "abcdefghijkl", domain),
+            None
+        );
+        assert_eq!(
+            route_name("xabcdefghijkl.opentunnel.xyz", "abcdefghijkl", domain),
+            None
+        );
     }
 }

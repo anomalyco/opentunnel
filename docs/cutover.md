@@ -98,7 +98,7 @@ fly ips list --app opentunnel            # note the v4 as FLY_IPV4 and the v6 as
 fly secrets set --app opentunnel --stage \
   DATABASE_URL="$DATABASE_URL" \
   ACME_EAB_KID=... ACME_EAB_HMAC_KEY=... ACME_ACCOUNT_KEY_JWK='{"kty":"EC",...}' \
-  CLOUDFLARE_API_TOKEN=... ADMIN_TOKEN=$ADMIN_TOKEN \
+  CLOUDFLARE_API_TOKEN=... ADMIN_TOKEN=$ADMIN_TOKEN INTERNAL_TOKEN=$(openssl rand -hex 32) \
   ANALYTICS_URL=... ANALYTICS_TOKEN=... \
   LEGACY_WORKER_URL=$WORKER_URL RELAY_TOKEN=... LEGACY_EXPORT_TOKEN=$ADMIN_EXPORT_TOKEN
 ```
@@ -230,8 +230,10 @@ are still on the Worker.
 
 ## 9. Verify
 
-- `fly_admin stats`: `bridges_attached` near the usual count, `jobs_failed` 0,
-  `legacy_forwarded` flat.
+- `fly_admin stats`: `cluster.bridges` near the usual count, `jobs_failed` 0,
+  `legacy_forwarded` flat. Counters other than `cluster` are the answering
+  machine's only (see docs/server.md, "Multiple regions"; scaling out to every
+  region is described there).
 - `fly logs`: no repeated errors; `bridge.connected` analytics arriving.
 - Create a tunnel from scratch on a clean machine:
   `curl -fsSL https://opentunnel.xyz/install | sh && opentunnel route add 3000`.
@@ -258,8 +260,8 @@ requests:
   `35.170.151.254` and start the AWS relay if it was stopped. Clients never
   left the Worker.
 - **After step 7**: restore the proxied apex record and the `*` record to the
-  AWS relay, then restart the Fly machine (`fly machine restart`), which
-  closes its bridges with 1012 so clients reconnect to the Worker. Caveats:
+  AWS relay, then restart the Fly machines (`fly machine restart` for each),
+  which close their bridges with 1012 so clients reconnect to the Worker. Caveats:
   tunnels created on Fly do not exist on the Worker (their clients get 404 on
   the bridge and keep retrying until rolled forward again), and certificates
   renewed on Fly are unknown to the Worker (the clients keep the newer one,

@@ -13,6 +13,7 @@ use crate::acme::{Acme, AcmeConfig};
 use crate::admin::TokenAdmin;
 use crate::analytics::Analytics;
 use crate::clock::Clock;
+use crate::cluster::{self, Cluster};
 use crate::config::{Config, DnsKind, HttpMode, IssuerKind};
 use crate::dns::DnsProvider;
 use crate::http::{self, App, Stats};
@@ -34,6 +35,8 @@ pub struct Server {
     pub certificates: Arc<ServerCertificates>,
     pub resolver: Arc<tls::ServerCertificate>,
     pub fallback: Option<Arc<dyn Fallback>>,
+    /// The other machines, with `INTERNAL_LISTEN`.
+    pub cluster: Option<Arc<Cluster>>,
     pub config: Config,
     /// The local CA's certificate, when that is the issuer.
     pub local_ca: Option<String>,
@@ -160,6 +163,26 @@ impl Server {
         };
 
         let stats = Arc::new(Stats::default());
+        let cluster = match config.internal_listen.as_str() {
+            "" | "off" => None,
+            _ => {
+                let cluster = Arc::new(Cluster::new(
+                    config
+                        .machine_id
+                        .clone()
+                        .filter(|id| !id.is_empty())
+                        .unwrap_or_else(|| jobs.owner.clone()),
+                    config.region.clone(),
+                    config.internal_token.clone().unwrap_or_default(),
+                    store.clone(),
+                    clock.clone(),
+                    config.cluster_heartbeat_ms,
+                    stats.clone(),
+                )?);
+                service.set_cluster(cluster.clone());
+                Some(cluster)
+            }
+        };
         let mut fallback: Option<Arc<dyn Fallback>> = None;
         if let Some(url) = config
             .legacy_worker_url
@@ -213,6 +236,7 @@ impl Server {
             certificates,
             resolver,
             fallback,
+            cluster,
             config,
             local_ca,
         })
@@ -243,6 +267,13 @@ impl Server {
             Ok(0) => {}
             Ok(resumed) => info!(resumed, "resumed certificate issuance without a job"),
             Err(error) => warn!(%error, "resuming certificate issuance failed"),
+        }
+        if let Some(cluster) = &self.cluster {
+            cluster.start().await?;
+            tasks.push(tokio::spawn(cluster::run_heartbeat(
+                service.clone(),
+                cluster.clone(),
+            )));
         }
         tasks.push(tokio::spawn(self.jobs.clone().run()));
         tasks.push(tokio::spawn(jobs::run_alarms(service.clone())));
@@ -300,10 +331,56 @@ impl Server {
             return;
         }
         http::count(&self.app.stats.tunnel_connections);
-        if let Err(error) =
-            relay::route_tunnel(&self.app.service, accepted, self.fallback.as_ref()).await
-        {
+        let origin = relay::Origin::Public {
+            cluster: self.cluster.as_ref(),
+            fallback: self.fallback.as_ref(),
+        };
+        if let Err(error) = relay::route_tunnel(&self.app.service, accepted, origin).await {
             debug!(%error, %peer, "TCP connection rejected");
+        }
+    }
+
+    /// Binds the internal listener (with `INTERNAL_LISTEN`) and records the address other machines use.
+    pub async fn bind_internal(&self) -> Result<Option<TcpListener>> {
+        let Some(cluster) = &self.cluster else {
+            return Ok(None);
+        };
+        let configured = self.config.internal_listen.as_str();
+        let mut address = tokio::net::lookup_host(configured)
+            .await
+            .with_context(|| format!("INTERNAL_LISTEN {configured}"))?
+            .next()
+            .with_context(|| format!("INTERNAL_LISTEN {configured} has no address"))?;
+        // On Fly, the private network only: never every interface.
+        if address.ip().is_unspecified()
+            && let Some(private) = self.config.private_ip
+        {
+            address.set_ip(private);
+        }
+        let listener = TcpListener::bind(address)
+            .await
+            .with_context(|| format!("binding {address}"))?;
+        let bound = listener.local_addr()?;
+        let advertised = match &self.config.internal_address {
+            Some(advertised) if !advertised.is_empty() => advertised.clone(),
+            _ if bound.ip().is_unspecified() => {
+                let loopback: std::net::IpAddr = if bound.is_ipv6() {
+                    std::net::Ipv6Addr::LOCALHOST.into()
+                } else {
+                    std::net::Ipv4Addr::LOCALHOST.into()
+                };
+                SocketAddr::new(loopback, bound.port()).to_string()
+            }
+            _ => bound.to_string(),
+        };
+        cluster.set_address(advertised);
+        info!(address = %bound, advertised = %cluster.address(), "listening for other machines");
+        Ok(Some(listener))
+    }
+
+    pub async fn serve_internal(self: Arc<Self>, listener: TcpListener) {
+        if let Some(cluster) = &self.cluster {
+            cluster::serve_internal(listener, self.app.service.clone(), cluster.clone()).await;
         }
     }
 
@@ -346,21 +423,31 @@ impl Server {
                 Some(listener)
             }
         };
+        let internal_listener = self.bind_internal().await?;
         self.start_background().await?;
         let server = Arc::new(self);
         let service = server.app.service.clone();
         let self_jobs = server.jobs.clone();
         let tls = tokio::spawn(server.clone().serve_tls(tls_listener));
         let http = http_listener.map(|listener| tokio::spawn(server.clone().serve_http(listener)));
+        let internal =
+            internal_listener.map(|listener| tokio::spawn(server.clone().serve_internal(listener)));
         shutdown_signal().await;
         info!("shutting down; asking bridges to reconnect");
         tls.abort();
         if let Some(http) = http {
             http.abort();
         }
+        // Other machines stop forwarding here before the bridges move to them.
+        if let Some(cluster) = &server.cluster {
+            cluster.shutdown().await;
+        }
         service.drain("server restarting").await;
         self_jobs.release().await;
         tokio::time::sleep(Duration::from_millis(500)).await;
+        if let Some(internal) = internal {
+            internal.abort();
+        }
         Ok(())
     }
 }

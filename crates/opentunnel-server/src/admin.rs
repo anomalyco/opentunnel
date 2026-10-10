@@ -2,7 +2,7 @@
 //!
 //! - `POST /api/admin/import[?force=1]`: imports an export file (the cutover's path; see docs/cutover.md)
 //! - `POST /api/admin/export`: every record, in the same format
-//! - `POST /api/admin/stats`: counts for checking a cutover
+//! - `POST /api/admin/stats`: counts for checking a cutover, this machine's counters, and every machine's bridges
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -68,11 +68,48 @@ impl Admin for TokenAdmin {
                 },
                 "stats" => match service.store.counts().await {
                     Ok(mut counts) => {
+                        // This machine's counters (top level, as before, and under `machine`).
+                        let stats = &app.stats;
                         counts["bridges_attached"] = service.bridge_count().into();
                         counts["legacy_forwarded"] =
-                            app.stats.legacy_forwarded.load(Ordering::Relaxed).into();
+                            stats.legacy_forwarded.load(Ordering::Relaxed).into();
                         counts["tunnel_connections"] =
-                            app.stats.tunnel_connections.load(Ordering::Relaxed).into();
+                            stats.tunnel_connections.load(Ordering::Relaxed).into();
+                        if let Some(cluster) = service.cluster() {
+                            counts["machine"] = json!({
+                                "id": cluster.machine_id,
+                                "region": cluster.region,
+                                "address": cluster.address(),
+                                "bridges_attached": service.bridge_count(),
+                                "tunnel_connections": stats.tunnel_connections.load(Ordering::Relaxed),
+                                "forwarded_out": stats.forwarded_out.load(Ordering::Relaxed),
+                                "forwarded_in": stats.forwarded_in.load(Ordering::Relaxed),
+                                "forward_failures": stats.forward_failures.load(Ordering::Relaxed),
+                                "legacy_forwarded": stats.legacy_forwarded.load(Ordering::Relaxed),
+                            });
+                            // Every machine, from the registry.
+                            counts["cluster"] = match cluster.machines().await {
+                                Ok(machines) => {
+                                    let mut regions = serde_json::Map::new();
+                                    for machine in &machines {
+                                        let bridges = regions
+                                            .get(&machine.region)
+                                            .and_then(serde_json::Value::as_u64)
+                                            .unwrap_or(0);
+                                        regions.insert(
+                                            machine.region.clone(),
+                                            (bridges + machine.bridges).into(),
+                                        );
+                                    }
+                                    json!({
+                                        "bridges": machines.iter().map(|machine| machine.bridges).sum::<u64>(),
+                                        "regions": regions,
+                                        "machines": machines,
+                                    })
+                                }
+                                Err(error) => json!({ "error": format!("{error:#}") }),
+                            };
+                        }
                         json_response(StatusCode::OK, &counts)
                     }
                     Err(error) => json_response(

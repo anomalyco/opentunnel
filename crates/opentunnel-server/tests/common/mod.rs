@@ -103,8 +103,12 @@ impl TestServer {
             .await
             .unwrap();
         let ca = server.local_ca.clone().unwrap_or_default();
+        let internal = server.bind_internal().await.unwrap();
         let mut tasks = server.start_background().await.unwrap();
         let server = Arc::new(server);
+        if let Some(listener) = internal {
+            tasks.push(tokio::spawn(server.clone().serve_internal(listener)));
+        }
         let http_listener = reusable(http);
         let tls_listener = reusable(tls);
         let http = http_listener.local_addr().unwrap();
@@ -140,9 +144,20 @@ impl TestServer {
         for task in &self.tasks {
             task.abort();
         }
+        if let Some(cluster) = &self.server.cluster {
+            cluster.shutdown().await;
+        }
         self.server.app.service.drain("server restarting").await;
         self.server.jobs.release().await;
         tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    /// Stops every listener and background task without any cleanup, like a machine that crashed. Bridges
+    /// already attached stay open, but nothing else reaches the server.
+    pub fn crash(&self) {
+        for task in &self.tasks {
+            task.abort();
+        }
     }
 
     pub fn service(&self) -> &opentunnel_server::service::Service {

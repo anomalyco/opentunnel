@@ -134,6 +134,36 @@ pub struct Config {
     #[arg(long, env = "ADMIN_TOKEN", hide_env_values = true)]
     pub admin_token: Option<String>,
 
+    /// Running as one of many machines: the internal listener for forwarded visitors and control between
+    /// machines, e.g. `[::]:9000` (bound to `FLY_PRIVATE_IP` on Fly, so only the private network reaches it).
+    /// `off` (the default) runs a single machine with no registry.
+    #[arg(long, env = "INTERNAL_LISTEN", default_value = "off")]
+    pub internal_listen: String,
+
+    /// Where other machines reach this one's internal listener; defaults to `[FLY_PRIVATE_IP]:<port>`, else the
+    /// bound address.
+    #[arg(long, env = "INTERNAL_ADDRESS")]
+    pub internal_address: Option<String>,
+
+    /// The secret shared by all machines, required with `INTERNAL_LISTEN`.
+    #[arg(long, env = "INTERNAL_TOKEN", hide_env_values = true)]
+    pub internal_token: Option<String>,
+
+    /// This machine's name in the registry and on job leases (random when unset).
+    #[arg(long, env = "FLY_MACHINE_ID")]
+    pub machine_id: Option<String>,
+
+    #[arg(long, env = "FLY_REGION", default_value = "local")]
+    pub region: String,
+
+    /// The machine's private network (6PN) address, set by Fly.
+    #[arg(long, env = "FLY_PRIVATE_IP")]
+    pub private_ip: Option<std::net::IpAddr>,
+
+    /// How often this machine refreshes its registry rows; readers ignore rows older than three of these.
+    #[arg(long, env = "CLUSTER_HEARTBEAT_MS", default_value_t = 60_000)]
+    pub cluster_heartbeat_ms: u64,
+
     /// TEMPORARY (migration): the old Worker, e.g. its workers.dev URL. Enables the legacy relay fallback and
     /// the pull-through import.
     #[arg(long, env = "LEGACY_WORKER_URL")]

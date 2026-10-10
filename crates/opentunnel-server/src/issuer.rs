@@ -32,6 +32,9 @@ pub struct LocalCa {
     key: rcgen::KeyPair,
     certificate_pem: String,
     validity_days: u32,
+    /// Certificates signed per first identifier, for tests that check each job runs once.
+    #[doc(hidden)]
+    pub signed: std::sync::Mutex<std::collections::HashMap<String, u32>>,
 }
 
 impl LocalCa {
@@ -69,6 +72,7 @@ impl LocalCa {
             key: rcgen::KeyPair::from_pem(key_pem)?,
             certificate_pem,
             validity_days,
+            signed: Default::default(),
         })
     }
 
@@ -91,6 +95,14 @@ impl LocalCa {
         serial[0] &= 0x7f;
         request.params.serial_number = Some(rcgen::SerialNumber::from_slice(&serial));
         let certificate = request.signed_by(&issuer).context("signing the request")?;
+        if let Some(first) = identifiers.first() {
+            *self
+                .signed
+                .lock()
+                .expect("signed lock")
+                .entry(first.clone())
+                .or_default() += 1;
+        }
         chain_from_pem(&format!("{}\n{}", certificate.pem(), self.certificate_pem))
     }
 }

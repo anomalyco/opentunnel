@@ -1,7 +1,8 @@
 # The OpenTunnel server
 
 `crates/opentunnel-server` is the whole hosted service in one async Rust
-binary (Tokio, rustls with `ring`, hyper, MySQL on PlanetScale through sqlx). It replaced the Cloudflare
+binary (Tokio, rustls with `ring`, hyper, MySQL on PlanetScale through sqlx), run as one machine per Fly
+region against one shared database ([Multiple regions](#multiple-regions)). It replaced the Cloudflare
 Worker, its Durable Objects, its certificate Workflow, and the TCP relay on
 AWS without changing anything clients see: the HTTP API, the bridge protocol
 ([protocol.md](protocol.md)), hostnames, tokens, and certificates are the same.
@@ -27,6 +28,9 @@ visitor ──TLS──▶ :443 ─┬─ SNI <route>.<id>.opentunnel.xyz ─▶
    30 s is reset so it cannot stall the bridge. `end` half-closes, `reset`
    aborts with an RST. Anything else (unknown tunnel, no bridge, certificate
    not ready, deeper names) is closed, exactly as before.
+4. No bridge for the route on this machine: the visitor is forwarded to the
+   machine that has one ([Multiple regions](#multiple-regions)), and only if
+   no machine has it, to the legacy Worker (migration) or closed.
 
 ## Where each Worker feature went
 
@@ -69,6 +73,9 @@ MySQL 8, in production the PlanetScale database `opentunnel` (org
 - `server_certificates`: the domain's key, CSR, certificate and expiry.
 - `meta`: the API certificate's current job, and the local test CA when
   `ISSUER=local`.
+- `bridges` (schema 2): the registry of attached bridges, one row per tunnel,
+  route and machine (`bridge_id`, `region`, the machine's internal `address`,
+  `updated_at`).
 - `schema_migrations`: the schema version.
 
 The schema keeps to what Vitess allows: a primary key on every table, no
@@ -76,7 +83,10 @@ foreign keys, triggers or stored procedures. On startup the server creates
 missing tables with `CREATE TABLE IF NOT EXISTS` and records the version; once
 the database is at its version it runs no DDL at all (so PlanetScale's safe
 migrations may be turned on afterwards; later schema changes then go through a
-deploy request). A database at a newer version is refused.
+deploy request). A database at a newer version is refused. Schema 2 only adds
+the `bridges` table; with safe migrations on, create it through a deploy
+request (the statement is in `store.rs`) before deploying, or the new server
+keeps retrying at startup.
 
 Nothing assumes a single writer, so two servers on one database stay correct:
 
@@ -91,9 +101,15 @@ Nothing assumes a single writer, so two servers on one database stay correct:
   so it fires once.
 - Jobs are claimed with a conditional update that sets a two-minute lease,
   extended every 40 s while the ACME order runs; results are recorded only by
-  the lease holder. An expired lease (a crashed server) is taken over. The
-  owner is `FLY_MACHINE_ID`, so a restarted machine takes its own jobs back at
-  once; a clean shutdown also releases them.
+  the lease holder (checked again right before recording). An expired lease (a
+  crashed server) is taken over. The owner is `FLY_MACHINE_ID`, so a restarted
+  machine takes its own jobs back at once; a clean shutdown also releases
+  them. `tests/cluster.rs` runs 30 jobs on two servers and checks each ran
+  once.
+- Orphaned-issuance reconcile runs on every machine; it only adds jobs keyed
+  by certificate ID (insert-if-absent), so concurrent runs add each once.
+- The legacy pull-through import is the same insert-first import, so two
+  machines importing one tunnel at once insert it once.
 - The domain's key is created insert-if-absent and its job is requested with a
   compare-and-set on `meta`.
 
@@ -138,6 +154,11 @@ Every flag also reads an environment variable (`opentunnel-server --help`).
 | `ISSUANCE_CONCURRENCY` | `4` | ACME orders at once |
 | `ANALYTICS_URL`, `ANALYTICS_TOKEN` | | the platform event stream's HTTP endpoint and bearer token; analytics are off without the URL |
 | `ADMIN_TOKEN` | | secret: enables `POST /api/admin/{import,export,stats}` |
+| `INTERNAL_LISTEN` | `off` | the internal listener for other machines (`[::]:9000` on Fly, bound to `FLY_PRIVATE_IP`); `off` runs a single machine without the registry |
+| `INTERNAL_TOKEN` | | secret shared by all machines, required with `INTERNAL_LISTEN` |
+| `INTERNAL_ADDRESS` | `[FLY_PRIVATE_IP]:<port>` | where other machines reach this one |
+| `FLY_MACHINE_ID`, `FLY_REGION`, `FLY_PRIVATE_IP` | random, `local`, | set by Fly: the registry's machine ID (also the job lease owner), region, and 6PN address |
+| `CLUSTER_HEARTBEAT_MS` | `60000` | registry heartbeat; rows older than three are ignored |
 | `LEGACY_WORKER_URL`, `RELAY_TOKEN`, `LEGACY_EXPORT_TOKEN` | | TEMPORARY, migration only ([cutover.md](cutover.md)) |
 
 Set secrets with `fly secrets set NAME=value ... -a opentunnel`.
@@ -146,30 +167,109 @@ Set secrets with `fly secrets set NAME=value ... -a opentunnel`.
 
 - `fly logs -a opentunnel`; `RUST_LOG=opentunnel_server=debug` for per-connection detail.
 - `POST /api/admin/stats` (bearer `ADMIN_TOKEN`) returns tunnel, alarm, job,
-  attached-bridge and legacy-forward counts.
-- Deploys replace the single machine: on SIGTERM the server sends every bridge
-  `drain` and closes it with 1012, and clients reconnect with backoff (a few
-  seconds of downtime). Issuance jobs resume where they stopped.
+  attached-bridge and legacy-forward counts. The top-level connection and
+  bridge counts are the answering machine's; `machine` has its ID, region and
+  forwarding counters (`forwarded_out`, `forwarded_in`, `forward_failures`),
+  and `cluster` the registry's view: bridges in total, per region, and per
+  machine. The request lands on the machine nearest the caller's Cloudflare
+  colo.
+- Deploys are rolling, one machine at a time: on SIGTERM the machine removes
+  its registry rows, sends every bridge `drain` and closes it with 1012, and
+  clients reconnect with backoff to the next-nearest machine (a few seconds of
+  downtime for them). Issuance jobs resume where they stopped, on any machine.
 - The domain certificate is requested on first start and checked hourly;
   until it exists, TLS to the domain fails while tunnel traffic works.
 
-## Multiple regions later
+## Multiple regions
 
-Single region is deliberate for now. What it would take:
+Ten machines, one in each of `iad`, `ord`, `sjc`, `gru`, `lhr`, `fra`, `bom`,
+`sin`, `nrt` and `syd`, behind one anycast IPv4/IPv6. Fly sends each TCP
+connection to the nearest machine: a visitor to the one nearest the visitor,
+and a client's bridge (through Cloudflare, which proxies `opentunnel.xyz`) to
+the one nearest the client's Cloudflare colo. The two meet through a registry
+in MySQL and forwarding over Fly's private network (6PN). The code is
+`cluster.rs`; with `INTERNAL_LISTEN=off` none of it runs.
 
-- A tunnel's bridges and its visitors must meet on one machine. With Fly's
-  anycast, a visitor lands in the nearest region, so either assign each tunnel
-  a home region (the reserved `tunnels.region` column) and forward visitor
-  streams over 6PN to the machine holding the bridge, or publish per-region
-  addresses (`<id>.<region>.opentunnel.xyz` would change hostnames, so the
-  forwarding approach is the compatible one).
-- Bridges must attach in the tunnel's home region: the upgrade can answer from
-  any region and replay to the home machine (`fly-replay` works only with
-  Fly's HTTP handler, so it would be an internal forward instead).
-- Storage is already shared and safe for several servers (revisions, alarm
-  and job leases). Cross-region latency to the primary would matter for
-  writes; PlanetScale read replicas in other regions could serve the reads
-  that load a tunnel.
+```text
+visitor ─▶ machine B (syd) ── no bridge here ── registry: tunnel/route → machine A
+             │                                                     │
+             └── TCP over 6PN to A:9000 ──▶ "OPENTUNNEL-FORWARD/1 <secret> <id> <route> <visitor>\n"
+                                              + ClientHello ◀── "1" ── then raw bytes both ways
+client ─▶ Cloudflare ─▶ machine A (iad) ─▶ bridge attached, rows in `bridges`
+```
+
+- **Registry.** On attach, the machine upserts one `bridges` row per route
+  (tunnel, route, machine, bridge ID, region, internal address) and deletes
+  them when the bridge closes or is retired as silent. Every heartbeat (60 s)
+  it refreshes `updated_at` on all its rows, records bridges whose upsert
+  failed (database outage), retries failed removals, and closes local bridges
+  of tunnels deleted elsewhere. Readers ignore rows older than three
+  heartbeats, so a crashed machine's rows expire after at most three minutes;
+  a machine deletes all rows with its own ID at startup and on clean shutdown,
+  and anyone deletes rows untouched for thirty heartbeats.
+- **Forwarding.** A visitor for a route with no local bridge: look up the
+  route's freshest row on another machine (cached 30 s, a miss 10 s), connect
+  to its internal address, send the header (shared secret, tunnel, route, the
+  visitor's address from PROXY v2) and the buffered ClientHello. The receiver
+  parses the ClientHello itself and routes it exactly like a local visitor
+  (`max_conns`, backpressure, analytics, the `open` message with the real
+  visitor address), but never forwards again. It answers `1` before the stream
+  or `0` when it has no bridge; on `0` or a failed connection the sender drops
+  its cache entry (and skips an unreachable machine for 30 s), looks up once
+  more, and otherwise falls back to the legacy Worker (if configured) or
+  closes. The sender then copies both directions (`copy_bidirectional`,
+  32 KiB buffers); a reset on one side resets the other.
+- **Control.** The internal listener also serves a small HTTP/1.1 API,
+  authenticated with `Authorization: Bearer <INTERNAL_TOKEN>` (compared in
+  constant time): `GET /internal/tunnel/<id>/routes` (the routes this
+  machine's live bridges hold, after retiring silent ones) and `POST
+  /internal/tunnel/<id>/close` (a deletion). Deleting a tunnel on any machine
+  closes its bridges on every machine in the registry and removes its rows.
+  Attaching checks the registry for the requested routes on other machines
+  and asks those machines whether they still hold them; only a live answer is
+  a `route_conflict`, so a crashed or draining machine's leftover rows never
+  block a client that moved. Two machines accepting the same route in the same
+  instant is possible; visitors then go to the newer row and nothing breaks.
+- **Cached records.** A machine caches tunnel records for routing, so the
+  database stays off the visitor path. With other machines writing, API calls,
+  attaches, alarms and certificate updates read the record again (one query),
+  and routing re-reads a cached record only while it is missing or its
+  certificate is not ready. During a database outage the cached copy is used.
+- **The internal port** binds only the machine's 6PN address and is not in
+  `fly.toml`'s services, so it is unreachable from the Internet.
+
+Failure modes:
+
+| What | Effect |
+| --- | --- |
+| A machine restarts (deploy) | Its rows are removed first, its bridges get `drain`/1012 and reattach to the next-nearest machine within seconds; forwards to it fail over to the new location after one refused attempt |
+| A machine crashes | Forwards to it fail fast (connection refused or 3 s timeout), the sender skips it for 30 s; its rows expire after three heartbeats; its clients reconnect elsewhere and attach at once (the route check cannot reach it, so it does not count) |
+| 6PN between two machines fails | Visitors for that pair are closed (or go to the legacy Worker); local traffic is unaffected |
+| Database unavailable | Local visitors and attached bridges keep working from memory; lookups for remote bridges fail (closed); registry changes are retried by the heartbeat |
+| A delete's close request does not arrive | The owning machine's heartbeat sees the tunnel deleted and closes its bridges within a minute |
+
+Latency: PlanetScale is in us-east-1, ~200 ms from `syd`. The visitor path
+reads the database only on a tunnel's first visitor per machine (record load
+and, without a local bridge, one registry lookup per 30 s); attaching costs a
+few queries.
+
+### Deploying
+
+```bash
+fly secrets set --app opentunnel --stage INTERNAL_TOKEN=$(openssl rand -hex 32)
+fly deploy --app opentunnel                  # rolling, one machine at a time; iad first
+fly scale vm shared-cpu-1x --memory 1024 --app opentunnel   # if existing machines kept the old size
+for region in ord sjc gru lhr fra bom sin nrt syd; do
+  fly scale count 1 --region $region --app opentunnel --yes
+done                                         # or: fly machine clone <iad machine> --region <region>
+fly status --app opentunnel                  # ten machines, one per region, all passing checks
+curl -s -X POST https://opentunnel.xyz/api/admin/stats -H "authorization: Bearer $ADMIN_TOKEN" | jq .cluster
+```
+
+`fly scale count` for a region keeps the other regions as they are. Every
+machine must have `INTERNAL_TOKEN` before it runs with `INTERNAL_LISTEN`
+(staged secrets apply on the next deploy), and the first deploy of this
+version creates the `bridges` table (schema 2; see [Storage](#storage)).
 
 ## Tests
 
@@ -185,12 +285,14 @@ docker rm -f ot-mysql    # when done; it holds the test databases
 ```
 
 - `cargo test -p opentunnel-server`: storage (revisions, imports, concurrent
-  alarms, job leases), unit tests (SNI, PROXY protocol, CSRs,
+  alarms, job leases, the registry), unit tests (SNI, PROXY protocol, CSRs,
   analytics, renewal scheduling with a manual clock, stale bridges, routing,
   imports), the API contract replay against the Worker's recorded responses,
   the Rust client end to end (provisioning, passthrough, shared tunnels,
-  restarts, migrated tunnels, renewal on attach, a database outage), and the
-  migration paths against a fake Worker.
+  restarts, migrated tunnels, renewal on attach, a database outage), the
+  migration paths against a fake Worker, and two servers on one database
+  (`tests/cluster.rs`: forwarding, route conflicts and deletes across
+  machines, a crashed machine, a restart, and jobs running once).
 - ACME against Pebble with external account binding and DNS-01 through
   pebble-challtestsrv:
 
