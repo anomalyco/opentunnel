@@ -1,0 +1,91 @@
+# The hosted service on Fly.io: one machine in each of iad, ord, sjc, gru, lhr, fra, bom, sin, nrt and syd, all
+# storing everything in one PlanetScale MySQL database (the DATABASE_URL secret; AWS us-east-1, next to iad).
+# Visitors and bridges reach the nearest machine; a visitor whose bridge is elsewhere is forwarded over the
+# private network (docs/server.md, "Multiple regions"). Both services are raw TCP (no Fly TLS or HTTP handlers),
+# so tenant TLS passes through to the tunnel clients untouched. Raw TCP on 443 needs a dedicated IPv4:
+# `fly ips allocate-v4` (see docs/cutover.md). Secrets: `fly secrets set` (docs/server.md).
+
+app = "opentunnel"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "15s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# One machine at a time: its bridges get `drain` and close 1012, and reconnect to the next-nearest machine.
+[deploy]
+  strategy = "rolling"
+  max_unavailable = 1
+
+[env]
+  OPENTUNNEL_DOMAIN = "opentunnel.xyz"
+  # Fly's proxy_proto handler below prepends a PROXY v2 header with the visitor's address.
+  PROXY_PROTOCOL = "true"
+  RUST_LOG = "info"
+  # opentunnel.xyz is on the Public Suffix List, so no public CA issues for it: the apex stays proxied by
+  # Cloudflare, which reaches this server with a Cloudflare Origin CA certificate.
+  TLS_CERT_FILE = "/etc/opentunnel/origin-cert.pem"
+  TLS_KEY_FILE = "/etc/opentunnel/origin-key.pem"
+  # Forwarded visitors and control between machines, on the private network only: the server binds it to
+  # FLY_PRIVATE_IP (6PN), and no [[services]] entry exposes it. Requires the INTERNAL_TOKEN secret.
+  INTERNAL_LISTEN = "[::]:9000"
+
+[[files]]
+  guest_path = "/etc/opentunnel/origin-cert.pem"
+  secret_name = "ORIGIN_CERT_PEM"
+
+[[files]]
+  guest_path = "/etc/opentunnel/origin-key.pem"
+  secret_name = "ORIGIN_KEY_PEM"
+
+# Public TLS: tunnel hostnames by SNI (passthrough), and the API and website for opentunnel.xyz.
+[[services]]
+  internal_port = 8443
+  protocol = "tcp"
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 443
+    handlers = ["proxy_proto"]
+    proxy_proto_options = { version = "v2" }
+
+  [services.concurrency]
+    type = "connections"
+    soft_limit = 20000
+    hard_limit = 25000
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+
+# Plain HTTP: redirects to HTTPS, and /health.
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+
+  [services.concurrency]
+    type = "connections"
+    soft_limit = 1000
+    hard_limit = 2000
+
+  [[services.http_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+    method = "get"
+    path = "/health"
+    protocol = "http"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

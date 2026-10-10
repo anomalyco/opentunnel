@@ -1,6 +1,0 @@
-# Secrets for `bun run dev` (vite with the Cloudflare plugin). Copy to the ignored .dev.vars and fill in.
-ACME_EAB_KID=
-ACME_EAB_HMAC_KEY=
-ACME_ACCOUNT_KEY_JWK=
-CLOUDFLARE_API_TOKEN=
-RELAY_TOKEN=

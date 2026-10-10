@@ -1,14 +1,8 @@
 # OpenTunnel
 
-OpenTunnel is a blind TLS tunnel hosted on Cloudflare. Each client receives a
-unique `<id>.opentunnel.xyz` hostname and terminates TLS locally, so neither
-Cloudflare Workers nor the relay stores the certificate private key or sees
-HTTP plaintext.
-
-> [!NOTE]
-> We are waiting on the private beta of Cloudflare Spectrum + TCP Workers for
-> this to run fully on Cloudflare. Until then, inbound TCP is temporarily
-> handled by some dummy relay servers running on AWS.
+OpenTunnel is a blind TLS tunnel. Each client receives a unique
+`<id>.opentunnel.xyz` hostname and terminates TLS locally, so the server never
+holds the certificate private key or sees HTTP plaintext.
 
 ## Installation
 
@@ -43,12 +37,19 @@ See [packages/cli](packages/cli) for the full command reference.
 
 ## Architecture
 
-- Spectrum accepts public TCP 443 with TLS termination disabled.
-- The Worker's `connect(socket)` handler reads only ClientHello metadata and
-  routes by SNI.
-- One Durable Object per tunnel owns durable metadata, the authenticated bridge
-  WebSocket, and active TCP channels.
-- A Cloudflare Workflow issues certificates with ZeroSSL using DNS-01.
+The hosted service is one Rust binary, `crates/opentunnel-server`, on Fly.io
+([docs/server.md](docs/server.md)):
+
+- It accepts public TCP on 443 and reads only the TLS ClientHello. A tunnel
+  hostname (`<id>.opentunnel.xyz` or `<route>.<id>.opentunnel.xyz`) is carried,
+  still encrypted, over the tunnel's bridge WebSocket to the client that
+  claimed the route.
+- `opentunnel.xyz` itself is terminated with the server's own certificate and
+  serves the HTTP API, the bridge WebSocket, and the website.
+- Tunnel records, certificate state, and durable issuance jobs live in MySQL
+  (PlanetScale).
+- Certificates come from ZeroSSL over ACME with DNS-01 challenges in the
+  Cloudflare-hosted zone, and renew 30 days before expiry.
 - The local client owns the certificate private key, terminates TLS, and
   forwards decrypted traffic to the local application.
 
@@ -58,78 +59,61 @@ There are two client implementations that share one protocol:
 | --- | --- |
 | `crates/opentunnel` | Rust client library and wire types, published as `opentunnel` on crates.io |
 | `crates/opentunnel-cli` | The `opentunnel` CLI and per-profile background service |
+| `crates/opentunnel-server` | The hosted service: SNI routing, bridges, API, certificates (not published) |
 | `packages/client` | TypeScript SDK (`@opentunnel/client`), compiled to JavaScript for Bun, Node, and Deno |
 | `packages/protocol` | TypeScript schemas, bridge framing, and the HTTP API contract |
-| `packages/server` | The Worker's code: API, Durable Objects, certificate Workflow, and the TCP relay |
-| `packages/website` | The landing page, served as the Worker's static assets |
+| `packages/website` | The landing page, built with Vite and served by the server |
 | `packages/cli` | npm launcher and publish script for the Rust CLI |
+| `migration` | Temporary tooling for the move off the Cloudflare Worker ([docs/cutover.md](docs/cutover.md)) |
 
 The wire protocol and on-disk layout are specified in
 [docs/protocol.md](docs/protocol.md). Both clients are tested against the
 shared vectors in `spec/vectors`, so a change to the protocol must update the
 spec, the vectors, and both clients.
 
-## Configuration
+## Deployment
 
-Everything hosted is one Cloudflare Worker, described by `cloudflare.config.ts`
-at the repository root: the API under `/api/*`, and the website (the Vite build
-of `packages/website`, with `index.html` at the root) as static assets for
-everything else. Every deployment has a mode, and every resource is named after
-it: `--mode production` is `opentunnel-production` on opentunnel.xyz, while any
-other mode (`--mode dev`) is a separate Worker, with its own Durable Objects
-and Workflow, on workers.dev. Anything that differs between stages switches on
-the mode in that file. The config loads with Node 22.18 or later, not Bun.
-
-```bash
-bun run ready                      # types, TypeScript checks, and the Worker build
-bun run deploy --mode production   # deploy that build (cf deploy --prebuilt)
-```
-
-`vite build` builds production by default; build another stage with
-`bunx vite build --mode dev`, then `bun run deploy --mode dev`. CI deploys
-production on every change to `master`.
-
-The Worker needs these secrets in each mode. They persist across deploys; set
-them once with `bun run deploy --mode <mode> --secrets-file secrets.json`:
-`ACME_EAB_KID`, `ACME_EAB_HMAC_KEY`, `ACME_ACCOUNT_KEY_JWK`,
-`CLOUDFLARE_API_TOKEN` and `RELAY_TOKEN`. `ACME_ACCOUNT_KEY_JWK` is a one-time
-P-256 private JWK used as the stable ZeroSSL account identity; it does not need
-scheduled rotation. The Cloudflare API token only needs DNS edit access to the
-OpenTunnel zone. `RELAY_TOKEN` must match the TCP relay's.
-
-Tenant TLS is never terminated in the Worker. `*.opentunnel.xyz` resolves to a
-TCP relay host running `packages/server/relay/index.mjs`, which carries each
-connection over a WebSocket to `/api/relay`; the Worker's `connect(socket)`
-handler takes the same connections directly once Spectrum routes
-`*.opentunnel.xyz:443` to it with TLS passthrough.
+`Dockerfile` builds the server and the website into one image; `fly.toml`
+runs it as the `opentunnel` Fly app in `iad` with PlanetScale MySQL, raw TCP
+on 443 (with a dedicated IPv4) and 80. Deploy with `fly deploy`, or run the
+manual "Deploy to Fly" GitHub workflow. Configuration and secrets are listed
+in [docs/server.md](docs/server.md).
 
 ## Development
 
 ```bash
 bun install
-cp .dev.vars.example .dev.vars   # fill in the secrets
-bun run dev
+bun run ready     # TypeScript builds and the website (dist/website)
+bun run test      # Rust and TypeScript tests
 ```
 
-`bun run dev` runs the site and the Worker together on
-`http://127.0.0.1:4190`. With the current beta of `@cloudflare/vite-plugin`
-the local Worker runtime does not answer requests (`fetch failed`), so until it
-does, deploy a stage instead: `bunx vite build --mode dev && bun run deploy
---mode dev`. Point the CLI at it in a second terminal after
-starting a local HTTP application on port 4096:
+Run the server locally against MySQL 8 in Docker, with its insecure built-in
+test CA, serving the whole app on plain HTTP:
 
 ```bash
-export OPENTUNNEL_API=http://127.0.0.1:4190
+docker run -d --name ot-mysql -e MYSQL_ROOT_PASSWORD=opentunnel -e MYSQL_DATABASE=opentunnel -p 3306:3306 mysql:8.0
+mkdir -p .local
+DATABASE_URL=mysql://root:opentunnel@127.0.0.1:3306/opentunnel \
+  ISSUER=local LOCAL_CA_FILE=.local/local-ca.pem OPENTUNNEL_DOMAIN=localhost \
+  WEBSITE_DIR=dist/website TLS_LISTEN='[::]:8443' HTTP_LISTEN='[::]:8080' HTTP_MODE=serve \
+  cargo run -p opentunnel-server
+```
+
+The server tests use the same container: `TEST_DATABASE_URL=mysql://root:opentunnel@127.0.0.1:3306/opentunnel cargo test -p opentunnel-server`
+(without it they skip).
+
+`*.localhost` resolves to the loopback address on most systems, so tunnels are
+reachable at `https://<route>.<id>.localhost:8443` (trust
+`.local/local-ca.pem`). Point the CLI at it in a second terminal after starting
+a local HTTP application on port 4096:
+
+```bash
+export OPENTUNNEL_API=http://localhost:8080
 bun run opentunnel route add 4096
 ```
 
-Useful commands:
-
-```bash
-bun run test      # Rust and TypeScript tests
-bun run ready     # types, TypeScript checks, and the Worker build
-bun run deploy --mode production
-```
+`bun run dev` serves the website with hot reload on `http://127.0.0.1:4190`
+and proxies `/api` to that server.
 
 ## Contributing
 

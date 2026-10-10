@@ -1,0 +1,1177 @@
+{
+  "capturedFrom": "packages/server (the Worker) at 22156aa: each request replayed through its fetch handler and the real TunnelObject. $ID, $TOKEN and $HOSTNAME are the tunnel created first; $CSR, $OTHER and $WRONG are CSRs for its hostname, for it again with another key, and for another hostname.",
+  "cases": [
+    {
+      "name": "create",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{}"
+      },
+      "response": {
+        "status": 201,
+        "contentType": "application/json",
+        "body": {
+          "tunnel": {
+            "id": "*",
+            "hostname": "*",
+            "state": "offline"
+          },
+          "token": "*"
+        }
+      }
+    },
+    {
+      "name": "create with name",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"name\":\"x\"}"
+      },
+      "response": {
+        "status": 400,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "InvalidRequestError",
+          "message": "Custom tunnel names are not supported; omit name to get a random hostname"
+        }
+      }
+    },
+    {
+      "name": "create with invalid json",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{"
+      },
+      "response": {
+        "status": 400,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "create without body",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {}
+      },
+      "response": {
+        "status": 400,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "create with name of wrong type",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"name\":1}"
+      },
+      "response": {
+        "status": 400,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "create with array body",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "[]"
+      },
+      "response": {
+        "status": 400,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "create with text body",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "text/plain"
+        },
+        "body": "{}"
+      },
+      "response": {
+        "status": 415,
+        "contentType": "text/plain",
+        "body": "Unsupported content-type: text/plain"
+      }
+    },
+    {
+      "name": "create without content type",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {},
+        "body": "{}"
+      },
+      "response": {
+        "status": 201,
+        "contentType": "application/json",
+        "body": {
+          "tunnel": {
+            "id": "*",
+            "hostname": "*",
+            "state": "offline"
+          },
+          "token": "*"
+        }
+      }
+    },
+    {
+      "name": "create with charset",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{}"
+      },
+      "response": {
+        "status": 201,
+        "contentType": "application/json",
+        "body": {
+          "tunnel": {
+            "id": "*",
+            "hostname": "*",
+            "state": "offline"
+          },
+          "token": "*"
+        }
+      }
+    },
+    {
+      "name": "create with uppercase content type",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "APPLICATION/JSON"
+        },
+        "body": "{}"
+      },
+      "response": {
+        "status": 201,
+        "contentType": "application/json",
+        "body": {
+          "tunnel": {
+            "id": "*",
+            "hostname": "*",
+            "state": "offline"
+          },
+          "token": "*"
+        }
+      }
+    },
+    {
+      "name": "create with form body",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": "a=b"
+      },
+      "response": {
+        "status": 415,
+        "contentType": "text/plain",
+        "body": "Unsupported content-type: application/x-www-form-urlencoded"
+      }
+    },
+    {
+      "name": "create with null name",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"name\":null}"
+      },
+      "response": {
+        "status": 201,
+        "contentType": "application/json",
+        "body": {
+          "tunnel": {
+            "id": "*",
+            "hostname": "*",
+            "state": "offline"
+          },
+          "token": "*"
+        }
+      }
+    },
+    {
+      "name": "create with empty json body",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": ""
+      },
+      "response": {
+        "status": 400,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "create trailing slash",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{}"
+      },
+      "response": {
+        "status": 201,
+        "contentType": "application/json",
+        "body": {
+          "tunnel": {
+            "id": "*",
+            "hostname": "*",
+            "state": "offline"
+          },
+          "token": "*"
+        }
+      }
+    },
+    {
+      "name": "create with query",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel?x=1",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{}"
+      },
+      "response": {
+        "status": 201,
+        "contentType": "application/json",
+        "body": {
+          "tunnel": {
+            "id": "*",
+            "hostname": "*",
+            "state": "offline"
+          },
+          "token": "*"
+        }
+      }
+    },
+    {
+      "name": "create with extra fields",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"foo\":1}"
+      },
+      "response": {
+        "status": 201,
+        "contentType": "application/json",
+        "body": {
+          "tunnel": {
+            "id": "*",
+            "hostname": "*",
+            "state": "offline"
+          },
+          "token": "*"
+        }
+      }
+    },
+    {
+      "name": "get",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": {
+          "id": "$ID",
+          "hostname": "$ID.opentunnel.test",
+          "state": "offline"
+        }
+      }
+    },
+    {
+      "name": "get without auth",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID",
+        "headers": {}
+      },
+      "response": {
+        "status": 401,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "UnauthorizedError",
+          "message": "Invalid bearer token"
+        }
+      }
+    },
+    {
+      "name": "get with bad token",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID",
+        "headers": {
+          "authorization": "Bearer nope"
+        }
+      },
+      "response": {
+        "status": 401,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "UnauthorizedError",
+          "message": "Invalid bearer token"
+        }
+      }
+    },
+    {
+      "name": "get with basic auth",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID",
+        "headers": {
+          "authorization": "Basic abc"
+        }
+      },
+      "response": {
+        "status": 401,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "UnauthorizedError",
+          "message": "Invalid bearer token"
+        }
+      }
+    },
+    {
+      "name": "get with lowercase bearer",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID",
+        "headers": {
+          "authorization": "bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": {
+          "id": "$ID",
+          "hostname": "$ID.opentunnel.test",
+          "state": "offline"
+        }
+      }
+    },
+    {
+      "name": "get unknown without auth",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/zzzzzzzzzzzz",
+        "headers": {}
+      },
+      "response": {
+        "status": 404,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "TunnelNotFoundError",
+          "tunnelID": "zzzzzzzzzzzz",
+          "message": "Tunnel not found"
+        }
+      }
+    },
+    {
+      "name": "get with empty bearer",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID",
+        "headers": {
+          "authorization": "Bearer "
+        }
+      },
+      "response": {
+        "status": 401,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "UnauthorizedError",
+          "message": "Invalid bearer token"
+        }
+      }
+    },
+    {
+      "name": "get with query",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID?x=1",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": {
+          "id": "$ID",
+          "hostname": "$ID.opentunnel.test",
+          "state": "offline"
+        }
+      }
+    },
+    {
+      "name": "get with encoded id",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/%24ID",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 404,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "TunnelNotFoundError",
+          "tunnelID": "$ID",
+          "message": "Tunnel not found"
+        }
+      }
+    },
+    {
+      "name": "get double slash",
+      "request": {
+        "method": "GET",
+        "path": "/api//tunnel/$ID",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": {
+          "id": "$ID",
+          "hostname": "$ID.opentunnel.test",
+          "state": "offline"
+        }
+      }
+    },
+    {
+      "name": "head",
+      "request": {
+        "method": "HEAD",
+        "path": "/api/tunnel/$ID",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": ""
+      }
+    },
+    {
+      "name": "options",
+      "request": {
+        "method": "OPTIONS",
+        "path": "/api/tunnel",
+        "headers": {}
+      },
+      "response": {
+        "status": 404,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "openapi",
+      "request": {
+        "method": "GET",
+        "path": "/openapi.json",
+        "headers": {}
+      },
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": "<openapi.json>"
+      }
+    },
+    {
+      "name": "get unknown",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/zzzzzzzzzzzz",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 404,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "TunnelNotFoundError",
+          "tunnelID": "zzzzzzzzzzzz",
+          "message": "Tunnel not found"
+        }
+      }
+    },
+    {
+      "name": "get trailing slash",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID/",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": {
+          "id": "$ID",
+          "hostname": "$ID.opentunnel.test",
+          "state": "offline"
+        }
+      }
+    },
+    {
+      "name": "certificate before bind",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 404,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "CertificateNotFoundError",
+          "tunnelID": "$ID",
+          "message": "Certificate not found"
+        }
+      }
+    },
+    {
+      "name": "certificate with bad token",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "authorization": "Bearer nope"
+        }
+      },
+      "response": {
+        "status": 401,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "UnauthorizedError",
+          "message": "Invalid bearer token"
+        }
+      }
+    },
+    {
+      "name": "certificate unknown",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/zzzzzzzzzzzz/certificate",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 404,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "TunnelNotFoundError",
+          "tunnelID": "zzzzzzzzzzzz",
+          "message": "Tunnel not found"
+        }
+      }
+    },
+    {
+      "name": "bind without csr",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer $TOKEN"
+        },
+        "body": "{}"
+      },
+      "response": {
+        "status": 400,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "bind with invalid json",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer $TOKEN"
+        },
+        "body": "{"
+      },
+      "response": {
+        "status": 400,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "bind with csr of wrong type",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer $TOKEN"
+        },
+        "body": "{\"csr\":1}"
+      },
+      "response": {
+        "status": 400,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "bind without content type",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        },
+        "body": "{\"csr\":\"garbage\"}"
+      },
+      "response": {
+        "status": 400,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "InvalidRequestError",
+          "message": "Failed to parse CSR"
+        }
+      }
+    },
+    {
+      "name": "bind without auth",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"csr\":\"garbage\"}"
+      },
+      "response": {
+        "status": 401,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "UnauthorizedError",
+          "message": "Invalid bearer token"
+        }
+      }
+    },
+    {
+      "name": "bind with bad token and bad body",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer nope"
+        },
+        "body": "{"
+      },
+      "response": {
+        "status": 400,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "bind unknown with bad body",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/zzzzzzzzzzzz/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer $TOKEN"
+        },
+        "body": "{"
+      },
+      "response": {
+        "status": 400,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "bind with garbage csr",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer $TOKEN"
+        },
+        "body": "{\"csr\":\"garbage\"}"
+      },
+      "response": {
+        "status": 400,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "InvalidRequestError",
+          "message": "Failed to parse CSR"
+        }
+      }
+    },
+    {
+      "name": "bind with bad token",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer nope"
+        },
+        "body": "{\"csr\":\"$CSR\"}"
+      },
+      "response": {
+        "status": 401,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "UnauthorizedError",
+          "message": "Invalid bearer token"
+        }
+      }
+    },
+    {
+      "name": "bind unknown",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/zzzzzzzzzzzz/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer $TOKEN"
+        },
+        "body": "{\"csr\":\"$CSR\"}"
+      },
+      "response": {
+        "status": 404,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "TunnelNotFoundError",
+          "tunnelID": "zzzzzzzzzzzz",
+          "message": "Tunnel not found"
+        }
+      }
+    },
+    {
+      "name": "bind with wrong hostname",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer $TOKEN"
+        },
+        "body": "{\"csr\":\"$WRONG\"}"
+      },
+      "response": {
+        "status": 400,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "InvalidHostnameError",
+          "provided": "other.opentunnel.test",
+          "expected": "$ID.opentunnel.test",
+          "message": "CSR hostname does not match tunnel hostname"
+        }
+      }
+    },
+    {
+      "name": "bind",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer $TOKEN"
+        },
+        "body": "{\"csr\":\"$CSR\"}"
+      },
+      "response": {
+        "status": 202,
+        "contentType": "application/json",
+        "body": {
+          "id": "cert_*",
+          "state": {
+            "type": "issuing"
+          }
+        }
+      }
+    },
+    {
+      "name": "bind again with the same csr",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer $TOKEN"
+        },
+        "body": "{\"csr\":\"$CSR\"}"
+      },
+      "response": {
+        "status": 202,
+        "contentType": "application/json",
+        "body": {
+          "id": "cert_*",
+          "state": {
+            "type": "issuing"
+          }
+        }
+      }
+    },
+    {
+      "name": "bind another csr while issuing",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "content-type": "application/json",
+          "authorization": "Bearer $TOKEN"
+        },
+        "body": "{\"csr\":\"$OTHER\"}"
+      },
+      "response": {
+        "status": 409,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "CertificateInProgressError",
+          "tunnelID": "$ID",
+          "message": "Certificate issuance is already in progress"
+        }
+      }
+    },
+    {
+      "name": "certificate while issuing",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": {
+          "id": "cert_*",
+          "state": {
+            "type": "issuing"
+          }
+        }
+      }
+    },
+    {
+      "name": "get after bind",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": {
+          "id": "$ID",
+          "hostname": "$ID.opentunnel.test",
+          "state": "offline",
+          "certificateID": "cert_*"
+        }
+      }
+    },
+    {
+      "name": "connect without upgrade",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID/connect",
+        "headers": {}
+      },
+      "response": {
+        "status": 426,
+        "contentType": null,
+        "body": "Expected WebSocket upgrade"
+      }
+    },
+    {
+      "name": "connect without subprotocol",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID/connect",
+        "headers": {
+          "upgrade": "websocket"
+        }
+      },
+      "response": {
+        "status": 426,
+        "contentType": null,
+        "body": "Expected opentunnel WebSocket subprotocol"
+      }
+    },
+    {
+      "name": "connect unknown",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/zzzzzzzzzzzz/connect",
+        "headers": {
+          "upgrade": "websocket"
+        }
+      },
+      "response": {
+        "status": 404,
+        "contentType": null,
+        "body": "Tunnel not found"
+      }
+    },
+    {
+      "name": "connect with post",
+      "request": {
+        "method": "POST",
+        "path": "/api/tunnel/$ID/connect",
+        "headers": {}
+      },
+      "response": {
+        "status": 404,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "unknown api path",
+      "request": {
+        "method": "GET",
+        "path": "/api/nope",
+        "headers": {}
+      },
+      "response": {
+        "status": 404,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "unknown method",
+      "request": {
+        "method": "PUT",
+        "path": "/api/tunnel",
+        "headers": {}
+      },
+      "response": {
+        "status": 404,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "list tunnels",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel",
+        "headers": {}
+      },
+      "response": {
+        "status": 404,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "health",
+      "request": {
+        "method": "GET",
+        "path": "/health",
+        "headers": {}
+      },
+      "response": {
+        "status": 200,
+        "contentType": "application/json;charset=utf-8",
+        "body": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "name": "delete with bad token",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/tunnel/$ID",
+        "headers": {
+          "authorization": "Bearer nope"
+        }
+      },
+      "response": {
+        "status": 401,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "UnauthorizedError",
+          "message": "Invalid bearer token"
+        }
+      }
+    },
+    {
+      "name": "delete unknown",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/tunnel/zzzzzzzzzzzz",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 404,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "TunnelNotFoundError",
+          "tunnelID": "zzzzzzzzzzzz",
+          "message": "Tunnel not found"
+        }
+      }
+    },
+    {
+      "name": "delete",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/tunnel/$ID",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 204,
+        "contentType": null,
+        "body": ""
+      }
+    },
+    {
+      "name": "get after delete",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 404,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "TunnelNotFoundError",
+          "tunnelID": "$ID",
+          "message": "Tunnel not found"
+        }
+      }
+    },
+    {
+      "name": "certificate after delete",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID/certificate",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 404,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "TunnelNotFoundError",
+          "tunnelID": "$ID",
+          "message": "Tunnel not found"
+        }
+      }
+    },
+    {
+      "name": "delete again",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/tunnel/$ID",
+        "headers": {
+          "authorization": "Bearer $TOKEN"
+        }
+      },
+      "response": {
+        "status": 404,
+        "contentType": "application/json",
+        "body": {
+          "_tag": "TunnelNotFoundError",
+          "tunnelID": "$ID",
+          "message": "Tunnel not found"
+        }
+      }
+    },
+    {
+      "name": "connect after delete",
+      "request": {
+        "method": "GET",
+        "path": "/api/tunnel/$ID/connect",
+        "headers": {
+          "upgrade": "websocket"
+        }
+      },
+      "response": {
+        "status": 404,
+        "contentType": null,
+        "body": "Tunnel not found"
+      }
+    }
+  ]
+}
