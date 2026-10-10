@@ -130,3 +130,8 @@ bun run test      # Rust and TypeScript tests
 bun run ready     # types, TypeScript checks, and the Worker build
 bun run deploy --mode production
 ```
+
+## Contributing
+
+We don't accept pull requests. If you've found a bug or have an idea,
+[open an issue](https://github.com/anomalyco/opentunnel/issues/new) instead.
