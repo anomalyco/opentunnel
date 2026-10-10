@@ -5,7 +5,8 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-rust-version.workspace = true
+# sqlx 0.9 needs 1.94; the server is not published, so it does not hold back the workspace MSRV.
+rust-version = "1.94"
 description = "The hosted OpenTunnel service: SNI routing, bridges, the HTTP API, and certificates"
 publish = false
 
@@ -23,7 +24,6 @@ opentunnel = { path = "../opentunnel" }
 rcgen = { version = "0.14.10", default-features = false, features = ["ring", "pem", "x509-parser"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls-no-provider"] }
 ring = "0.17.14"
-rusqlite = { version = "0.40.2", features = ["bundled"] }
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-pki-types = { version = "1.15.1", features = ["std"] }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -39,6 +39,7 @@ url = "2.5.8"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 webpki-root-certs = "1.0.9"
 x509-parser = { version = "0.18.1", features = ["verify"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["mysql", "runtime-tokio", "tls-rustls-ring-webpki"] }
 
 [dev-dependencies]
 tempfile = "3.23.0"

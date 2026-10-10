@@ -171,7 +171,7 @@ async fn hands_connections_without_a_local_bridge_to_the_worker() {
     let (url, worker) = fake_worker().await;
     let dir = tempfile::tempdir().unwrap();
     let legacy = format!("--legacy-worker-url={url}");
-    let server = TestServer::start(
+    let Some(server) = TestServer::start(
         dir.path(),
         &[
             &legacy,
@@ -179,7 +179,10 @@ async fn hands_connections_without_a_local_bridge_to_the_worker() {
             "--legacy-export-token=export-secret",
         ],
     )
-    .await;
+    .await
+    else {
+        return;
+    };
 
     let hello = client_hello("api.stillonwrkr.opentunnel.test");
     let mut visitor = TcpStream::connect(server.tls).await.unwrap();
@@ -208,7 +211,7 @@ async fn imports_unknown_tunnels_from_the_worker_on_first_use() {
     let (url, worker) = fake_worker().await;
     let dir = tempfile::tempdir().unwrap();
     let legacy = format!("--legacy-worker-url={url}");
-    let server = TestServer::start(
+    let Some(server) = TestServer::start(
         dir.path(),
         &[
             &legacy,
@@ -216,7 +219,10 @@ async fn imports_unknown_tunnels_from_the_worker_on_first_use() {
             "--legacy-export-token=export-secret",
         ],
     )
-    .await;
+    .await
+    else {
+        return;
+    };
     let http = reqwest::Client::new();
     let response = http
         .get(format!("{}/api/tunnel/pulledtunnel", server.api))

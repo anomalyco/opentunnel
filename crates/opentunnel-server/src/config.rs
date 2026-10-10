@@ -27,8 +27,10 @@ pub struct Config {
     #[arg(long, env = "PROXY_PROTOCOL", default_value_t = false)]
     pub proxy_protocol: bool,
 
-    #[arg(long, env = "DATABASE_PATH", default_value = "/data/opentunnel.db")]
-    pub database: PathBuf,
+    /// MySQL (PlanetScale), e.g. `mysql://user:password@host/opentunnel?ssl-mode=VERIFY_IDENTITY`. TLS is
+    /// required except for a database on loopback.
+    #[arg(long, env = "DATABASE_URL", hide_env_values = true)]
+    pub database_url: Option<String>,
 
     /// The built website (`vite build` output).
     #[arg(long, env = "WEBSITE_DIR", default_value = "/app/website")]
@@ -44,6 +46,10 @@ pub struct Config {
     /// Who signs certificates. `local` is an INSECURE built-in CA for development and tests.
     #[arg(long, env = "ISSUER", value_enum, default_value = "acme")]
     pub issuer: IssuerKind,
+
+    /// Where to write the local test CA's certificate, for clients to trust.
+    #[arg(long, env = "LOCAL_CA_FILE")]
+    pub local_ca_file: Option<PathBuf>,
 
     #[arg(long, env = "LOCAL_CA_VALIDITY_DAYS", default_value_t = 90)]
     pub local_ca_validity_days: u32,

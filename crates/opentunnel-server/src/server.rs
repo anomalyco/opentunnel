@@ -57,7 +57,13 @@ pub fn http_client(extra: Option<&std::path::Path>) -> Result<reqwest::Client> {
 
 impl Server {
     pub async fn build(config: Config, clock: Clock) -> Result<Self> {
-        let store = Store::open(&config.database)?;
+        let url = config
+            .database_url
+            .as_deref()
+            .filter(|url| !url.is_empty())
+            .context("DATABASE_URL is not set")?;
+        let store = Store::connect(url)?;
+        store.wait_ready().await?;
         Self::with_store(config, clock, store).await
     }
 
@@ -343,6 +349,7 @@ impl Server {
         self.start_background().await?;
         let server = Arc::new(self);
         let service = server.app.service.clone();
+        let self_jobs = server.jobs.clone();
         let tls = tokio::spawn(server.clone().serve_tls(tls_listener));
         let http = http_listener.map(|listener| tokio::spawn(server.clone().serve_http(listener)));
         shutdown_signal().await;
@@ -352,6 +359,7 @@ impl Server {
             http.abort();
         }
         service.drain("server restarting").await;
+        self_jobs.release().await;
         tokio::time::sleep(Duration::from_millis(500)).await;
         Ok(())
     }

@@ -1,68 +1,109 @@
-//! SQLite storage: one file on the Fly volume. Calls run on Tokio's blocking pool; every statement is small.
+//! MySQL storage (PlanetScale in production). Records keep the Durable Object's JSON shape byte for byte.
+//!
+//! The schema follows Vitess' rules: every table has a primary key, there are no foreign keys, triggers or
+//! stored procedures, and migrations are idempotent `CREATE TABLE IF NOT EXISTS` statements run at startup.
+//! Nothing relies on a single writer: tunnel records carry a revision that every write checks, alarms and
+//! job leases are taken with conditional updates, and imports lock the row they replace.
 
-use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, params};
+use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
+use sqlx::Executor;
+use sqlx::mysql::{
+    MySqlConnectOptions, MySqlDatabaseError, MySqlPool, MySqlPoolOptions, MySqlSslMode,
+};
+use tracing::warn;
 
 use crate::record::StoredTunnel;
 
+/// The schema version this server writes. A database at a newer version is refused.
 const SCHEMA_VERSION: i64 = 1;
 
-const SCHEMA: &str = r#"
-CREATE TABLE IF NOT EXISTS tunnels (
-  id TEXT PRIMARY KEY,
-  -- The record, in the Durable Object's StoredTunnel JSON shape.
-  record TEXT NOT NULL,
+const SCHEMA: &[&str] = &[
+    r#"CREATE TABLE IF NOT EXISTS schema_migrations (
+  version BIGINT NOT NULL PRIMARY KEY,
+  applied_at BIGINT NOT NULL
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin"#,
+    r#"CREATE TABLE IF NOT EXISTS tunnels (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  -- The record, exactly as serialized in the Durable Object's StoredTunnel JSON shape. Text rather than JSON,
+  -- which would reorder keys.
+  record LONGTEXT NOT NULL,
+  -- Bumped by every write; writers update only the revision they read.
+  revision BIGINT NOT NULL,
+  -- Derived from the record on every write, for queries.
+  deleted TINYINT NOT NULL DEFAULT 0,
+  issuing TINYINT NOT NULL DEFAULT 0,
   -- The renewal alarm (the Durable Object's storage alarm), Unix milliseconds.
-  alarm_at INTEGER,
+  alarm_at BIGINT NULL,
   -- Reserved for assigning tunnels to regions; NULL is the primary region.
-  region TEXT,
-  updated_at INTEGER NOT NULL,
-  imported_at INTEGER,
+  region VARCHAR(32) NULL,
+  updated_at BIGINT NOT NULL,
+  imported_at BIGINT NULL,
   -- 0 while the row is exactly as last imported, so a later import may refresh it; 1 once this server wrote it.
-  local_update INTEGER NOT NULL DEFAULT 1
-);
-CREATE INDEX IF NOT EXISTS tunnels_alarm ON tunnels (alarm_at) WHERE alarm_at IS NOT NULL;
-
-CREATE TABLE IF NOT EXISTS jobs (
-  certificate_id TEXT PRIMARY KEY,
+  local_update TINYINT NOT NULL DEFAULT 1,
+  KEY tunnels_alarm (alarm_at),
+  KEY tunnels_issuing (issuing, deleted)
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin"#,
+    r#"CREATE TABLE IF NOT EXISTS jobs (
+  certificate_id VARCHAR(191) NOT NULL PRIMARY KEY,
   -- NULL for the server's own certificates.
-  tunnel_id TEXT,
-  kind TEXT NOT NULL,
+  tunnel_id VARCHAR(191) NULL,
+  kind VARCHAR(16) NOT NULL,
   identifiers TEXT NOT NULL,
   csr TEXT NOT NULL,
   -- pending, done or failed.
-  status TEXT NOT NULL,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  run_at INTEGER NOT NULL,
-  last_error TEXT,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS jobs_pending ON jobs (run_at) WHERE status = 'pending';
-
-CREATE TABLE IF NOT EXISTS server_certificates (
-  name TEXT PRIMARY KEY,
+  status VARCHAR(16) NOT NULL,
+  attempts INT NOT NULL DEFAULT 0,
+  run_at BIGINT NOT NULL,
+  -- The process running the job and until when; another may take it over once the lease expires.
+  lease_owner VARCHAR(191) NULL,
+  lease_until BIGINT NULL,
+  last_error TEXT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  KEY jobs_due (status, run_at)
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin"#,
+    r#"CREATE TABLE IF NOT EXISTS server_certificates (
+  name VARCHAR(191) NOT NULL PRIMARY KEY,
   private_key TEXT NOT NULL,
   csr TEXT NOT NULL,
-  certificate TEXT,
-  chain TEXT,
-  expiry TEXT,
-  updated_at INTEGER NOT NULL
-);
+  certificate MEDIUMTEXT NULL,
+  chain MEDIUMTEXT NULL,
+  expiry VARCHAR(64) NULL,
+  updated_at BIGINT NOT NULL
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin"#,
+    r#"CREATE TABLE IF NOT EXISTS meta (
+  name VARCHAR(191) NOT NULL PRIMARY KEY,
+  value MEDIUMTEXT NOT NULL
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin"#,
+];
 
-CREATE TABLE IF NOT EXISTS meta (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-"#;
+/// Every statement gives up after this long, so a stalled database cannot hang a request.
+const QUERY_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long a job lease lasts; the runner extends it while the job runs.
+pub const LEASE_MS: u64 = 2 * 60 * 1000;
+
+const ER_DUP_ENTRY: u16 = 1062;
+const ER_LOCK_WAIT_TIMEOUT: u16 = 1205;
+const ER_LOCK_DEADLOCK: u16 = 1213;
 
 #[derive(Clone)]
 pub struct Store {
-    connection: Arc<Mutex<Connection>>,
+    pool: MySqlPool,
+}
+
+/// A tunnel record changed since it was read, by an import or another server.
+#[derive(Debug, thiserror::Error)]
+#[error("the tunnel changed concurrently; try again")]
+pub struct Conflict;
+
+/// A record and the revision it was read at.
+#[derive(Debug, Clone)]
+pub struct Loaded {
+    pub record: StoredTunnel,
+    pub revision: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -123,137 +164,343 @@ pub enum ImportOutcome {
     KeptLocal,
 }
 
-impl Store {
-    pub fn open(path: &Path) -> Result<Self> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("creating {}", parent.display()))?;
+/// Parses `DATABASE_URL` and enforces TLS: a remote database must use `ssl-mode` `REQUIRED`, `VERIFY_CA` or
+/// `VERIFY_IDENTITY` (the default when unset); only a loopback host or a socket may go without.
+pub fn connect_options(url: &str) -> Result<MySqlConnectOptions> {
+    let parsed = url::Url::parse(url).context("DATABASE_URL is not a URL")?;
+    anyhow::ensure!(
+        parsed.scheme() == "mysql",
+        "DATABASE_URL must be a mysql:// URL"
+    );
+    let explicit_mode = parsed
+        .query_pairs()
+        .any(|(key, _)| key == "ssl-mode" || key == "sslmode");
+    let mut options: MySqlConnectOptions = url.parse().context("reading DATABASE_URL")?;
+    let host = options.get_host().trim_matches(['[', ']']).to_owned();
+    let local = options.get_socket().is_some()
+        || host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| address.is_loopback());
+    if !local {
+        if !explicit_mode {
+            options = options.ssl_mode(MySqlSslMode::VerifyIdentity);
         }
-        let connection =
-            Connection::open(path).with_context(|| format!("opening {}", path.display()))?;
-        Self::init(connection)
+        if matches!(
+            options.get_ssl_mode(),
+            MySqlSslMode::Disabled | MySqlSslMode::Preferred
+        ) {
+            bail!(
+                "DATABASE_URL must use TLS for a remote database: set ssl-mode=VERIFY_IDENTITY (or leave it unset)"
+            );
+        }
+    }
+    Ok(options
+        // Vitess rejects or pins connections for these session settings, and nothing here needs them.
+        .pipes_as_concat(false)
+        .no_engine_substitution(false)
+        .timezone(None)
+        .charset("utf8mb4"))
+}
+
+fn mysql_code(error: &sqlx::Error) -> Option<u16> {
+    error
+        .as_database_error()?
+        .try_downcast_ref::<MySqlDatabaseError>()
+        .map(MySqlDatabaseError::number)
+}
+
+fn retryable(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<sqlx::Error>()
+        .and_then(mysql_code)
+        .is_some_and(|code| matches!(code, ER_DUP_ENTRY | ER_LOCK_WAIT_TIMEOUT | ER_LOCK_DEADLOCK))
+}
+
+fn db(error: sqlx::Error) -> anyhow::Error {
+    anyhow::Error::new(error).context("storage unavailable")
+}
+
+/// Runs one storage operation with the statement timeout.
+async fn timed<T>(future: impl Future<Output = Result<T>>) -> Result<T> {
+    match tokio::time::timeout(QUERY_TIMEOUT, future).await {
+        Ok(result) => result,
+        Err(_) => Err(anyhow!("storage timed out").context("storage unavailable")),
+    }
+}
+
+fn record_flags(record: &StoredTunnel) -> (bool, bool) {
+    use opentunnel::protocol::api::CertificateState;
+    let issuing = record.renewal.is_some()
+        || record.certificate.as_ref().is_some_and(|certificate| {
+            matches!(
+                certificate.state,
+                CertificateState::Issuing | CertificateState::Challenge { .. }
+            )
+        });
+    (record.is_deleted(), issuing)
+}
+
+type ServerCertificateRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+type JobRow = (String, Option<String>, String, String, String, i32, i64);
+
+fn job_from_row(row: JobRow) -> Result<Job> {
+    let (certificate_id, tunnel_id, kind, identifiers, csr, attempts, created_at) = row;
+    Ok(Job {
+        certificate_id,
+        tunnel_id,
+        kind: JobKind::parse(&kind),
+        identifiers: serde_json::from_str(&identifiers).context("decoding job identifiers")?,
+        csr,
+        attempts: attempts.max(0) as u32,
+        created_at: created_at as u64,
+    })
+}
+
+impl Store {
+    /// A pool that connects on demand, so a database that is down at startup only delays it.
+    pub fn connect(url: &str) -> Result<Self> {
+        Self::connect_with(url, 10)
     }
 
-    pub fn memory() -> Result<Self> {
-        Self::init(Connection::open_in_memory()?)
+    fn connect_with(url: &str, max_connections: u32) -> Result<Self> {
+        let options = connect_options(url)?;
+        let pool = MySqlPoolOptions::new()
+            .max_connections(max_connections)
+            .min_connections(1)
+            .acquire_timeout(Duration::from_secs(5))
+            .idle_timeout(Duration::from_secs(5 * 60))
+            .max_lifetime(Duration::from_secs(30 * 60))
+            // A connection the server or a proxy dropped is noticed and replaced before use.
+            .test_before_acquire(true)
+            .connect_lazy_with(options);
+        Ok(Self { pool })
     }
 
-    fn init(connection: Connection) -> Result<Self> {
-        connection.pragma_update(None, "journal_mode", "WAL")?;
-        connection.pragma_update(None, "synchronous", "NORMAL")?;
-        connection.pragma_update(None, "foreign_keys", "ON")?;
-        connection.busy_timeout(std::time::Duration::from_secs(5))?;
-        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        anyhow::ensure!(
-            version <= SCHEMA_VERSION,
-            "database schema {version} is newer than this server ({SCHEMA_VERSION})"
-        );
-        connection.execute_batch(SCHEMA)?;
-        connection.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-        Ok(Self {
-            connection: Arc::new(Mutex::new(connection)),
-        })
+    /// Connects and migrates, failing if the database is unavailable (the CLI's import and export).
+    pub async fn open(url: &str) -> Result<Self> {
+        let store = Self::connect(url)?;
+        store.migrate().await?;
+        Ok(store)
     }
 
-    /// Runs `f` with the connection on the blocking pool.
-    pub async fn call<R: Send + 'static>(
-        &self,
-        f: impl FnOnce(&mut Connection) -> Result<R> + Send + 'static,
-    ) -> Result<R> {
-        let connection = self.connection.clone();
-        tokio::task::spawn_blocking(move || {
-            let mut connection = connection
-                .lock()
-                .unwrap_or_else(|poison| poison.into_inner());
-            f(&mut connection)
+    /// Migrates, retrying with backoff until the database answers. Only an incompatible schema is an error.
+    pub async fn wait_ready(&self) -> Result<()> {
+        let mut delay = Duration::from_millis(500);
+        loop {
+            match self.migrate().await {
+                Ok(()) => return Ok(()),
+                Err(error) if error.downcast_ref::<NewerSchema>().is_some() => return Err(error),
+                Err(error) => {
+                    warn!(error = %format!("{error:#}"), retry_in = ?delay, "the database is not ready");
+                    tokio::time::sleep(delay).await;
+                    delay = (delay * 2).min(Duration::from_secs(15));
+                }
+            }
+        }
+    }
+
+    /// Creates the tables unless the database is already at this version. Safe to run from several servers.
+    pub async fn migrate(&self) -> Result<()> {
+        timed(async {
+            let version: Option<i64> =
+                match sqlx::query_scalar("SELECT MAX(version) FROM schema_migrations")
+                    .fetch_one(&self.pool)
+                    .await
+                {
+                    Ok(version) => version,
+                    // 1146: the table does not exist yet.
+                    Err(error) if mysql_code(&error) == Some(1146) => None,
+                    Err(error) => return Err(db(error)),
+                };
+            if let Some(version) = version {
+                if version > SCHEMA_VERSION {
+                    return Err(NewerSchema(version).into());
+                }
+                if version == SCHEMA_VERSION {
+                    return Ok(());
+                }
+            }
+            for statement in SCHEMA {
+                self.pool.execute(*statement).await.map_err(db)?;
+            }
+            sqlx::query(
+                "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE version = version",
+            )
+            .bind(SCHEMA_VERSION)
+            .bind(crate::clock::Clock::system().now_ms() as i64)
+            .execute(&self.pool)
+            .await
+            .map_err(db)?;
+            Ok(())
         })
         .await
-        .context("storage task failed")?
     }
 
-    pub async fn tunnel(&self, id: &str) -> Result<Option<StoredTunnel>> {
-        let id = id.to_owned();
-        self.call(move |connection| {
-            let record: Option<String> = connection
-                .query_row(
-                    "SELECT record FROM tunnels WHERE id = ?1",
-                    params![id],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            record
-                .map(|record| serde_json::from_str(&record).context("decoding a stored tunnel"))
-                .transpose()
+    pub async fn close(&self) {
+        self.pool.close().await;
+    }
+
+    pub async fn tunnel(&self, id: &str) -> Result<Option<Loaded>> {
+        timed(async {
+            let row: Option<(String, i64)> =
+                sqlx::query_as("SELECT record, revision FROM tunnels WHERE id = ?")
+                    .bind(id)
+                    .fetch_optional(&self.pool)
+                    .await
+                    .map_err(db)?;
+            row.map(|(record, revision)| {
+                Ok(Loaded {
+                    record: serde_json::from_str(&record).context("decoding a stored tunnel")?,
+                    revision: revision as u64,
+                })
+            })
+            .transpose()
         })
         .await
     }
 
-    pub async fn save_tunnel(&self, record: &StoredTunnel, now: u64) -> Result<()> {
-        let id = record.id.clone();
+    /// Writes a record read at `revision` (0: no row existed) and returns its new revision. Fails with
+    /// [`Conflict`] when the row changed meanwhile.
+    pub async fn save_tunnel(&self, record: &StoredTunnel, revision: u64, now: u64) -> Result<u64> {
         let json = serde_json::to_string(record)?;
-        self.call(move |connection| {
-            connection.execute(
-                "INSERT INTO tunnels (id, record, updated_at, local_update) VALUES (?1, ?2, ?3, 1)
-                 ON CONFLICT (id) DO UPDATE SET record = ?2, updated_at = ?3, local_update = 1",
-                params![id, json, now as i64],
-            )?;
+        let (deleted, issuing) = record_flags(record);
+        timed(async {
+            if revision == 0 {
+                let inserted = sqlx::query(
+                    "INSERT INTO tunnels (id, record, revision, deleted, issuing, updated_at, local_update)
+                     VALUES (?, ?, 1, ?, ?, ?, 1)",
+                )
+                .bind(&record.id)
+                .bind(&json)
+                .bind(deleted)
+                .bind(issuing)
+                .bind(now as i64)
+                .execute(&self.pool)
+                .await;
+                return match inserted {
+                    Ok(_) => Ok(1),
+                    Err(error) if mysql_code(&error) == Some(ER_DUP_ENTRY) => Err(Conflict.into()),
+                    Err(error) => Err(db(error)),
+                };
+            }
+            let updated = sqlx::query(
+                "UPDATE tunnels SET record = ?, revision = revision + 1, deleted = ?, issuing = ?, updated_at = ?,
+                   local_update = 1
+                 WHERE id = ? AND revision = ?",
+            )
+            .bind(&json)
+            .bind(deleted)
+            .bind(issuing)
+            .bind(now as i64)
+            .bind(&record.id)
+            .bind(revision as i64)
+            .execute(&self.pool)
+            .await
+            .map_err(db)?;
+            if updated.rows_affected() == 0 {
+                return Err(Conflict.into());
+            }
+            Ok(revision + 1)
+        })
+        .await
+    }
+
+    /// Writes a record whatever its revision, for seeding tests.
+    #[doc(hidden)]
+    pub async fn put_tunnel(&self, record: &StoredTunnel, now: u64) -> Result<()> {
+        let json = serde_json::to_string(record)?;
+        let (deleted, issuing) = record_flags(record);
+        timed(async {
+            sqlx::query(
+                "INSERT INTO tunnels (id, record, revision, deleted, issuing, updated_at, local_update)
+                 VALUES (?, ?, 1, ?, ?, ?, 1)
+                 ON DUPLICATE KEY UPDATE record = VALUES(record), revision = revision + 1,
+                   deleted = VALUES(deleted), issuing = VALUES(issuing), updated_at = VALUES(updated_at),
+                   local_update = 1",
+            )
+            .bind(&record.id)
+            .bind(&json)
+            .bind(deleted)
+            .bind(issuing)
+            .bind(now as i64)
+            .execute(&self.pool)
+            .await
+            .map_err(db)?;
             Ok(())
         })
         .await
     }
 
     pub async fn alarm(&self, id: &str) -> Result<Option<u64>> {
-        let id = id.to_owned();
-        self.call(move |connection| {
-            let alarm: Option<Option<i64>> = connection
-                .query_row(
-                    "SELECT alarm_at FROM tunnels WHERE id = ?1",
-                    params![id],
-                    |row| row.get(0),
-                )
-                .optional()?;
+        timed(async {
+            let alarm: Option<Option<i64>> =
+                sqlx::query_scalar("SELECT alarm_at FROM tunnels WHERE id = ?")
+                    .bind(id)
+                    .fetch_optional(&self.pool)
+                    .await
+                    .map_err(db)?;
             Ok(alarm.flatten().map(|alarm| alarm as u64))
         })
         .await
     }
 
     pub async fn set_alarm(&self, id: &str, at: Option<u64>) -> Result<()> {
-        let id = id.to_owned();
-        self.call(move |connection| {
-            connection.execute(
-                "UPDATE tunnels SET alarm_at = ?2 WHERE id = ?1",
-                params![id, at.map(|at| at as i64)],
-            )?;
+        timed(async {
+            sqlx::query("UPDATE tunnels SET alarm_at = ? WHERE id = ?")
+                .bind(at.map(|at| at as i64))
+                .bind(id)
+                .execute(&self.pool)
+                .await
+                .map_err(db)?;
             Ok(())
         })
         .await
     }
 
-    /// Clears and returns the alarms due at `now`, like a Durable Object alarm firing once.
+    /// Clears and returns the alarms due at `now`, like a Durable Object alarm firing once. Each alarm is
+    /// cleared only if it is still the one that was read, so concurrent callers never both take it.
     pub async fn take_due_alarms(&self, now: u64) -> Result<Vec<String>> {
-        self.call(move |connection| {
-            let transaction = connection.transaction()?;
-            let ids = {
-                let mut statement = transaction.prepare(
-                    "SELECT id FROM tunnels WHERE alarm_at IS NOT NULL AND alarm_at <= ?1 ORDER BY alarm_at LIMIT 500",
-                )?;
-                statement
-                    .query_map(params![now as i64], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?
-            };
-            for id in &ids {
-                transaction.execute("UPDATE tunnels SET alarm_at = NULL WHERE id = ?1", params![id])?;
+        timed(async {
+            let due: Vec<(String, i64)> = sqlx::query_as(
+                "SELECT id, alarm_at FROM tunnels WHERE alarm_at IS NOT NULL AND alarm_at <= ?
+                 ORDER BY alarm_at LIMIT 500",
+            )
+            .bind(now as i64)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db)?;
+            let mut taken = Vec::with_capacity(due.len());
+            for (id, alarm) in due {
+                let cleared =
+                    sqlx::query("UPDATE tunnels SET alarm_at = NULL WHERE id = ? AND alarm_at = ?")
+                        .bind(&id)
+                        .bind(alarm)
+                        .execute(&self.pool)
+                        .await
+                        .map_err(db)?;
+                if cleared.rows_affected() == 1 {
+                    taken.push(id);
+                }
             }
-            transaction.commit()?;
-            Ok(ids)
+            Ok(taken)
         })
         .await
     }
 
     pub async fn next_alarm(&self) -> Result<Option<u64>> {
-        self.call(|connection| {
-            let next: Option<i64> =
-                connection.query_row("SELECT MIN(alarm_at) FROM tunnels", [], |row| row.get(0))?;
+        timed(async {
+            let next: Option<i64> = sqlx::query_scalar("SELECT MIN(alarm_at) FROM tunnels")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(db)?;
             Ok(next.map(|next| next as u64))
         })
         .await
@@ -261,16 +508,12 @@ impl Store {
 
     /// Records whose certificate is issuing or renewing, for resuming issuance that has no job.
     pub async fn issuing_tunnels(&self) -> Result<Vec<StoredTunnel>> {
-        self.call(|connection| {
-            let mut statement = connection.prepare(
-                "SELECT record FROM tunnels
-                 WHERE json_extract(record, '$.deletedAt') IS NULL
-                   AND (json_extract(record, '$.certificate.state.type') IN ('issuing', 'challenge')
-                        OR json_extract(record, '$.renewal') IS NOT NULL)",
-            )?;
-            let rows = statement
-                .query_map([], |row| row.get::<_, String>(0))?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
+        timed(async {
+            let rows: Vec<String> =
+                sqlx::query_scalar("SELECT record FROM tunnels WHERE issuing = 1 AND deleted = 0")
+                    .fetch_all(&self.pool)
+                    .await
+                    .map_err(db)?;
             rows.iter()
                 .map(|row| serde_json::from_str(row).context("decoding a stored tunnel"))
                 .collect()
@@ -288,50 +531,88 @@ impl Store {
         now: u64,
     ) -> Result<ImportOutcome> {
         let json = serde_json::to_string(&record)?;
-        self.call(move |connection| {
-            let transaction = connection.transaction()?;
-            let existing: Option<(String, i64)> = transaction
-                .query_row(
-                    "SELECT record, local_update FROM tunnels WHERE id = ?1",
-                    params![record.id],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
-                )
-                .optional()?;
-            let outcome = match existing {
-                None => {
-                    transaction.execute(
-                        "INSERT INTO tunnels (id, record, alarm_at, updated_at, imported_at, local_update)
-                         VALUES (?1, ?2, ?3, ?4, ?4, 0)",
-                        params![record.id, json, alarm.map(|alarm| alarm as i64), now as i64],
-                    )?;
-                    ImportOutcome::Inserted
+        let mut attempt = 0;
+        loop {
+            match timed(self.try_import(&record, &json, alarm, force, now)).await {
+                Err(error) if attempt < 5 && retryable(&error) => {
+                    attempt += 1;
+                    tokio::time::sleep(Duration::from_millis(20 * attempt)).await;
                 }
-                Some((_, 1)) if !force => ImportOutcome::KeptLocal,
-                Some((existing, _)) if existing == json => ImportOutcome::Unchanged,
-                Some(_) => {
-                    transaction.execute(
-                        "UPDATE tunnels SET record = ?2, alarm_at = ?3, updated_at = ?4, imported_at = ?4,
-                         local_update = 0 WHERE id = ?1",
-                        params![record.id, json, alarm.map(|alarm| alarm as i64), now as i64],
-                    )?;
-                    ImportOutcome::Updated
-                }
-            };
-            transaction.commit()?;
-            Ok(outcome)
-        })
-        .await
+                result => return result,
+            }
+        }
+    }
+
+    async fn try_import(
+        &self,
+        record: &StoredTunnel,
+        json: &str,
+        alarm: Option<u64>,
+        force: bool,
+        now: u64,
+    ) -> Result<ImportOutcome> {
+        let (deleted, issuing) = record_flags(record);
+        // Insert first: locking a missing row would take a gap lock, which deadlocks concurrent imports.
+        let inserted = sqlx::query(
+            "INSERT INTO tunnels (id, record, revision, deleted, issuing, alarm_at, updated_at, imported_at,
+               local_update)
+             VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0)",
+        )
+        .bind(&record.id)
+        .bind(json)
+        .bind(deleted)
+        .bind(issuing)
+        .bind(alarm.map(|alarm| alarm as i64))
+        .bind(now as i64)
+        .bind(now as i64)
+        .execute(&self.pool)
+        .await;
+        match inserted {
+            Ok(_) => return Ok(ImportOutcome::Inserted),
+            Err(error) if mysql_code(&error) == Some(ER_DUP_ENTRY) => {}
+            Err(error) => return Err(db(error)),
+        }
+        // Rows are never deleted, so the existing one is locked and compared without a race.
+        let mut transaction = self.pool.begin().await.map_err(db)?;
+        let (existing, local_update): (String, i8) =
+            sqlx::query_as("SELECT record, local_update FROM tunnels WHERE id = ? FOR UPDATE")
+                .bind(&record.id)
+                .fetch_one(&mut *transaction)
+                .await
+                .map_err(db)?;
+        let outcome = if local_update == 1 && !force {
+            ImportOutcome::KeptLocal
+        } else if existing == json {
+            ImportOutcome::Unchanged
+        } else {
+            sqlx::query(
+                "UPDATE tunnels SET record = ?, revision = revision + 1, deleted = ?, issuing = ?, alarm_at = ?,
+                   updated_at = ?, imported_at = ?, local_update = 0
+                 WHERE id = ?",
+            )
+            .bind(json)
+            .bind(deleted)
+            .bind(issuing)
+            .bind(alarm.map(|alarm| alarm as i64))
+            .bind(now as i64)
+            .bind(now as i64)
+            .bind(&record.id)
+            .execute(&mut *transaction)
+            .await
+            .map_err(db)?;
+            ImportOutcome::Updated
+        };
+        transaction.commit().await.map_err(db)?;
+        Ok(outcome)
     }
 
     pub async fn export_tunnels(&self) -> Result<Vec<(StoredTunnel, Option<u64>)>> {
-        self.call(|connection| {
-            let mut statement =
-                connection.prepare("SELECT record, alarm_at FROM tunnels ORDER BY id")?;
-            let rows = statement
-                .query_map([], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
+        timed(async {
+            let rows: Vec<(String, Option<i64>)> =
+                sqlx::query_as("SELECT record, alarm_at FROM tunnels ORDER BY id")
+                    .fetch_all(&self.pool)
+                    .await
+                    .map_err(db)?;
             rows.into_iter()
                 .map(|(record, alarm)| {
                     Ok((
@@ -346,235 +627,720 @@ impl Store {
 
     /// Adds an issuance job unless one exists for the certificate ID. Returns whether it was added.
     pub async fn add_job(&self, job: Job, run_at: u64) -> Result<bool> {
-        self.call(move |connection| {
-            let added = connection.execute(
+        let identifiers = serde_json::to_string(&job.identifiers)?;
+        timed(async {
+            let added = sqlx::query(
                 "INSERT INTO jobs (certificate_id, tunnel_id, kind, identifiers, csr, status, attempts, run_at,
                                    created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?7, ?8, ?8)
-                 ON CONFLICT (certificate_id) DO NOTHING",
-                params![
-                    job.certificate_id,
-                    job.tunnel_id,
-                    job.kind.as_str(),
-                    serde_json::to_string(&job.identifiers)?,
-                    job.csr,
-                    job.attempts,
-                    run_at as i64,
-                    job.created_at as i64,
-                ],
-            )?;
-            Ok(added == 1)
+                 VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)",
+            )
+            .bind(&job.certificate_id)
+            .bind(&job.tunnel_id)
+            .bind(job.kind.as_str())
+            .bind(&identifiers)
+            .bind(&job.csr)
+            .bind(job.attempts as i32)
+            .bind(run_at as i64)
+            .bind(job.created_at as i64)
+            .bind(job.created_at as i64)
+            .execute(&self.pool)
+            .await;
+            match added {
+                Ok(_) => Ok(true),
+                Err(error) if mysql_code(&error) == Some(ER_DUP_ENTRY) => Ok(false),
+                Err(error) => Err(db(error)),
+            }
         })
         .await
     }
 
     pub async fn job_exists(&self, certificate_id: &str) -> Result<bool> {
-        let certificate_id = certificate_id.to_owned();
-        self.call(move |connection| {
-            Ok(connection
-                .query_row(
-                    "SELECT 1 FROM jobs WHERE certificate_id = ?1",
-                    params![certificate_id],
-                    |_| Ok(()),
-                )
-                .optional()?
-                .is_some())
-        })
-        .await
+        self.job_status(certificate_id)
+            .await
+            .map(|status| status.is_some())
     }
 
     pub async fn job_pending(&self, certificate_id: &str) -> Result<bool> {
-        let certificate_id = certificate_id.to_owned();
-        self.call(move |connection| {
-            Ok(connection
-                .query_row(
-                    "SELECT 1 FROM jobs WHERE certificate_id = ?1 AND status = 'pending'",
-                    params![certificate_id],
-                    |_| Ok(()),
-                )
-                .optional()?
-                .is_some())
+        self.job_status(certificate_id)
+            .await
+            .map(|status| status.as_deref() == Some("pending"))
+    }
+
+    async fn job_status(&self, certificate_id: &str) -> Result<Option<String>> {
+        timed(async {
+            sqlx::query_scalar("SELECT status FROM jobs WHERE certificate_id = ?")
+                .bind(certificate_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(db)
         })
         .await
     }
 
     pub async fn counts(&self) -> Result<serde_json::Value> {
-        self.call(|connection| {
-            let count = |sql: &str| -> rusqlite::Result<i64> { connection.query_row(sql, [], |row| row.get(0)) };
-            Ok(serde_json::json!({
-                "tunnels": count("SELECT COUNT(*) FROM tunnels WHERE json_extract(record, '$.deletedAt') IS NULL")?,
-                "deleted": count("SELECT COUNT(*) FROM tunnels WHERE json_extract(record, '$.deletedAt') IS NOT NULL")?,
-                "imported_unchanged": count("SELECT COUNT(*) FROM tunnels WHERE local_update = 0")?,
-                "alarms": count("SELECT COUNT(*) FROM tunnels WHERE alarm_at IS NOT NULL")?,
-                "jobs_pending": count("SELECT COUNT(*) FROM jobs WHERE status = 'pending'")?,
-                "jobs_failed": count("SELECT COUNT(*) FROM jobs WHERE status = 'failed'")?,
-            }))
+        timed(async {
+            let mut counts = serde_json::Map::new();
+            for (name, sql) in [
+                ("tunnels", "SELECT COUNT(*) FROM tunnels WHERE deleted = 0"),
+                ("deleted", "SELECT COUNT(*) FROM tunnels WHERE deleted = 1"),
+                (
+                    "imported_unchanged",
+                    "SELECT COUNT(*) FROM tunnels WHERE local_update = 0",
+                ),
+                (
+                    "alarms",
+                    "SELECT COUNT(*) FROM tunnels WHERE alarm_at IS NOT NULL",
+                ),
+                (
+                    "jobs_pending",
+                    "SELECT COUNT(*) FROM jobs WHERE status = 'pending'",
+                ),
+                (
+                    "jobs_failed",
+                    "SELECT COUNT(*) FROM jobs WHERE status = 'failed'",
+                ),
+            ] {
+                let count: i64 = sqlx::query_scalar(sql)
+                    .fetch_one(&self.pool)
+                    .await
+                    .map_err(db)?;
+                counts.insert(name.into(), count.into());
+            }
+            Ok(serde_json::Value::Object(counts))
         })
         .await
     }
 
-    pub async fn due_jobs(&self, now: u64, limit: usize) -> Result<Vec<Job>> {
-        self.call(move |connection| {
-            let mut statement = connection.prepare(
+    /// Pending jobs due at `now` that nobody else holds, without taking them.
+    pub async fn due_job_ids(&self, owner: &str, now: u64, limit: usize) -> Result<Vec<String>> {
+        timed(async {
+            sqlx::query_scalar(
+                "SELECT certificate_id FROM jobs
+                 WHERE status = 'pending' AND run_at <= ?
+                   AND (lease_until IS NULL OR lease_until < ? OR lease_owner = ?)
+                 ORDER BY run_at LIMIT ?",
+            )
+            .bind(now as i64)
+            .bind(now as i64)
+            .bind(owner)
+            .bind(limit as i64)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db)
+        })
+        .await
+    }
+
+    /// Takes a due job for `owner` until `now + LEASE_MS`, unless another process holds an unexpired lease.
+    /// Returns the job as it is once taken.
+    pub async fn claim_job(
+        &self,
+        certificate_id: &str,
+        owner: &str,
+        now: u64,
+    ) -> Result<Option<Job>> {
+        timed(async {
+            let claimed = sqlx::query(
+                "UPDATE jobs SET lease_owner = ?, lease_until = ?
+                 WHERE certificate_id = ? AND status = 'pending' AND run_at <= ?
+                   AND (lease_until IS NULL OR lease_until < ? OR lease_owner = ?)",
+            )
+            .bind(owner)
+            .bind((now + LEASE_MS) as i64)
+            .bind(certificate_id)
+            .bind(now as i64)
+            .bind(now as i64)
+            .bind(owner)
+            .execute(&self.pool)
+            .await
+            .map_err(db)?;
+            if claimed.rows_affected() == 0 {
+                return Ok(None);
+            }
+            let row: Option<JobRow> = sqlx::query_as(
                 "SELECT certificate_id, tunnel_id, kind, identifiers, csr, attempts, created_at FROM jobs
-                 WHERE status = 'pending' AND run_at <= ?1 ORDER BY run_at LIMIT ?2",
-            )?;
-            let rows = statement
-                .query_map(params![now as i64, limit as i64], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, Option<String>>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?,
-                        row.get::<_, String>(4)?,
-                        row.get::<_, u32>(5)?,
-                        row.get::<_, i64>(6)?,
-                    ))
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            rows.into_iter()
-                .map(
-                    |(certificate_id, tunnel_id, kind, identifiers, csr, attempts, created_at)| {
-                        Ok(Job {
-                            certificate_id,
-                            tunnel_id,
-                            kind: JobKind::parse(&kind),
-                            identifiers: serde_json::from_str(&identifiers)?,
-                            csr,
-                            attempts,
-                            created_at: created_at as u64,
-                        })
-                    },
-                )
-                .collect()
+                 WHERE certificate_id = ? AND lease_owner = ?",
+            )
+            .bind(certificate_id)
+            .bind(owner)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(db)?;
+            row.map(job_from_row).transpose()
+        })
+        .await
+    }
+
+    /// Takes up to `limit` due jobs for `owner`.
+    pub async fn claim_due_jobs(&self, owner: &str, now: u64, limit: usize) -> Result<Vec<Job>> {
+        let mut claimed = Vec::new();
+        for id in self.due_job_ids(owner, now, limit).await? {
+            if let Some(job) = self.claim_job(&id, owner, now).await? {
+                claimed.push(job);
+            }
+        }
+        Ok(claimed)
+    }
+
+    /// Extends a lease `owner` still holds. Returns false once it lost it.
+    pub async fn extend_lease(&self, certificate_id: &str, owner: &str, now: u64) -> Result<bool> {
+        timed(async {
+            let extended = sqlx::query(
+                "UPDATE jobs SET lease_until = ? WHERE certificate_id = ? AND lease_owner = ? AND status = 'pending'",
+            )
+            .bind((now + LEASE_MS) as i64)
+            .bind(certificate_id)
+            .bind(owner)
+            .execute(&self.pool)
+            .await
+            .map_err(db)?;
+            Ok(extended.rows_affected() == 1)
+        })
+        .await
+    }
+
+    /// Gives up every lease `owner` holds, on shutdown, so a restarted server resumes the jobs at once.
+    pub async fn release_leases(&self, owner: &str) -> Result<()> {
+        timed(async {
+            sqlx::query(
+                "UPDATE jobs SET lease_owner = NULL, lease_until = NULL WHERE lease_owner = ?",
+            )
+            .bind(owner)
+            .execute(&self.pool)
+            .await
+            .map_err(db)?;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Records a job's final status and releases its lease. Returns false if `owner` no longer held it.
+    pub async fn finish_job(
+        &self,
+        certificate_id: &str,
+        owner: &str,
+        status: &'static str,
+        error: Option<String>,
+        now: u64,
+    ) -> Result<bool> {
+        timed(async {
+            let finished = sqlx::query(
+                "UPDATE jobs SET status = ?, last_error = ?, updated_at = ?, lease_owner = NULL, lease_until = NULL
+                 WHERE certificate_id = ? AND lease_owner = ?",
+            )
+            .bind(status)
+            .bind(error)
+            .bind(now as i64)
+            .bind(certificate_id)
+            .bind(owner)
+            .execute(&self.pool)
+            .await
+            .map_err(db)?;
+            Ok(finished.rows_affected() == 1)
+        })
+        .await
+    }
+
+    /// Schedules another attempt and releases the lease. Returns false if `owner` no longer held it.
+    pub async fn retry_job(
+        &self,
+        certificate_id: &str,
+        owner: &str,
+        attempts: u32,
+        run_at: u64,
+        error: String,
+        now: u64,
+    ) -> Result<bool> {
+        timed(async {
+            let retried = sqlx::query(
+                "UPDATE jobs SET attempts = ?, run_at = ?, last_error = ?, updated_at = ?, lease_owner = NULL,
+                   lease_until = NULL
+                 WHERE certificate_id = ? AND lease_owner = ?",
+            )
+            .bind(attempts as i32)
+            .bind(run_at as i64)
+            .bind(error)
+            .bind(now as i64)
+            .bind(certificate_id)
+            .bind(owner)
+            .execute(&self.pool)
+            .await
+            .map_err(db)?;
+            Ok(retried.rows_affected() == 1)
         })
         .await
     }
 
     pub async fn next_job_at(&self) -> Result<Option<u64>> {
-        self.call(|connection| {
-            let next: Option<i64> = connection.query_row(
-                "SELECT MIN(run_at) FROM jobs WHERE status = 'pending'",
-                [],
-                |row| row.get(0),
-            )?;
+        timed(async {
+            let next: Option<i64> =
+                sqlx::query_scalar("SELECT MIN(run_at) FROM jobs WHERE status = 'pending'")
+                    .fetch_one(&self.pool)
+                    .await
+                    .map_err(db)?;
             Ok(next.map(|next| next as u64))
         })
         .await
     }
 
-    pub async fn finish_job(
-        &self,
-        certificate_id: &str,
-        status: &'static str,
-        error: Option<String>,
-        now: u64,
-    ) -> Result<()> {
-        let certificate_id = certificate_id.to_owned();
-        self.call(move |connection| {
-            connection.execute(
-                "UPDATE jobs SET status = ?2, last_error = ?3, updated_at = ?4 WHERE certificate_id = ?1",
-                params![certificate_id, status, error, now as i64],
-            )?;
-            Ok(())
-        })
-        .await
-    }
-
-    pub async fn retry_job(
-        &self,
-        certificate_id: &str,
-        attempts: u32,
-        run_at: u64,
-        error: String,
-        now: u64,
-    ) -> Result<()> {
-        let certificate_id = certificate_id.to_owned();
-        self.call(move |connection| {
-            connection.execute(
-                "UPDATE jobs SET attempts = ?2, run_at = ?3, last_error = ?4, updated_at = ?5
-                 WHERE certificate_id = ?1",
-                params![certificate_id, attempts, run_at as i64, error, now as i64],
-            )?;
-            Ok(())
-        })
-        .await
-    }
-
     pub async fn server_certificate(&self, name: &str) -> Result<Option<ServerCertificate>> {
-        let name = name.to_owned();
-        self.call(move |connection| {
-            Ok(connection
-                .query_row(
-                    "SELECT private_key, csr, certificate, chain, expiry FROM server_certificates WHERE name = ?1",
-                    params![name],
-                    |row| {
-                        Ok(ServerCertificate {
-                            private_key: row.get(0)?,
-                            csr: row.get(1)?,
-                            certificate: row.get(2)?,
-                            chain: row.get(3)?,
-                            expiry: row.get(4)?,
-                        })
-                    },
+        timed(async {
+            let row: Option<ServerCertificateRow> =
+                sqlx::query_as(
+                    "SELECT private_key, csr, certificate, chain, expiry FROM server_certificates WHERE name = ?",
                 )
-                .optional()?)
+                .bind(name)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(db)?;
+            Ok(
+                row.map(|(private_key, csr, certificate, chain, expiry)| ServerCertificate {
+                    private_key,
+                    csr,
+                    certificate,
+                    chain,
+                    expiry,
+                }),
+            )
         })
         .await
     }
 
+    /// Stores the first key and CSR for `name` unless another server already did; returns what is stored.
+    pub async fn create_server_certificate(
+        &self,
+        name: &str,
+        certificate: ServerCertificate,
+        now: u64,
+    ) -> Result<ServerCertificate> {
+        timed(async {
+            let inserted = sqlx::query(
+                "INSERT INTO server_certificates (name, private_key, csr, certificate, chain, expiry, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(name)
+            .bind(&certificate.private_key)
+            .bind(&certificate.csr)
+            .bind(&certificate.certificate)
+            .bind(&certificate.chain)
+            .bind(&certificate.expiry)
+            .bind(now as i64)
+            .execute(&self.pool)
+            .await;
+            match inserted {
+                Ok(_) => Ok(()),
+                Err(error) if mysql_code(&error) == Some(ER_DUP_ENTRY) => Ok(()),
+                Err(error) => Err(db(error)),
+            }
+        })
+        .await?;
+        self.server_certificate(name)
+            .await?
+            .ok_or_else(|| anyhow!("the server certificate disappeared"))
+    }
+
+    /// Stores an issued certificate, only for the CSR it was issued for.
     pub async fn save_server_certificate(
         &self,
         name: &str,
         certificate: ServerCertificate,
         now: u64,
     ) -> Result<()> {
-        let name = name.to_owned();
-        self.call(move |connection| {
-            connection.execute(
-                "INSERT INTO server_certificates (name, private_key, csr, certificate, chain, expiry, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                 ON CONFLICT (name) DO UPDATE SET private_key = ?2, csr = ?3, certificate = ?4, chain = ?5,
-                   expiry = ?6, updated_at = ?7",
-                params![
-                    name,
-                    certificate.private_key,
-                    certificate.csr,
-                    certificate.certificate,
-                    certificate.chain,
-                    certificate.expiry,
-                    now as i64
-                ],
-            )?;
+        timed(async {
+            sqlx::query(
+                "UPDATE server_certificates SET certificate = ?, chain = ?, expiry = ?, updated_at = ?
+                 WHERE name = ? AND csr = ?",
+            )
+            .bind(&certificate.certificate)
+            .bind(&certificate.chain)
+            .bind(&certificate.expiry)
+            .bind(now as i64)
+            .bind(name)
+            .bind(&certificate.csr)
+            .execute(&self.pool)
+            .await
+            .map_err(db)?;
             Ok(())
         })
         .await
     }
 
     pub async fn meta(&self, key: &str) -> Result<Option<String>> {
-        let key = key.to_owned();
-        self.call(move |connection| {
-            Ok(connection
-                .query_row(
-                    "SELECT value FROM meta WHERE key = ?1",
-                    params![key],
-                    |row| row.get(0),
-                )
-                .optional()?)
+        timed(async {
+            sqlx::query_scalar("SELECT value FROM meta WHERE name = ?")
+                .bind(key)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(db)
         })
         .await
     }
 
-    pub async fn set_meta(&self, key: &str, value: &str) -> Result<()> {
-        let key = key.to_owned();
-        let value = value.to_owned();
-        self.call(move |connection| {
-            connection.execute(
-                "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = ?2",
-                params![key, value],
-            )?;
-            Ok(())
+    /// Sets `key` to `value` only if it is still `expected` (`None`: absent). Returns whether it did.
+    pub async fn swap_meta(&self, key: &str, expected: Option<&str>, value: &str) -> Result<bool> {
+        timed(async {
+            let result = match expected {
+                None => {
+                    sqlx::query("INSERT INTO meta (name, value) VALUES (?, ?)")
+                        .bind(key)
+                        .bind(value)
+                        .execute(&self.pool)
+                        .await
+                }
+                Some(expected) => {
+                    sqlx::query("UPDATE meta SET value = ? WHERE name = ? AND value = ?")
+                        .bind(value)
+                        .bind(key)
+                        .bind(expected)
+                        .execute(&self.pool)
+                        .await
+                }
+            };
+            match result {
+                Ok(done) => Ok(done.rows_affected() == 1),
+                Err(error) if mysql_code(&error) == Some(ER_DUP_ENTRY) => Ok(false),
+                Err(error) => Err(db(error)),
+            }
         })
         .await
+    }
+}
+
+/// The database was migrated by a newer server.
+#[derive(Debug, thiserror::Error)]
+#[error("database schema {0} is newer than this server ({SCHEMA_VERSION})")]
+pub struct NewerSchema(i64);
+
+/// A store in a new, empty database on the server `TEST_DATABASE_URL` points at, or `None` (with a note on
+/// stderr) when it is unset. Tests skip themselves without it.
+#[doc(hidden)]
+pub async fn test_store() -> Option<Store> {
+    let url = test_database_url().await?;
+    Some(
+        Store::open(&url)
+            .await
+            .expect("migrating the test database"),
+    )
+}
+
+/// The URL of a new, empty database for one test (see [`test_store`]).
+#[doc(hidden)]
+pub async fn test_database_url() -> Option<String> {
+    let Ok(base) = std::env::var("TEST_DATABASE_URL") else {
+        eprintln!(
+            "skipping: TEST_DATABASE_URL is not set (a MySQL 8 server URL whose user may create databases, e.g. mysql://root:password@127.0.0.1:3306/opentunnel; see docs/server.md)"
+        );
+        return None;
+    };
+    let name = format!(
+        "ot_test_{}",
+        crate::crypto::uuid()
+            .replace('-', "")
+            .get(..16)
+            .unwrap_or("x")
+    );
+    let admin = Store::connect_with(&base, 1).expect("TEST_DATABASE_URL");
+    timed(async {
+        admin
+            .pool
+            // The name is generated here from hex digits.
+            .execute(sqlx::AssertSqlSafe(format!(
+                "CREATE DATABASE `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_bin"
+            )))
+            .await
+            .map_err(db)
+    })
+    .await
+    .expect("creating a test database");
+    admin.close().await;
+    let mut url = url::Url::parse(&base).expect("TEST_DATABASE_URL");
+    url.set_path(&format!("/{name}"));
+    Some(url.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::clock::iso;
+    use opentunnel::protocol::api::TunnelState;
+
+    fn record(id: &str) -> StoredTunnel {
+        StoredTunnel {
+            version: 1,
+            id: id.into(),
+            hostname: format!("{id}.opentunnel.test"),
+            state: TunnelState::Offline,
+            certificate_id: None,
+            token_hash: "00ff".into(),
+            created_at: iso(1_800_000_000_000),
+            deleted_at: None,
+            certificate: None,
+            certificate_csr: None,
+            certificate_identifiers: None,
+            certificate_started_at: None,
+            last_connected_at: None,
+            renewal: None,
+        }
+    }
+
+    fn job(id: &str) -> Job {
+        Job {
+            certificate_id: id.into(),
+            tunnel_id: Some("abcdefghijkl".into()),
+            kind: JobKind::Issue,
+            identifiers: vec!["abcdefghijkl.opentunnel.test".into()],
+            csr: "CSR".into(),
+            attempts: 0,
+            created_at: 1,
+        }
+    }
+
+    #[test]
+    fn requires_tls_for_remote_databases() {
+        let remote = connect_options("mysql://u:p@aws.connect.psdb.cloud/opentunnel").unwrap();
+        assert!(matches!(
+            remote.get_ssl_mode(),
+            MySqlSslMode::VerifyIdentity
+        ));
+        let verified = connect_options(
+            "mysql://u:p@aws.connect.psdb.cloud/opentunnel?ssl-mode=VERIFY_IDENTITY",
+        )
+        .unwrap();
+        assert!(matches!(
+            verified.get_ssl_mode(),
+            MySqlSslMode::VerifyIdentity
+        ));
+        assert!(
+            connect_options("mysql://u:p@db.example.com/opentunnel?ssl-mode=DISABLED").is_err()
+        );
+        assert!(
+            connect_options("mysql://u:p@db.example.com/opentunnel?sslmode=preferred").is_err()
+        );
+        assert!(connect_options("mysql://u:p@127.0.0.1:3306/opentunnel?ssl-mode=DISABLED").is_ok());
+        assert!(connect_options("mysql://u:p@localhost/opentunnel").is_ok());
+        assert!(connect_options("mysql://u:p@[::1]:3306/opentunnel?ssl-mode=DISABLED").is_ok());
+        assert!(connect_options("postgres://u:p@localhost/opentunnel").is_err());
+    }
+
+    #[tokio::test]
+    async fn keeps_records_byte_for_byte_and_checks_revisions() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        // Migrating again is a no-op.
+        store.migrate().await.unwrap();
+        let mut tunnel = record("abcdefghijkl");
+        tunnel.renewal = Some(crate::record::Renewal {
+            certificate_id: "cert_✓".into(),
+            started_at: iso(1),
+        });
+        assert_eq!(store.save_tunnel(&tunnel, 0, 1).await.unwrap(), 1);
+        assert!(
+            store
+                .save_tunnel(&tunnel, 0, 1)
+                .await
+                .unwrap_err()
+                .is::<Conflict>()
+        );
+        let loaded = store.tunnel("abcdefghijkl").await.unwrap().unwrap();
+        assert_eq!(loaded.revision, 1);
+        assert_eq!(
+            serde_json::to_string(&loaded.record).unwrap(),
+            serde_json::to_string(&tunnel).unwrap()
+        );
+        assert_eq!(store.issuing_tunnels().await.unwrap().len(), 1);
+        // IDs are case-sensitive, as they were in SQLite.
+        assert!(store.tunnel("ABCDEFGHIJKL").await.unwrap().is_none());
+
+        assert_eq!(store.save_tunnel(&tunnel, 1, 2).await.unwrap(), 2);
+        assert!(
+            store
+                .save_tunnel(&tunnel, 1, 3)
+                .await
+                .unwrap_err()
+                .is::<Conflict>()
+        );
+        tunnel.deleted_at = Some(iso(3));
+        store.save_tunnel(&tunnel, 2, 3).await.unwrap();
+        assert!(store.issuing_tunnels().await.unwrap().is_empty());
+        assert_eq!(store.counts().await.unwrap()["deleted"], 1);
+    }
+
+    #[tokio::test]
+    async fn imports_keep_local_changes_and_bump_revisions() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let tunnel = record("abcdefghijkl");
+        let import = |force| store.import_tunnel(tunnel.clone(), Some(5), force, 1);
+        assert_eq!(import(false).await.unwrap(), ImportOutcome::Inserted);
+        assert_eq!(import(false).await.unwrap(), ImportOutcome::Unchanged);
+        assert_eq!(store.alarm("abcdefghijkl").await.unwrap(), Some(5));
+        let mut changed = tunnel.clone();
+        changed.state = TunnelState::Online;
+        assert_eq!(
+            store
+                .import_tunnel(changed.clone(), None, false, 2)
+                .await
+                .unwrap(),
+            ImportOutcome::Updated
+        );
+        let loaded = store.tunnel("abcdefghijkl").await.unwrap().unwrap();
+        assert_eq!(loaded.revision, 2);
+        store.save_tunnel(&loaded.record, 2, 3).await.unwrap();
+        assert_eq!(import(false).await.unwrap(), ImportOutcome::KeptLocal);
+        assert_eq!(import(true).await.unwrap(), ImportOutcome::Updated);
+
+        // Concurrent imports of new records all land once.
+        let imports = (0..8).map(|index| {
+            let store = store.clone();
+            async move {
+                store
+                    .import_tunnel(record(&format!("concurrent{index:02}")), None, false, 1)
+                    .await
+            }
+        });
+        for outcome in futures_util::future::join_all(imports).await {
+            assert_eq!(outcome.unwrap(), ImportOutcome::Inserted);
+        }
+    }
+
+    #[tokio::test]
+    async fn alarms_fire_once_across_concurrent_callers() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        for index in 0..20 {
+            let id = format!("tunnel{index:06}");
+            store.put_tunnel(&record(&id), 1).await.unwrap();
+            store.set_alarm(&id, Some(100 + index)).await.unwrap();
+        }
+        let (first, second) = tokio::join!(store.take_due_alarms(200), store.take_due_alarms(200));
+        let mut taken = first.unwrap();
+        taken.extend(second.unwrap());
+        taken.sort();
+        taken.dedup();
+        assert_eq!(taken.len(), 20);
+        assert_eq!(store.next_alarm().await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn jobs_are_leased_to_one_owner() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        assert!(store.add_job(job("cert_1"), 10).await.unwrap());
+        assert!(!store.add_job(job("cert_1"), 10).await.unwrap());
+        assert!(store.claim_due_jobs("a", 5, 10).await.unwrap().is_empty());
+
+        let (a, b) = tokio::join!(
+            store.claim_job("cert_1", "a", 20),
+            store.claim_job("cert_1", "b", 20)
+        );
+        let (a, b) = (a.unwrap(), b.unwrap());
+        assert!(
+            a.is_some() != b.is_some(),
+            "exactly one owner takes the job"
+        );
+        let (owner, other) = if a.is_some() { ("a", "b") } else { ("b", "a") };
+        assert!(
+            store
+                .claim_due_jobs(other, 20 + LEASE_MS - 1, 10)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            !store
+                .finish_job("cert_1", other, "done", None, 30)
+                .await
+                .unwrap()
+        );
+        assert!(store.extend_lease("cert_1", owner, 1_000).await.unwrap());
+
+        // An expired lease (a crashed owner) is taken over, and the old owner can no longer record results.
+        let taken = store
+            .claim_due_jobs(other, 1_000 + LEASE_MS + 1, 10)
+            .await
+            .unwrap();
+        assert_eq!(taken.len(), 1);
+        assert!(
+            !store
+                .retry_job("cert_1", owner, 1, 0, "x".into(), 40)
+                .await
+                .unwrap()
+        );
+        assert!(
+            store
+                .retry_job("cert_1", other, 1, 50, "x".into(), 40)
+                .await
+                .unwrap()
+        );
+        let retried = store.claim_due_jobs(owner, 60, 10).await.unwrap();
+        assert_eq!(retried[0].attempts, 1);
+        store.release_leases(owner).await.unwrap();
+        assert!(
+            store
+                .claim_job("cert_1", other, 61)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            store
+                .finish_job("cert_1", other, "done", None, 70)
+                .await
+                .unwrap()
+        );
+        assert!(!store.job_pending("cert_1").await.unwrap());
+        assert!(store.job_exists("cert_1").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn server_certificates_and_meta_are_set_once() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let created = |key: &str| ServerCertificate {
+            private_key: key.into(),
+            csr: format!("csr-{key}"),
+            certificate: None,
+            chain: None,
+            expiry: None,
+        };
+        let first = store
+            .create_server_certificate("opentunnel.test", created("a"), 1)
+            .await
+            .unwrap();
+        let second = store
+            .create_server_certificate("opentunnel.test", created("b"), 1)
+            .await
+            .unwrap();
+        assert_eq!(first.private_key, "a");
+        assert_eq!(second.private_key, "a");
+        // A certificate for a CSR that is no longer stored is not saved.
+        let stale = ServerCertificate {
+            certificate: Some("C".into()),
+            ..created("b")
+        };
+        store
+            .save_server_certificate("opentunnel.test", stale, 2)
+            .await
+            .unwrap();
+        assert!(
+            store
+                .server_certificate("opentunnel.test")
+                .await
+                .unwrap()
+                .unwrap()
+                .certificate
+                .is_none()
+        );
+
+        assert!(store.swap_meta("k", None, "1").await.unwrap());
+        assert!(!store.swap_meta("k", None, "2").await.unwrap());
+        assert!(!store.swap_meta("k", Some("0"), "2").await.unwrap());
+        assert!(store.swap_meta("k", Some("1"), "2").await.unwrap());
+        assert_eq!(store.meta("k").await.unwrap().as_deref(), Some("2"));
     }
 }

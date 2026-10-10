@@ -33,7 +33,9 @@ async fn connected(tunnel: &opentunnel::Tunnel) {
 #[tokio::test(flavor = "multi_thread")]
 async fn provisions_routes_and_deletes() {
     let dir = tempfile::tempdir().unwrap();
-    let server = TestServer::start(dir.path(), &[]).await;
+    let Some(server) = TestServer::start(dir.path(), &[]).await else {
+        return;
+    };
     let client = client(&server, &dir.path().join("client"));
     let identity = client.create("default", |_| {}).await.unwrap();
     assert!(identity.hostname.ends_with(".opentunnel.test"));
@@ -93,7 +95,9 @@ async fn provisions_routes_and_deletes() {
 #[tokio::test(flavor = "multi_thread")]
 async fn shares_a_tunnel_between_clients_by_route() {
     let dir = tempfile::tempdir().unwrap();
-    let server = TestServer::start(dir.path(), &[]).await;
+    let Some(server) = TestServer::start(dir.path(), &[]).await else {
+        return;
+    };
     let client = client(&server, &dir.path().join("client"));
     let identity = client.create("default", |_| {}).await.unwrap();
 
@@ -153,7 +157,9 @@ async fn shares_a_tunnel_between_clients_by_route() {
 #[tokio::test(flavor = "multi_thread")]
 async fn reconnects_after_a_restart() {
     let dir = tempfile::tempdir().unwrap();
-    let server = TestServer::start(dir.path(), &[]).await;
+    let Some(server) = TestServer::start(dir.path(), &[]).await else {
+        return;
+    };
     let http = server.http;
     let client = client(&server, &dir.path().join("client"));
     let identity = client.create("default", |_| {}).await.unwrap();
@@ -165,7 +171,11 @@ async fn reconnects_after_a_restart() {
     let session = tunnel.status().session.unwrap();
     server.stop().await;
 
-    let server = TestServer::start_at(dir.path(), &[], http, "127.0.0.1:0".parse().unwrap()).await;
+    let Some(server) =
+        TestServer::start_at(dir.path(), &[], http, "127.0.0.1:0".parse().unwrap()).await
+    else {
+        return;
+    };
     eventually("a new session", || async {
         let status = tunnel.status();
         status.state == State::Connected && status.session.as_deref() != Some(session.as_str())
@@ -176,6 +186,64 @@ async fn reconnects_after_a_restart() {
         .await
         .unwrap();
     assert!(response.ends_with("still here"), "{response}");
+    server.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn keeps_live_tunnels_working_while_the_database_is_down() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some(proxy) = common::proxied_database(dir.path()).await else {
+        return;
+    };
+    let Some(server) = TestServer::start(dir.path(), &[]).await else {
+        return;
+    };
+    let client = client(&server, &dir.path().join("client"));
+    let identity = client.create("default", |_| {}).await.unwrap();
+    let target = app("served from memory").await;
+    let tunnel = client
+        .connect("default", routes(&[("api", &target)]))
+        .unwrap();
+    connected(&tunnel).await;
+
+    proxy.cut();
+    // Visitors still reach the attached client, and the API answers from memory what it can.
+    for _ in 0..3 {
+        let response = server
+            .visit(&format!("api.{}", identity.hostname), "/")
+            .await
+            .unwrap();
+        assert!(response.ends_with("served from memory"), "{response}");
+    }
+    let info = client
+        .api()
+        .get(&identity.token, &identity.id)
+        .await
+        .unwrap();
+    assert_eq!(info.state, opentunnel::protocol::api::TunnelState::Online);
+    // What needs the database answers 503 instead of failing the server.
+    let http = reqwest::Client::new();
+    let created = http
+        .post(format!("{}/api/tunnel", server.api))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), 503);
+    let body: serde_json::Value = created.json().await.unwrap();
+    assert_eq!(body["_tag"], "ServiceUnavailableError");
+    assert_eq!(body["message"], "storage unavailable");
+
+    proxy.restore();
+    eventually("the database to come back", || async {
+        http.post(format!("{}/api/tunnel", server.api))
+            .json(&serde_json::json!({}))
+            .send()
+            .await
+            .is_ok_and(|response| response.status() == 201)
+    })
+    .await;
+    assert_eq!(tunnel.status().state, State::Connected);
     server.stop().await;
 }
 
@@ -194,7 +262,9 @@ fn zerossl() -> (rcgen::Issuer<'static, rcgen::KeyPair>, String) {
 #[tokio::test(flavor = "multi_thread")]
 async fn serves_a_tunnel_migrated_from_the_worker() {
     let dir = tempfile::tempdir().unwrap();
-    let server = TestServer::start(dir.path(), &[]).await;
+    let Some(server) = TestServer::start(dir.path(), &[]).await else {
+        return;
+    };
 
     // A tunnel as the Worker's Durable Object stored it, with its ZeroSSL certificate.
     let id = "migratedtunl";
@@ -292,7 +362,9 @@ async fn serves_a_tunnel_migrated_from_the_worker() {
 async fn renews_on_attach_when_the_certificate_is_due() {
     let dir = tempfile::tempdir().unwrap();
     // Certificates valid for 20 days are inside the 30-day renewal window from the start.
-    let server = TestServer::start(dir.path(), &["--local-ca-validity-days=20"]).await;
+    let Some(server) = TestServer::start(dir.path(), &["--local-ca-validity-days=20"]).await else {
+        return;
+    };
     let client = client(&server, &dir.path().join("client"));
     let identity = client.create("default", |_| {}).await.unwrap();
     let first = client

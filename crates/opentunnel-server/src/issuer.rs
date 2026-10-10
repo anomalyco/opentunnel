@@ -35,15 +35,11 @@ pub struct LocalCa {
 }
 
 impl LocalCa {
-    /// Loads the CA from the store, creating it on first use.
+    /// Loads the CA from the store, creating it on first use. Servers sharing a database share one CA.
     pub async fn load(store: &Store, validity_days: u32) -> Result<Self> {
-        let existing = (
-            store.meta("test_ca_key").await?,
-            store.meta("test_ca_certificate").await?,
-        );
-        let (key_pem, certificate_pem) = match existing {
-            (Some(key), Some(certificate)) => (key, certificate),
-            _ => {
+        let stored = match store.meta("test_ca").await? {
+            Some(stored) => stored,
+            None => {
                 let key = rcgen::KeyPair::generate()?;
                 let mut params = rcgen::CertificateParams::new(Vec::<String>::new())?;
                 params
@@ -56,14 +52,21 @@ impl LocalCa {
                     rcgen::KeyUsagePurpose::DigitalSignature,
                 ];
                 let certificate = params.self_signed(&key)?;
-                let pair = (key.serialize_pem(), certificate.pem());
-                store.set_meta("test_ca_key", &pair.0).await?;
-                store.set_meta("test_ca_certificate", &pair.1).await?;
-                pair
+                let created = format!("{}{}", key.serialize_pem(), certificate.pem());
+                // Whoever stores a CA first wins; everyone else loads it.
+                store.swap_meta("test_ca", None, &created).await?;
+                store
+                    .meta("test_ca")
+                    .await?
+                    .context("the local test CA disappeared")?
             }
         };
+        let split = stored
+            .find("-----BEGIN CERTIFICATE-----")
+            .context("the stored local test CA has no certificate")?;
+        let (key_pem, certificate_pem) = (&stored[..split], stored[split..].to_owned());
         Ok(Self {
-            key: rcgen::KeyPair::from_pem(&key_pem)?,
+            key: rcgen::KeyPair::from_pem(key_pem)?,
             certificate_pem,
             validity_days,
         })

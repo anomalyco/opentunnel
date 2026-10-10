@@ -88,7 +88,7 @@ async fn matches_the_worker() {
     });
     let jwk = opentunnel_server::acme::generate_account_jwk().unwrap();
     let jwk = format!("--acme-account-key-jwk={jwk}");
-    let server = TestServer::start(
+    let Some(server) = TestServer::start(
         dir.path(),
         &[
             "--issuer=acme",
@@ -99,7 +99,10 @@ async fn matches_the_worker() {
             "--dns-provider=challtestsrv",
         ],
     )
-    .await;
+    .await
+    else {
+        return;
+    };
     let http = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()

@@ -24,8 +24,19 @@ struct Args {
     config: Config,
 }
 
-pub fn config(dir: &Path, extra: &[&str]) -> Config {
-    let database = dir.join("db.sqlite");
+/// The test database for `dir`: created on first use and shared by every server started on `dir`, like a
+/// restarted deploy. `None` without `TEST_DATABASE_URL`.
+pub async fn database_url(dir: &Path) -> Option<String> {
+    let file = dir.join("database-url");
+    if let Ok(url) = std::fs::read_to_string(&file) {
+        return Some(url);
+    }
+    let url = opentunnel_server::store::test_database_url().await?;
+    std::fs::write(&file, &url).unwrap();
+    Some(url)
+}
+
+pub fn config(dir: &Path, database_url: &str, extra: &[&str]) -> Config {
     let website = dir.join("site");
     std::fs::create_dir_all(&website).unwrap();
     std::fs::write(website.join("index.html"), "<h1>opentunnel</h1>").unwrap();
@@ -33,7 +44,7 @@ pub fn config(dir: &Path, extra: &[&str]) -> Config {
     let mut args = vec![
         "test".to_owned(),
         format!("--domain={DOMAIN}"),
-        format!("--database={}", database.display()),
+        format!("--database-url={database_url}"),
         format!("--website-dir={}", website.display()),
         "--issuer=local".into(),
         "--http-mode=serve".into(),
@@ -67,7 +78,8 @@ pub struct TestServer {
 }
 
 impl TestServer {
-    pub async fn start(dir: &Path, extra: &[&str]) -> Self {
+    /// `None` (the test skips) without `TEST_DATABASE_URL`.
+    pub async fn start(dir: &Path, extra: &[&str]) -> Option<Self> {
         Self::start_at(
             dir,
             extra,
@@ -77,10 +89,16 @@ impl TestServer {
         .await
     }
 
-    pub async fn start_at(dir: &Path, extra: &[&str], http: SocketAddr, tls: SocketAddr) -> Self {
+    pub async fn start_at(
+        dir: &Path,
+        extra: &[&str],
+        http: SocketAddr,
+        tls: SocketAddr,
+    ) -> Option<Self> {
         opentunnel_server::install_crypto_provider();
-        let config = config(dir, extra);
-        let store = Store::open(&config.database).unwrap();
+        let url = database_url(dir).await?;
+        let config = config(dir, &url, extra);
+        let store = Store::open(&url).await.unwrap();
         let server = Server::with_store(config, Clock::system(), store)
             .await
             .unwrap();
@@ -106,7 +124,7 @@ impl TestServer {
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        Self {
+        Some(Self {
             dir: dir.to_owned(),
             api: format!("http://{http}"),
             http,
@@ -114,7 +132,7 @@ impl TestServer {
             server,
             ca,
             tasks,
-        }
+        })
     }
 
     /// Stops accepting, tells bridges to reconnect, and stops background work, like a deploy.
@@ -123,6 +141,7 @@ impl TestServer {
             task.abort();
         }
         self.server.app.service.drain("server restarting").await;
+        self.server.jobs.release().await;
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
 
@@ -215,4 +234,67 @@ where
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     panic!("timed out waiting for {what}");
+}
+
+/// A TCP proxy to the test database that can be cut, for outage tests.
+pub struct DatabaseProxy {
+    pub address: SocketAddr,
+    up: Arc<std::sync::atomic::AtomicBool>,
+    cut: tokio::sync::watch::Sender<u64>,
+}
+
+impl DatabaseProxy {
+    pub async fn start(target: String) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let up = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let (cut, _) = tokio::sync::watch::channel(0u64);
+        let accepting = up.clone();
+        let cuts = cut.clone();
+        tokio::spawn(async move {
+            while let Ok((mut visitor, _)) = listener.accept().await {
+                if !accepting.load(std::sync::atomic::Ordering::SeqCst) {
+                    continue;
+                }
+                let target = target.clone();
+                let mut cut = cuts.subscribe();
+                tokio::spawn(async move {
+                    let Ok(mut upstream) = TcpStream::connect(&target).await else {
+                        return;
+                    };
+                    tokio::select! {
+                        _ = tokio::io::copy_bidirectional(&mut visitor, &mut upstream) => {}
+                        _ = cut.changed() => {}
+                    }
+                });
+            }
+        });
+        Self { address, up, cut }
+    }
+
+    /// Drops every connection and refuses new ones until `restore`.
+    pub fn cut(&self) {
+        self.up.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.cut.send_modify(|generation| *generation += 1);
+    }
+
+    pub fn restore(&self) {
+        self.up.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// A test database reached through a [`DatabaseProxy`], for servers started on `dir`.
+pub async fn proxied_database(dir: &Path) -> Option<DatabaseProxy> {
+    let url = database_url(dir).await?;
+    let mut parsed = url::Url::parse(&url).unwrap();
+    let target = format!(
+        "{}:{}",
+        parsed.host_str().unwrap(),
+        parsed.port().unwrap_or(3306)
+    );
+    let proxy = DatabaseProxy::start(target).await;
+    parsed.set_ip_host(proxy.address.ip()).unwrap();
+    parsed.set_port(Some(proxy.address.port())).unwrap();
+    std::fs::write(dir.join("database-url"), parsed.to_string()).unwrap();
+    Some(proxy)
 }

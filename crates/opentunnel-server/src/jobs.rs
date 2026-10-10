@@ -15,7 +15,7 @@ use crate::clock::{DAY_MS, HOUR_MS, MINUTE_MS};
 use crate::crypto::uuid;
 use crate::issuer::Issuer;
 use crate::service::{RENEW_BEFORE_MS, Service};
-use crate::store::{Job, JobKind, ServerCertificate};
+use crate::store::{Job, JobKind, LEASE_MS, ServerCertificate};
 use crate::tls;
 
 /// Attempts per job, like the Workflow step's two retries.
@@ -31,7 +31,18 @@ pub struct Jobs {
     /// Delay before the second attempt; it doubles for each one after.
     pub retry_delay_ms: u64,
     pub server: Option<Arc<ServerCertificates>>,
+    /// This process's name on job leases.
+    pub owner: String,
     running: Mutex<HashSet<String>>,
+}
+
+/// The lease owner for this process: the Fly machine ID, which survives restarts so a restarted server takes
+/// its own jobs back at once, or a random name.
+pub fn lease_owner() -> String {
+    std::env::var("FLY_MACHINE_ID")
+        .ok()
+        .filter(|id| !id.is_empty())
+        .unwrap_or_else(|| format!("process-{}", uuid()))
 }
 
 impl Jobs {
@@ -48,6 +59,7 @@ impl Jobs {
             concurrency: concurrency.max(1),
             retry_delay_ms,
             server,
+            owner: lease_owner(),
             running: Mutex::new(HashSet::new()),
         })
     }
@@ -78,12 +90,11 @@ impl Jobs {
         if running >= self.concurrency {
             return Ok(());
         }
-        let due = self
-            .service
-            .store
-            .due_jobs(self.service.now(), self.concurrency + running)
+        let store = &self.service.store;
+        let due = store
+            .due_job_ids(&self.owner, self.service.now(), self.concurrency + running)
             .await?;
-        for job in due {
+        for id in due {
             if self.running.lock().expect("running lock").len() >= self.concurrency {
                 break;
             }
@@ -91,10 +102,22 @@ impl Jobs {
                 .running
                 .lock()
                 .expect("running lock")
-                .insert(job.certificate_id.clone())
+                .insert(id.clone())
             {
                 continue;
             }
+            // Another server may have taken it since it was listed.
+            let job = match store.claim_job(&id, &self.owner, self.service.now()).await {
+                Ok(Some(job)) => job,
+                Ok(None) => {
+                    self.running.lock().expect("running lock").remove(&id);
+                    continue;
+                }
+                Err(error) => {
+                    self.running.lock().expect("running lock").remove(&id);
+                    return Err(error);
+                }
+            };
             let jobs = self.clone();
             tasks.spawn(async move {
                 let id = job.certificate_id.clone();
@@ -108,9 +131,20 @@ impl Jobs {
         Ok(())
     }
 
+    /// Gives up this process's job leases, on shutdown.
+    pub async fn release(&self) {
+        if let Err(error) = self.service.store.release_leases(&self.owner).await {
+            warn!(%error, "releasing job leases failed");
+        }
+    }
+
     /// Runs every due job to completion, for tests.
     pub async fn run_due(self: &Arc<Self>) -> Result<usize> {
-        let due = self.service.store.due_jobs(self.service.now(), 100).await?;
+        let due = self
+            .service
+            .store
+            .claim_due_jobs(&self.owner, self.service.now(), 100)
+            .await?;
         let count = due.len();
         for job in due {
             self.execute(job).await?;
@@ -124,7 +158,8 @@ impl Jobs {
         let tunnel = job.tunnel_id.clone();
         let certificate_id = job.certificate_id.clone();
         let kind = job.kind;
-        let result = self
+        let owner = &self.owner;
+        let issue = self
             .issuer
             .issue(&job.identifiers, &job.csr, async |challenge: Challenge| {
                 // Only first issuance shows the challenge; a renewal keeps showing the current certificate.
@@ -143,8 +178,23 @@ impl Jobs {
                     anyhow::bail!(PERSIST_FAILED);
                 }
                 Ok(())
-            })
-            .await;
+            });
+        // Keep the lease while the order runs, so no other server takes the job over.
+        tokio::pin!(issue);
+        let mut renew = tokio::time::interval(Duration::from_millis(LEASE_MS / 3));
+        renew.tick().await;
+        let result = loop {
+            tokio::select! {
+                result = &mut issue => break result,
+                _ = renew.tick() => {
+                    match service.store.extend_lease(&job.certificate_id, owner, service.now()).await {
+                        Ok(true) => {}
+                        Ok(false) => warn!(certificate = %job.certificate_id, "lost the lease on a certificate job"),
+                        Err(error) => warn!(%error, certificate = %job.certificate_id, "extending a job lease failed"),
+                    }
+                }
+            }
+        };
         let now = service.now();
         match result {
             Ok(issued) => {
@@ -171,8 +221,9 @@ impl Jobs {
                 }
                 service
                     .store
-                    .finish_job(&job.certificate_id, "done", None, now)
+                    .finish_job(&job.certificate_id, owner, "done", None, now)
                     .await
+                    .map(drop)
             }
             Err(error) => {
                 let reason = format!("{error:#}");
@@ -182,15 +233,24 @@ impl Jobs {
                     // The tunnel was deleted or issued another certificate meanwhile.
                     return service
                         .store
-                        .finish_job(&job.certificate_id, "failed", Some(reason), now)
-                        .await;
+                        .finish_job(&job.certificate_id, owner, "failed", Some(reason), now)
+                        .await
+                        .map(drop);
                 }
                 if attempts < ATTEMPTS {
                     let delay = self.retry_delay_ms * (1 << (attempts - 1));
                     return service
                         .store
-                        .retry_job(&job.certificate_id, attempts, now + delay, reason, now)
-                        .await;
+                        .retry_job(
+                            &job.certificate_id,
+                            owner,
+                            attempts,
+                            now + delay,
+                            reason,
+                            now,
+                        )
+                        .await
+                        .map(drop);
                 }
                 if let (JobKind::Issue | JobKind::Renew, Some(tunnel)) = (&job.kind, &job.tunnel_id)
                 {
@@ -203,8 +263,9 @@ impl Jobs {
                 }
                 service
                     .store
-                    .finish_job(&job.certificate_id, "failed", Some(reason), now)
+                    .finish_job(&job.certificate_id, owner, "failed", Some(reason), now)
                     .await
+                    .map(drop)
             }
         }
     }
@@ -301,8 +362,9 @@ impl ServerCertificates {
             return Ok(());
         }
         let job_key = format!("server_job:{}", self.name);
-        if let Some(job) = store.meta(&job_key).await?
-            && store.job_pending(&job).await?
+        let previous = store.meta(&job_key).await?;
+        if let Some(job) = &previous
+            && store.job_pending(job).await?
         {
             return Ok(());
         }
@@ -322,13 +384,17 @@ impl ServerCertificates {
                     chain: None,
                     expiry: None,
                 };
+                // Another server sharing the database may have stored one first; everyone uses that one.
                 store
-                    .save_server_certificate(&self.name, created.clone(), now)
-                    .await?;
-                created
+                    .create_server_certificate(&self.name, created, now)
+                    .await?
             }
         };
         let id = format!("server_{}", uuid());
+        if !store.swap_meta(&job_key, previous.as_deref(), &id).await? {
+            // Another server requested it meanwhile.
+            return Ok(());
+        }
         store
             .add_job(
                 Job {
@@ -343,7 +409,6 @@ impl ServerCertificates {
                 now,
             )
             .await?;
-        store.set_meta(&job_key, &id).await?;
         self.service.jobs.notify_one();
         info!(domain = %self.name, "requested a certificate for the API domain");
         Ok(())

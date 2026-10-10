@@ -40,6 +40,14 @@ enum Command {
     AccountKey,
 }
 
+fn database_url(config: &Config) -> Result<String> {
+    config
+        .database_url
+        .clone()
+        .filter(|url| !url.is_empty())
+        .context("DATABASE_URL is not set")
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -56,9 +64,8 @@ async fn main() -> Result<()> {
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => {
             let server = Server::build(cli.config.clone(), clock).await?;
-            if let Some(ca) = &server.local_ca {
-                let path = cli.config.database.with_file_name("local-ca.pem");
-                std::fs::write(&path, ca)?;
+            if let (Some(ca), Some(path)) = (&server.local_ca, &cli.config.local_ca_file) {
+                std::fs::write(path, ca).with_context(|| format!("writing {}", path.display()))?;
                 tracing::warn!(path = %path.display(), "wrote the local test CA certificate");
             }
             server.run().await
@@ -74,7 +81,7 @@ async fn main() -> Result<()> {
             };
             let export: ExportFile =
                 serde_json::from_str(&text).context("reading the export file")?;
-            let store = Store::open(&cli.config.database)?;
+            let store = Store::open(&database_url(&cli.config)?).await?;
             let mut summary = migration::import(&store, &clock, export, force).await?;
             summary.ids.clear();
             println!("{}", serde_json::to_string_pretty(&summary)?);
@@ -84,7 +91,7 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Command::Export { file } => {
-            let store = Store::open(&cli.config.database)?;
+            let store = Store::open(&database_url(&cli.config)?).await?;
             let export = migration::export(&store, &clock).await?;
             let text = serde_json::to_string_pretty(&export)? + "\n";
             if file.as_os_str() == "-" {
