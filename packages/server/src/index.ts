@@ -3,6 +3,7 @@ import { concatBytes, parseClientHello } from "./tls-client-hello.js";
 import { env, waitUntil } from "cloudflare:workers";
 import { base64Url } from "./crypto.js";
 import { makeApiHandler } from "./routes.js";
+import { handleAdmin } from "./admin-export.js";
 
 export { CertificateWorkflow } from "./certificate-workflow.js";
 export { TunnelObject } from "./tunnel-object.js";
@@ -164,6 +165,9 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/health") return Response.json({ ok: true });
     if (url.pathname === "/api/relay") return relayWebSocket(request);
+    // TEMPORARY (migration to the Fly server): see admin-export.ts.
+    const admin = await handleAdmin(request);
+    if (admin) return admin;
     const connect = /^\/api\/tunnel\/([^/]+)\/connect$/.exec(url.pathname);
     if (connect && request.method === "GET") {
       return env.TUNNELS.getByName(decodeURIComponent(connect[1]!)).fetch(request);

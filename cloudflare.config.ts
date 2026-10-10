@@ -24,7 +24,9 @@ export default defineConfig(({ mode = "production" }) => {
     worker: {
       ...self,
       compatibilityFlags: ["nodejs_compat"],
-      workersDev: !production,
+      // TEMPORARY (migration to the Fly server, docs/cutover.md): production also answers on workers.dev, so
+      // the new server can reach the export endpoint and /api/relay once opentunnel.xyz points at it.
+      workersDev: true,
       observability: { enabled: true },
       assets: { runWorkerFirst: ["/api/*"] },
       triggers: production ? [triggers.fetch({ pattern: "opentunnel.xyz/*", zone: "opentunnel.xyz" })] : [],
@@ -39,6 +41,8 @@ export default defineConfig(({ mode = "production" }) => {
         ACME_ACCOUNT_KEY_JWK: bindings.secret(),
         CLOUDFLARE_API_TOKEN: bindings.secret(),
         RELAY_TOKEN: bindings.secret(),
+        // TEMPORARY (migration): bearer secret for /api/admin/export and /api/admin/handoff.
+        ADMIN_EXPORT_TOKEN: bindings.secret(),
         // Anomaly's platform event stream, platform_<stack>_event (anomaly/platform src/lake), by stream ID.
         EVENTS: bindings.pipeline({
           name: production ? "251a89241c3a461c9007f6b6f345ed8b" : "04809367dc154b469b80b054cc6afa6e",

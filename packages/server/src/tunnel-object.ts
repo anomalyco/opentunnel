@@ -131,6 +131,28 @@ export class TunnelObject extends DurableObject<Cloudflare.Env> {
     return tunnelView(record);
   }
 
+  /** TEMPORARY (migration, see admin-export.ts): the stored record and renewal alarm, read-only. */
+  async exportRecord(): Promise<{ record: StoredTunnel | null; alarm: number | null }> {
+    return { record: (await this.record()) ?? null, alarm: await this.ctx.storage.getAlarm() };
+  }
+
+  /**
+   * TEMPORARY (migration, see admin-export.ts): closes every bridge with 1012 so its client reconnects, now to
+   * the new server, and stops renewing here. Returns how many bridges were closed.
+   */
+  async handoff(): Promise<number> {
+    const sockets = this.ctx.getWebSockets("bridge");
+    for (const socket of sockets) {
+      try {
+        socket.close(1012, "server moved");
+      } catch {
+        // Already closing.
+      }
+    }
+    await this.ctx.storage.deleteAlarm();
+    return sockets.length;
+  }
+
   async info(token: string): Promise<TunnelInfoResult> {
     const record = await this.record();
     if (!record || record.deletedAt) return { status: "not-found" };
