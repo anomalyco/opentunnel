@@ -47,6 +47,11 @@ await connection.setRoutes({ api: "127.0.0.1:4000", "@": "127.0.0.1:8080" })
 Changing only targets applies to new connections immediately. Adding or
 removing names re-attaches the bridge.
 
+A target receives the decrypted bytes unchanged from a loopback connection, so
+it cannot tell a tunneled request from a local one by peer address or `Host`.
+The visitor's address is the `peer` field of each `connection-opened` event.
+See `docs/trust-boundary.md` in the repository for what a target can trust.
+
 ## API
 
 ```ts

@@ -51,7 +51,10 @@ The hosted service is one Rust binary, `crates/opentunnel-server`, on Fly.io
 - Certificates come from ZeroSSL over ACME with DNS-01 challenges in the
   Cloudflare-hosted zone, and renew 30 days before expiry.
 - The local client owns the certificate private key, terminates TLS, and
-  forwards decrypted traffic to the local application.
+  forwards decrypted traffic to the local application unchanged. The
+  application sees a loopback peer and the visitor's own headers, so it must
+  not treat tunneled requests as local; see
+  [docs/trust-boundary.md](docs/trust-boundary.md).
 
 There are two client implementations that share one protocol:
 
