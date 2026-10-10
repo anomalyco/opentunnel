@@ -16,6 +16,18 @@ kill_timeout = "15s"
   # Fly's proxy_proto handler below prepends a PROXY v2 header with the visitor's address.
   PROXY_PROTOCOL = "true"
   RUST_LOG = "info"
+  # opentunnel.xyz is on the Public Suffix List, so no public CA issues for it: the apex stays proxied by
+  # Cloudflare, which reaches this server with a Cloudflare Origin CA certificate.
+  TLS_CERT_FILE = "/etc/opentunnel/origin-cert.pem"
+  TLS_KEY_FILE = "/etc/opentunnel/origin-key.pem"
+
+[[files]]
+  guest_path = "/etc/opentunnel/origin-cert.pem"
+  secret_name = "ORIGIN_CERT_PEM"
+
+[[files]]
+  guest_path = "/etc/opentunnel/origin-key.pem"
+  secret_name = "ORIGIN_KEY_PEM"
 
 # Public TLS: tunnel hostnames by SNI (passthrough), and the API and website for opentunnel.xyz.
 [[services]]
