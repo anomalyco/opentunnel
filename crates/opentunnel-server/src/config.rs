@@ -48,7 +48,11 @@ pub struct Config {
     #[arg(long, env = "LOCAL_CA_VALIDITY_DAYS", default_value_t = 90)]
     pub local_ca_validity_days: u32,
 
-    #[arg(long, env = "ACME_URL", default_value = "https://acme.zerossl.com/v2/DV90")]
+    #[arg(
+        long,
+        env = "ACME_URL",
+        default_value = "https://acme.zerossl.com/v2/DV90"
+    )]
     pub acme_url: String,
 
     #[arg(long, env = "ACME_EMAIL", default_value = "acme@opentunnel.xyz")]
@@ -68,7 +72,11 @@ pub struct Config {
     #[arg(long, env = "ACME_CA_BUNDLE")]
     pub acme_ca_bundle: Option<PathBuf>,
 
-    #[arg(long, env = "ACME_DNS_PROPAGATION_TIMEOUT_MS", default_value_t = 10_000)]
+    #[arg(
+        long,
+        env = "ACME_DNS_PROPAGATION_TIMEOUT_MS",
+        default_value_t = 10_000
+    )]
     pub acme_dns_propagation_timeout_ms: u64,
 
     #[arg(long, env = "ACME_POLL_INTERVAL_MS", default_value_t = 5_000)]
@@ -77,18 +85,30 @@ pub struct Config {
     #[arg(long, env = "DNS_PROVIDER", value_enum, default_value = "cloudflare")]
     pub dns_provider: DnsKind,
 
-    #[arg(long, env = "CLOUDFLARE_ZONE_ID", default_value = "43d8e5cf1c0ccc8c3868125be74a5e68")]
+    #[arg(
+        long,
+        env = "CLOUDFLARE_ZONE_ID",
+        default_value = "43d8e5cf1c0ccc8c3868125be74a5e68"
+    )]
     pub cloudflare_zone_id: String,
 
     /// DNS edit on the zone, only for DNS-01 challenges.
     #[arg(long, env = "CLOUDFLARE_API_TOKEN", hide_env_values = true)]
     pub cloudflare_api_token: Option<String>,
 
-    #[arg(long, env = "CLOUDFLARE_API_URL", default_value = "https://api.cloudflare.com/client/v4")]
+    #[arg(
+        long,
+        env = "CLOUDFLARE_API_URL",
+        default_value = "https://api.cloudflare.com/client/v4"
+    )]
     pub cloudflare_api_url: String,
 
     /// pebble-challtestsrv's management API, with `--dns-provider challtestsrv`.
-    #[arg(long, env = "CHALLTESTSRV_URL", default_value = "http://127.0.0.1:8055")]
+    #[arg(
+        long,
+        env = "CHALLTESTSRV_URL",
+        default_value = "http://127.0.0.1:8055"
+    )]
     pub challtestsrv_url: String,
 
     #[arg(long, env = "ISSUANCE_CONCURRENCY", default_value_t = 4)]

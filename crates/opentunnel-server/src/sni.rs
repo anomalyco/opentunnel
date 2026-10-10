@@ -46,7 +46,9 @@ pub fn parse_client_hello(data: &[u8]) -> Hello {
                 return Hello::Invalid("expected TLS ClientHello");
             }
             let length = *handshake_length.get_or_insert(
-                ((handshake[1] as usize) << 16) | ((handshake[2] as usize) << 8) | handshake[3] as usize,
+                ((handshake[1] as usize) << 16)
+                    | ((handshake[2] as usize) << 8)
+                    | handshake[3] as usize,
             );
             if handshake.len() >= length + 4 {
                 break;
@@ -204,7 +206,11 @@ pub(crate) mod tests {
     fn waits_for_more_bytes() {
         let hello = client_hello("example.test", &[]);
         for cut in [0, 3, 5, hello.len() - 1] {
-            assert_eq!(parse_client_hello(&hello[..cut]), Hello::Incomplete, "cut {cut}");
+            assert_eq!(
+                parse_client_hello(&hello[..cut]),
+                Hello::Incomplete,
+                "cut {cut}"
+            );
         }
     }
 

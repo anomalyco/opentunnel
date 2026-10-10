@@ -73,8 +73,12 @@ pub fn data_frame(conn: u32, payload: &[u8]) -> Outbound {
 }
 
 /// Runs a bridge session on an upgraded socket until it closes.
-pub async fn run<S>(service: Service, tunnel_id: String, socket: WebSocketStream<S>, client: ClientInfo)
-where
+pub async fn run<S>(
+    service: Service,
+    tunnel_id: String,
+    socket: WebSocketStream<S>,
+    client: ClientInfo,
+) where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let (tx, rx) = mpsc::channel(OUTBOUND_QUEUE);
@@ -89,7 +93,10 @@ where
     let (sink, stream) = socket.split();
     let writer = tokio::spawn(write(sink, rx, bridge.clone()));
     let (code, clean) = read(&service, &tunnel_id, &bridge, stream).await;
-    if let Err(error) = service.bridge_closed(&tunnel_id, &bridge, code, clean).await {
+    if let Err(error) = service
+        .bridge_closed(&tunnel_id, &bridge, code, clean)
+        .await
+    {
         warn!(%error, tunnel = %tunnel_id, "failed to clean up a bridge");
     }
     // Let a queued close go out before the socket drops.
@@ -296,7 +303,9 @@ async fn handle_control(
             service.report_active(tunnel_id, bridge);
         }
         Some(kind @ ("end" | "reset")) => {
-            let Some(conn) = control["conn"].as_u64().and_then(|conn| u32::try_from(conn).ok())
+            let Some(conn) = control["conn"]
+                .as_u64()
+                .and_then(|conn| u32::try_from(conn).ok())
             else {
                 return;
             };
@@ -309,8 +318,9 @@ async fn handle_control(
                 // Queued after the data, so the visitor gets everything before the half-close.
                 let inbound = channel.inbound.clone();
                 tokio::spawn(async move {
-                    let _ = tokio::time::timeout(STALLED_CHANNEL_TIMEOUT, inbound.send(Inbound::End))
-                        .await;
+                    let _ =
+                        tokio::time::timeout(STALLED_CHANNEL_TIMEOUT, inbound.send(Inbound::End))
+                            .await;
                 });
             }
         }
@@ -337,11 +347,12 @@ async fn data(bridge: &Arc<Bridge>, frame: Bytes) {
     let sent = match channel.inbound.try_send(Inbound::Data(payload)) {
         Ok(()) => true,
         Err(mpsc::error::TrySendError::Closed(_)) => true,
-        Err(mpsc::error::TrySendError::Full(Inbound::Data(payload))) => {
-            tokio::time::timeout(STALLED_CHANNEL_TIMEOUT, channel.inbound.send(Inbound::Data(payload)))
-                .await
-                .is_ok()
-        }
+        Err(mpsc::error::TrySendError::Full(Inbound::Data(payload))) => tokio::time::timeout(
+            STALLED_CHANNEL_TIMEOUT,
+            channel.inbound.send(Inbound::Data(payload)),
+        )
+        .await
+        .is_ok(),
         Err(mpsc::error::TrySendError::Full(Inbound::End)) => true,
     };
     if !sent {

@@ -17,12 +17,13 @@
 - Rust checks: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`.
 - Rust uses the `ring` crypto provider everywhere; do not add dependencies that pull in `aws-lc-rs`, since it complicates cross-compiling.
 
-## Cloudflare Runtime
+## Hosted Service
 
-- The hosted application is one Worker, configured by the root `cloudflare.config.ts` and built by the root `vite.config.ts` (Cloudflare Vite plugin): `packages/server` is its code (HTTP handlers, inbound TCP, Durable Objects, a certificate Workflow) and `packages/website` its static assets.
-- Keep runtime-neutral schemas, bridge framing, and HTTP contracts in `packages/protocol`.
-- Keep API handlers, TLS parsing, Durable Objects, and Workflows in `packages/server`.
-- Spectrum must use TLS passthrough; never move tenant TLS termination into the Worker.
-- `cloudflare.config.ts` switches on `mode`, and every resource is named `<name>-<mode>`; production is `--mode production`. It loads with Node 22.18 or later, not Bun.
-- Run `bun run types` at the root after changing bindings.
-- `bun run ready` at the root builds everything; `bun run deploy --mode <mode>` deploys that build.
+- The hosted service is one Rust binary, `crates/opentunnel-server`, deployed to Fly.io by the root `Dockerfile` and `fly.toml` (app `opentunnel`, region `iad`, SQLite on a volume). `docs/server.md` describes it; `docs/cutover.md` is the runbook for moving off the Cloudflare Worker.
+- It is not published and keeps its own version (`publish = false`), outside the release group.
+- Keep runtime-neutral schemas, bridge framing, and HTTP contracts in `packages/protocol`; the server reuses the Rust wire types in `crates/opentunnel/src/protocol`.
+- The HTTP API must answer exactly as `crates/opentunnel-server/tests/fixtures/worker-contract.json` records (paths, status codes, bodies, key order); installed clients depend on it.
+- Never terminate tenant TLS in the server: only the API domain is terminated there, everything else is routed by SNI and passed through.
+- DNS stays on Cloudflare; DNS-01 challenges go through the provider in `crates/opentunnel-server/src/dns.rs`.
+- `packages/website` is built with plain Vite (`bun run ready`, output `dist/website`) and served by the server.
+- Code marked TEMPORARY (the `migration/` directory, `crates/opentunnel-server/src/migration.rs` apart from the export file format, and the `LEGACY_*` settings) exists only for the cutover and is removed once the Worker is decommissioned.

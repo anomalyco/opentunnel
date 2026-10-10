@@ -56,8 +56,17 @@ pub struct ImportSummary {
 }
 
 /// Imports records. Rows this server changed since they were imported are kept unless `force`.
-pub async fn import(store: &Store, clock: &Clock, file: ExportFile, force: bool) -> Result<ImportSummary> {
-    anyhow::ensure!(file.version == 1, "unsupported export version {}", file.version);
+pub async fn import(
+    store: &Store,
+    clock: &Clock,
+    file: ExportFile,
+    force: bool,
+) -> Result<ImportSummary> {
+    anyhow::ensure!(
+        file.version == 1,
+        "unsupported export version {}",
+        file.version
+    );
     let mut summary = ImportSummary::default();
     for entry in file.records {
         let Some(record) = entry.record else {
@@ -68,9 +77,15 @@ pub async fn import(store: &Store, clock: &Clock, file: ExportFile, force: bool)
             summary.skipped += 1;
             continue;
         }
-        let alarm = entry.alarm.filter(|alarm| *alarm > 0.0).map(|alarm| alarm as u64);
+        let alarm = entry
+            .alarm
+            .filter(|alarm| *alarm > 0.0)
+            .map(|alarm| alarm as u64);
         let id = record.id.clone();
-        match store.import_tunnel(record, alarm, force, clock.now_ms()).await? {
+        match store
+            .import_tunnel(record, alarm, force, clock.now_ms())
+            .await?
+        {
             ImportOutcome::Inserted => summary.inserted += 1,
             ImportOutcome::Updated => summary.updated += 1,
             ImportOutcome::Unchanged => summary.unchanged += 1,
@@ -215,7 +230,11 @@ impl PullThrough {
     /// Fetches and imports one tunnel. Returns whether the Worker had it.
     pub async fn fetch(&self, id: &str) -> bool {
         // Tunnel IDs are 12 base32 characters; nothing else is worth asking about.
-        if id.len() != 12 || !id.bytes().all(|byte| byte.is_ascii_lowercase() || (b'2'..=b'7').contains(&byte)) {
+        if id.len() != 12
+            || !id
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || (b'2'..=b'7').contains(&byte))
+        {
             return false;
         }
         let Some(token) = &self.legacy.export_token else {
@@ -282,7 +301,10 @@ impl PullThrough {
         .await
         {
             Ok(_) => {
-                info!(tunnel = id, "imported a tunnel from the Worker on first use");
+                info!(
+                    tunnel = id,
+                    "imported a tunnel from the Worker on first use"
+                );
                 true
             }
             Err(error) => {

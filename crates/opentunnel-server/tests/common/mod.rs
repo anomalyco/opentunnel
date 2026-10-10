@@ -42,7 +42,9 @@ pub fn config(dir: &Path, extra: &[&str]) -> Config {
     ];
     args.extend(extra.iter().map(|arg| (*arg).to_owned()));
     // Later flags override the defaults above.
-    let matches = Args::command().args_override_self(true).get_matches_from(args);
+    let matches = Args::command()
+        .args_override_self(true)
+        .get_matches_from(args);
     Args::from_arg_matches(&matches).unwrap().config
 }
 
@@ -66,14 +68,22 @@ pub struct TestServer {
 
 impl TestServer {
     pub async fn start(dir: &Path, extra: &[&str]) -> Self {
-        Self::start_at(dir, extra, "127.0.0.1:0".parse().unwrap(), "127.0.0.1:0".parse().unwrap()).await
+        Self::start_at(
+            dir,
+            extra,
+            "127.0.0.1:0".parse().unwrap(),
+            "127.0.0.1:0".parse().unwrap(),
+        )
+        .await
     }
 
     pub async fn start_at(dir: &Path, extra: &[&str], http: SocketAddr, tls: SocketAddr) -> Self {
         opentunnel_server::install_crypto_provider();
         let config = config(dir, extra);
         let store = Store::open(&config.database).unwrap();
-        let server = Server::with_store(config, Clock::system(), store).await.unwrap();
+        let server = Server::with_store(config, Clock::system(), store)
+            .await
+            .unwrap();
         let ca = server.local_ca.clone().unwrap_or_default();
         let mut tasks = server.start_background().await.unwrap();
         let server = Arc::new(server);
@@ -144,11 +154,14 @@ pub fn connector(ca: &str) -> tokio_rustls::TlsConnector {
 pub async fn visit(tls: SocketAddr, ca: &str, sni: &str, path: &str) -> std::io::Result<String> {
     let stream = TcpStream::connect(tls).await?;
     let name = ServerName::try_from(sni.to_owned()).unwrap();
-    let mut stream = tokio::time::timeout(Duration::from_secs(10), connector(ca).connect(name, stream))
-        .await
-        .map_err(|_| std::io::Error::other("handshake timed out"))??;
+    let mut stream =
+        tokio::time::timeout(Duration::from_secs(10), connector(ca).connect(name, stream))
+            .await
+            .map_err(|_| std::io::Error::other("handshake timed out"))??;
     stream
-        .write_all(format!("GET {path} HTTP/1.1\r\nHost: {sni}\r\nConnection: close\r\n\r\n").as_bytes())
+        .write_all(
+            format!("GET {path} HTTP/1.1\r\nHost: {sni}\r\nConnection: close\r\n\r\n").as_bytes(),
+        )
         .await?;
     let mut response = Vec::new();
     tokio::time::timeout(Duration::from_secs(10), stream.read_to_end(&mut response))
@@ -163,12 +176,16 @@ pub async fn app(body: &'static str) -> String {
     let address = listener.local_addr().unwrap().to_string();
     tokio::spawn(async move {
         loop {
-            let Ok((mut socket, _)) = listener.accept().await else { return };
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
             tokio::spawn(async move {
                 let mut buffer = vec![0u8; 8192];
                 let mut request = Vec::new();
                 while !request.windows(4).any(|window| window == b"\r\n\r\n") {
-                    let Ok(read) = socket.read(&mut buffer).await else { return };
+                    let Ok(read) = socket.read(&mut buffer).await else {
+                        return;
+                    };
                     if read == 0 {
                         return;
                     }

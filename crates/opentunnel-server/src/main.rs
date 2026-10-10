@@ -10,7 +10,11 @@ use opentunnel_server::server::Server;
 use opentunnel_server::store::Store;
 
 #[derive(Parser)]
-#[command(name = "opentunnel-server", version, about = "The hosted OpenTunnel service")]
+#[command(
+    name = "opentunnel-server",
+    version,
+    about = "The hosted OpenTunnel service"
+)]
 struct Cli {
     #[command(flatten)]
     config: Config,
@@ -39,6 +43,8 @@ enum Command {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,hyper=warn,rustls=warn".into()),
@@ -51,10 +57,7 @@ async fn main() -> Result<()> {
         Command::Serve => {
             let server = Server::build(cli.config.clone(), clock).await?;
             if let Some(ca) = &server.local_ca {
-                let path = cli
-                    .config
-                    .database
-                    .with_file_name("local-ca.pem");
+                let path = cli.config.database.with_file_name("local-ca.pem");
                 std::fs::write(&path, ca)?;
                 tracing::warn!(path = %path.display(), "wrote the local test CA certificate");
             }
@@ -66,9 +69,11 @@ async fn main() -> Result<()> {
                 std::io::stdin().read_to_string(&mut text)?;
                 text
             } else {
-                std::fs::read_to_string(&file).with_context(|| format!("reading {}", file.display()))?
+                std::fs::read_to_string(&file)
+                    .with_context(|| format!("reading {}", file.display()))?
             };
-            let export: ExportFile = serde_json::from_str(&text).context("reading the export file")?;
+            let export: ExportFile =
+                serde_json::from_str(&text).context("reading the export file")?;
             let store = Store::open(&cli.config.database)?;
             let mut summary = migration::import(&store, &clock, export, force).await?;
             summary.ids.clear();

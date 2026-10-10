@@ -88,7 +88,10 @@ pub fn text_response(status: StatusCode, text: &str) -> Response<Body> {
 fn unauthorized() -> Response<Body> {
     ordered(
         StatusCode::UNAUTHORIZED,
-        &[("_tag", "UnauthorizedError".into()), ("message", "Invalid bearer token".into())],
+        &[
+            ("_tag", "UnauthorizedError".into()),
+            ("message", "Invalid bearer token".into()),
+        ],
     )
 }
 
@@ -221,7 +224,10 @@ impl App {
                 Some(query) => format!("{rest}?{query}"),
                 None => rest.to_owned(),
             };
-            let body = match Limited::new(request.into_body(), 64 * 1024 * 1024).collect().await {
+            let body = match Limited::new(request.into_body(), 64 * 1024 * 1024)
+                .collect()
+                .await
+            {
                 Ok(body) => body.to_bytes(),
                 Err(_) => return response(StatusCode::BAD_REQUEST),
             };
@@ -434,7 +440,10 @@ impl App {
                     ("_tag", "InvalidHostnameError".into()),
                     ("provided", provided.into()),
                     ("expected", expected.into()),
-                    ("message", "CSR hostname does not match tunnel hostname".into()),
+                    (
+                        "message",
+                        "CSR hostname does not match tunnel hostname".into(),
+                    ),
                 ],
             ),
             Ok(Bind::InProgress) => ordered(
@@ -442,7 +451,10 @@ impl App {
                 &[
                     ("_tag", "CertificateInProgressError".into()),
                     ("tunnelID", id.into()),
-                    ("message", "Certificate issuance is already in progress".into()),
+                    (
+                        "message",
+                        "Certificate issuance is already in progress".into(),
+                    ),
                 ],
             ),
             Ok(Bind::Unavailable(message)) => unavailable(message),
@@ -498,9 +510,12 @@ impl App {
             let mut config = WebSocketConfig::default();
             config.max_message_size = Some(MAX_FRAME * 16);
             config.max_frame_size = Some(MAX_FRAME * 16);
-            let socket =
-                WebSocketStream::from_raw_socket(TokioIo::new(upgraded), Role::Server, Some(config))
-                    .await;
+            let socket = WebSocketStream::from_raw_socket(
+                TokioIo::new(upgraded),
+                Role::Server,
+                Some(config),
+            )
+            .await;
             crate::bridge::run(service, id, socket, client).await;
         });
         let mut response = response(StatusCode::SWITCHING_PROTOCOLS);
@@ -521,7 +536,9 @@ impl App {
 
 /// The tunnel ID in `/api/tunnel/<id>/connect`, matched exactly as the Worker matched it.
 fn connect_path(path: &str) -> Option<&str> {
-    let id = path.strip_prefix("/api/tunnel/")?.strip_suffix("/connect")?;
+    let id = path
+        .strip_prefix("/api/tunnel/")?
+        .strip_suffix("/connect")?;
     (!id.is_empty() && !id.contains('/')).then_some(id)
 }
 

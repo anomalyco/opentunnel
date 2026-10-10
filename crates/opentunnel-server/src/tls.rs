@@ -35,7 +35,8 @@ impl ServerCertificate {
         let key = PrivateKeyDer::from_pem_slice(key_pem.as_bytes())
             .map_err(|error| anyhow!("invalid private key: {error}"))?;
         let key = any_supported_type(&key).map_err(|error| anyhow!("unsupported key: {error}"))?;
-        *self.current.write().expect("certificate lock") = Some(Arc::new(CertifiedKey::new(chain, key)));
+        *self.current.write().expect("certificate lock") =
+            Some(Arc::new(CertifiedKey::new(chain, key)));
         Ok(())
     }
 

@@ -72,7 +72,12 @@ impl Server {
             ),
             _ => Analytics::disabled(clock.clone()),
         };
-        let service = Service::new(config.domain.clone(), store.clone(), clock.clone(), analytics);
+        let service = Service::new(
+            config.domain.clone(),
+            store.clone(),
+            clock.clone(),
+            analytics,
+        );
 
         let (issuer, local_ca) = match config.issuer {
             IssuerKind::Local => {
@@ -103,7 +108,10 @@ impl Server {
                     AcmeConfig {
                         directory: config.acme_url.clone(),
                         email: config.acme_email.clone(),
-                        eab_kid: config.acme_eab_kid.clone().filter(|value| !value.is_empty()),
+                        eab_kid: config
+                            .acme_eab_kid
+                            .clone()
+                            .filter(|value| !value.is_empty()),
                         eab_hmac_key: config
                             .acme_eab_hmac_key
                             .clone()
@@ -147,7 +155,11 @@ impl Server {
 
         let stats = Arc::new(Stats::default());
         let mut fallback: Option<Arc<dyn Fallback>> = None;
-        if let Some(url) = config.legacy_worker_url.clone().filter(|url| !url.is_empty()) {
+        if let Some(url) = config
+            .legacy_worker_url
+            .clone()
+            .filter(|url| !url.is_empty())
+        {
             let legacy = Legacy {
                 worker_url: url.trim_end_matches('/').to_owned(),
                 relay_token: config.relay_token.clone().filter(|token| !token.is_empty()),
@@ -258,7 +270,12 @@ impl Server {
         }
     }
 
-    async fn connection(&self, stream: TcpStream, peer: SocketAddr, acceptor: tokio_rustls::TlsAcceptor) {
+    async fn connection(
+        &self,
+        stream: TcpStream,
+        peer: SocketAddr,
+        acceptor: tokio_rustls::TlsAcceptor,
+    ) {
         let accepted = match relay::accept(stream, peer, self.config.proxy_protocol).await {
             Ok(accepted) => accepted,
             Err(error) => {

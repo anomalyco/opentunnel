@@ -78,8 +78,15 @@ async fn provisions_routes_and_deletes() {
             .await
             .is_err()
     );
-    let error = client.api().get(&identity.token, &identity.id).await.unwrap_err();
-    assert!(matches!(error, opentunnel::Error::Api { status: 404, .. }), "{error}");
+    let error = client
+        .api()
+        .get(&identity.token, &identity.id)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, opentunnel::Error::Api { status: 404, .. }),
+        "{error}"
+    );
     server.stop().await;
 }
 
@@ -100,9 +107,27 @@ async fn shares_a_tunnel_between_clients_by_route() {
     connected(&second).await;
 
     let host = &identity.hostname;
-    assert!(server.visit(&format!("api.{host}"), "/").await.unwrap().ends_with("from the cli"));
-    assert!(server.visit(&format!("web.{host}"), "/").await.unwrap().ends_with("from an sdk app"));
-    assert!(server.visit(host, "/").await.unwrap().ends_with("from an sdk app"));
+    assert!(
+        server
+            .visit(&format!("api.{host}"), "/")
+            .await
+            .unwrap()
+            .ends_with("from the cli")
+    );
+    assert!(
+        server
+            .visit(&format!("web.{host}"), "/")
+            .await
+            .unwrap()
+            .ends_with("from an sdk app")
+    );
+    assert!(
+        server
+            .visit(host, "/")
+            .await
+            .unwrap()
+            .ends_with("from an sdk app")
+    );
 
     // A route belongs to one bridge at a time; the other keeps retrying until it is free.
     let third = client.connect("default", routes(&[("api", &web)])).unwrap();
@@ -115,7 +140,13 @@ async fn shares_a_tunnel_between_clients_by_route() {
     .await;
     first.close().await.unwrap();
     connected(&third).await;
-    assert!(server.visit(&format!("api.{host}"), "/").await.unwrap().ends_with("from an sdk app"));
+    assert!(
+        server
+            .visit(&format!("api.{host}"), "/")
+            .await
+            .unwrap()
+            .ends_with("from an sdk app")
+    );
     server.stop().await;
 }
 
@@ -127,7 +158,9 @@ async fn reconnects_after_a_restart() {
     let client = client(&server, &dir.path().join("client"));
     let identity = client.create("default", |_| {}).await.unwrap();
     let target = app("still here").await;
-    let tunnel = client.connect("default", routes(&[("api", &target)])).unwrap();
+    let tunnel = client
+        .connect("default", routes(&[("api", &target)]))
+        .unwrap();
     connected(&tunnel).await;
     let session = tunnel.status().session.unwrap();
     server.stop().await;
@@ -138,7 +171,10 @@ async fn reconnects_after_a_restart() {
         status.state == State::Connected && status.session.as_deref() != Some(session.as_str())
     })
     .await;
-    let response = server.visit(&format!("api.{}", identity.hostname), "/").await.unwrap();
+    let response = server
+        .visit(&format!("api.{}", identity.hostname), "/")
+        .await
+        .unwrap();
     assert!(response.ends_with("still here"), "{response}");
     server.stop().await;
 }
@@ -168,7 +204,9 @@ async fn serves_a_tunnel_migrated_from_the_worker() {
     let key = rcgen::KeyPair::generate().unwrap();
     let mut params =
         rcgen::CertificateParams::new(vec![hostname.clone(), format!("*.{hostname}")]).unwrap();
-    params.distinguished_name.push(rcgen::DnType::CommonName, hostname.clone());
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, hostname.clone());
     let csr = params.serialize_request(&key).unwrap().pem().unwrap();
     let certificate = params.signed_by(&key, &issuer).unwrap().pem();
     let record = serde_json::json!({
@@ -226,9 +264,13 @@ async fn serves_a_tunnel_migrated_from_the_worker() {
     let ensured = client.ensure("default").await.unwrap();
     assert_eq!(ensured.certificate, certificate);
     let target = app("migrated").await;
-    let tunnel = client.connect("default", routes(&[("api", &target)])).unwrap();
+    let tunnel = client
+        .connect("default", routes(&[("api", &target)]))
+        .unwrap();
     connected(&tunnel).await;
-    let response = visit(server.tls, &ca, &format!("api.{hostname}"), "/").await.unwrap();
+    let response = visit(server.tls, &ca, &format!("api.{hostname}"), "/")
+        .await
+        .unwrap();
     assert!(response.ends_with("migrated"), "{response}");
 
     // Importing again does not overwrite what this server has changed since.
@@ -260,7 +302,9 @@ async fn renews_on_attach_when_the_certificate_is_due() {
         .unwrap();
 
     let target = app("renewed").await;
-    let tunnel = client.connect("default", routes(&[("api", &target)])).unwrap();
+    let tunnel = client
+        .connect("default", routes(&[("api", &target)]))
+        .unwrap();
     connected(&tunnel).await;
     eventually("a renewed certificate", || async {
         let current = client
@@ -276,18 +320,31 @@ async fn renews_on_attach_when_the_certificate_is_due() {
         .certificate(&identity.token, &identity.id)
         .await
         .unwrap();
-    let (CertificateState::Ready { certificate: old, .. }, CertificateState::Ready { certificate: new, .. }) =
-        (&first.state, &renewed.state)
+    let (
+        CertificateState::Ready {
+            certificate: old, ..
+        },
+        CertificateState::Ready {
+            certificate: new, ..
+        },
+    ) = (&first.state, &renewed.state)
     else {
         panic!("both certificates are ready");
     };
     assert_ne!(old, new);
-    let info = client.api().get(&identity.token, &identity.id).await.unwrap();
+    let info = client
+        .api()
+        .get(&identity.token, &identity.id)
+        .await
+        .unwrap();
     // The Worker sent `certificateID`; the Rust client's type reads `certificateId` and ignores it.
     assert!(info.certificate_id.is_none());
 
     // The old certificate kept serving until the new one was ready, and the client still answers.
-    let response = server.visit(&format!("api.{}", identity.hostname), "/").await.unwrap();
+    let response = server
+        .visit(&format!("api.{}", identity.hostname), "/")
+        .await
+        .unwrap();
     assert!(response.ends_with("renewed"));
     tokio::time::sleep(Duration::from_millis(10)).await;
     server.stop().await;

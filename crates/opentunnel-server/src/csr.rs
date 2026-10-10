@@ -58,7 +58,10 @@ pub(crate) mod tests {
         params
             .distinguished_name
             .push(rcgen::DnType::CommonName, hostname);
-        (params.serialize_request(&key).unwrap().pem().unwrap(), key.serialize_pem())
+        (
+            params.serialize_request(&key).unwrap().pem().unwrap(),
+            key.serialize_pem(),
+        )
     }
 
     #[test]

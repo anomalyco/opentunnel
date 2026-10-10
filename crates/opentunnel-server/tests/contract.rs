@@ -25,9 +25,9 @@ fn escaped(value: &str) -> String {
 }
 
 fn substitute(text: &str, values: &[(String, String)]) -> String {
-    values
-        .iter()
-        .fold(text.to_owned(), |text, (key, value)| text.replace(key, value))
+    values.iter().fold(text.to_owned(), |text, (key, value)| {
+        text.replace(key, value)
+    })
 }
 
 /// Puts the placeholders back and hides values that are random on every run.
@@ -58,7 +58,12 @@ fn normalize(value: Value, values: &[(String, String)]) -> Value {
             }
             Value::Object(map)
         }
-        Value::Array(items) => Value::Array(items.into_iter().map(|item| normalize(item, values)).collect()),
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .map(|item| normalize(item, values))
+                .collect(),
+        ),
         other => other,
     }
 }
@@ -71,7 +76,10 @@ async fn matches_the_worker() {
     // The Worker's capture never ran its Workflow, so certificates stay `issuing`: an ACME server that never
     // answers does the same here.
     let silent = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let acme = format!("--acme-url=http://{}/directory", silent.local_addr().unwrap());
+    let acme = format!(
+        "--acme-url=http://{}/directory",
+        silent.local_addr().unwrap()
+    );
     tokio::spawn(async move {
         let mut held = Vec::new();
         while let Ok((socket, _)) = silent.accept().await {
@@ -148,7 +156,9 @@ async fn matches_the_worker() {
                 }
             }
             Some("text/plain") if content_type.as_deref() != Some("text/plain") => {
-                problems.push(format!("content type {content_type:?}, expected text/plain"));
+                problems.push(format!(
+                    "content type {content_type:?}, expected text/plain"
+                ));
             }
             _ => {}
         }

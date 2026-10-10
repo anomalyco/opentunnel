@@ -162,7 +162,9 @@ impl Store {
     ) -> Result<R> {
         let connection = self.connection.clone();
         tokio::task::spawn_blocking(move || {
-            let mut connection = connection.lock().unwrap_or_else(|poison| poison.into_inner());
+            let mut connection = connection
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
             f(&mut connection)
         })
         .await
@@ -332,7 +334,10 @@ impl Store {
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             rows.into_iter()
                 .map(|(record, alarm)| {
-                    Ok((serde_json::from_str(&record)?, alarm.map(|alarm| alarm as u64)))
+                    Ok((
+                        serde_json::from_str(&record)?,
+                        alarm.map(|alarm| alarm as u64),
+                    ))
                 })
                 .collect()
         })

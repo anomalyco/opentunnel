@@ -1,7 +1,7 @@
 # opentunnel
 
 Rust client for [OpenTunnel](https://github.com/anomalyco/opentunnel): blind
-TLS tunnels on Cloudflare. TLS terminates in your process, so the relay never
+TLS tunnels. TLS terminates in your process, so the relay never
 sees plaintext or the private key.
 
 ```rust

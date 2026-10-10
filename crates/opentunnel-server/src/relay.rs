@@ -33,7 +33,11 @@ pub struct Accepted {
 }
 
 /// Reads the optional PROXY header and the ClientHello, within the ClientHello timeout.
-pub async fn accept(mut stream: TcpStream, peer: SocketAddr, proxy_protocol: bool) -> Result<Accepted> {
+pub async fn accept(
+    mut stream: TcpStream,
+    peer: SocketAddr,
+    proxy_protocol: bool,
+) -> Result<Accepted> {
     tokio::time::timeout(CLIENT_HELLO_TIMEOUT, async move {
         let mut buffer = Vec::with_capacity(4096);
         let mut peer = peer;
@@ -133,7 +137,10 @@ pub async fn route_tunnel(
             {
                 match fallback.forward(accepted) {
                     None => return Ok(()),
-                    Some(returned) => return reject(service, &id, tunnel_exists, outcome, started, returned).await,
+                    Some(returned) => {
+                        return reject(service, &id, tunnel_exists, outcome, started, returned)
+                            .await;
+                    }
                 }
             }
             return reject(service, &id, tunnel_exists, outcome, started, accepted).await;
@@ -246,9 +253,13 @@ async fn upload(
                 }
             }
             Err(_) => {
-                let _ = bridge
-                    .tx
-                    .try_send(ServerControl::Reset { conn, code: "client_io_error" }.message());
+                let _ = bridge.tx.try_send(
+                    ServerControl::Reset {
+                        conn,
+                        code: "client_io_error",
+                    }
+                    .message(),
+                );
                 bridge.channels.lock().expect("channels lock").remove(&conn);
                 finish.finish(Outcome::ClientError, true);
                 return total;
@@ -279,9 +290,13 @@ async fn download(
                 };
                 if written.is_err() {
                     bridge.channels.lock().expect("channels lock").remove(&conn);
-                    let _ = bridge
-                        .tx
-                        .try_send(ServerControl::Reset { conn, code: "client_io_error" }.message());
+                    let _ = bridge.tx.try_send(
+                        ServerControl::Reset {
+                            conn,
+                            code: "client_io_error",
+                        }
+                        .message(),
+                    );
                     finish.finish(Outcome::ClientError, true);
                     return;
                 }

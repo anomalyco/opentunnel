@@ -60,7 +60,9 @@ impl Jobs {
                 error!(%error, "failed to start certificate jobs");
             }
             let wait = match self.service.store.next_job_at().await {
-                Ok(Some(at)) => Duration::from_millis(at.saturating_sub(self.service.now()).min(30_000)),
+                Ok(Some(at)) => {
+                    Duration::from_millis(at.saturating_sub(self.service.now()).min(30_000))
+                }
                 _ => Duration::from_secs(30),
             };
             tokio::select! {
@@ -134,7 +136,10 @@ impl Jobs {
                     token: challenge.token,
                     key: challenge.key,
                 };
-                if !service.update_certificate(tunnel, &certificate_id, state).await? {
+                if !service
+                    .update_certificate(tunnel, &certificate_id, state)
+                    .await?
+                {
                     anyhow::bail!(PERSIST_FAILED);
                 }
                 Ok(())
@@ -155,7 +160,10 @@ impl Jobs {
                             chain: issued.chain,
                             expiry: issued.expiry,
                         };
-                        if !service.update_certificate(tunnel, &job.certificate_id, state).await? {
+                        if !service
+                            .update_certificate(tunnel, &job.certificate_id, state)
+                            .await?
+                        {
                             warn!(tunnel, certificate = %job.certificate_id, "issued certificate is no longer wanted");
                         }
                     }
@@ -184,7 +192,8 @@ impl Jobs {
                         .retry_job(&job.certificate_id, attempts, now + delay, reason, now)
                         .await;
                 }
-                if let (JobKind::Issue | JobKind::Renew, Some(tunnel)) = (&job.kind, &job.tunnel_id) {
+                if let (JobKind::Issue | JobKind::Renew, Some(tunnel)) = (&job.kind, &job.tunnel_id)
+                {
                     let state = CertificateState::Failed {
                         reason: reason.clone(),
                     };

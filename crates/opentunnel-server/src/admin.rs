@@ -25,7 +25,12 @@ impl Admin for TokenAdmin {
         !token.is_empty() && crate::crypto::token_matches(token, &self.token_hash)
     }
 
-    fn handle(&self, app: Arc<App>, path: String, body: Bytes) -> BoxFuture<'static, Response<Body>> {
+    fn handle(
+        &self,
+        app: Arc<App>,
+        path: String,
+        body: Bytes,
+    ) -> BoxFuture<'static, Response<Body>> {
         async move {
             let service = &app.service;
             let (path, query) = path.split_once('?').unwrap_or((&path, ""));

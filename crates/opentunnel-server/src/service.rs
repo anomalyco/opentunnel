@@ -27,6 +27,8 @@ pub const ACTIVE_WINDOW_MS: u64 = 90 * DAY_MS;
 pub const RENEWAL_RETRY_MS: u64 = HOUR_MS;
 /// A renewal still running after this long is treated as lost and restarted.
 pub const RENEWAL_STALE_MS: u64 = DAY_MS;
+/// Issuance without a job is resumed only when it started less than this long ago.
+pub const ORPHAN_MAX_AGE_MS: u64 = 2 * DAY_MS;
 /// A bridge silent for this long is gone: its client pings every heartbeat and gives up after the idle timeout.
 pub const STALE_BRIDGE_MS: u64 = IDLE_TIMEOUT_MS + HEARTBEAT_MS;
 
@@ -128,7 +130,11 @@ impl Bridge {
     }
 
     pub fn is_closing(&self) -> bool {
-        self.state.lock().expect("bridge lock").server_close.is_some()
+        self.state
+            .lock()
+            .expect("bridge lock")
+            .server_close
+            .is_some()
     }
 
     pub fn touch(&self, now: u64) {
@@ -572,10 +578,16 @@ impl Service {
     async fn ensure_issuance(&self, record: &StoredTunnel, kind: JobKind) -> Result<()> {
         let (certificate_id, csr) = match kind {
             JobKind::Renew => (
-                record.renewal.as_ref().map(|renewal| renewal.certificate_id.clone()),
+                record
+                    .renewal
+                    .as_ref()
+                    .map(|renewal| renewal.certificate_id.clone()),
                 record.certificate_csr.clone(),
             ),
-            _ => (record.certificate_id.clone(), record.certificate_csr.clone()),
+            _ => (
+                record.certificate_id.clone(),
+                record.certificate_csr.clone(),
+            ),
         };
         let certificate_id =
             certificate_id.ok_or_else(|| anyhow::anyhow!("Certificate ID is missing"))?;
@@ -618,7 +630,8 @@ impl Service {
         if let Some(renewal) = &record.renewal
             && renewal.certificate_id == certificate_id
         {
-            let duration = parse_iso(&renewal.started_at).map_or(0, |started| now.saturating_sub(started));
+            let duration =
+                parse_iso(&renewal.started_at).map_or(0, |started| now.saturating_sub(started));
             match &input {
                 CertificateState::Ready { .. } => {
                     let renewed = StoredTunnel {
@@ -654,7 +667,8 @@ impl Service {
                         ..record.clone()
                     };
                     self.save(&mut state, cleared).await?;
-                    self.set_alarm(tunnel_id, Some(now + RENEWAL_RETRY_MS)).await?;
+                    self.set_alarm(tunnel_id, Some(now + RENEWAL_RETRY_MS))
+                        .await?;
                 }
                 _ => {}
             }
@@ -672,7 +686,10 @@ impl Service {
         };
         self.save(&mut state, updated.clone()).await?;
         self.schedule_renewal(&updated).await?;
-        let previous = record.certificate.as_ref().map(|certificate| &certificate.state);
+        let previous = record
+            .certificate
+            .as_ref()
+            .map(|certificate| &certificate.state);
         let mut payload = json!({ "tunnel_id": record.id, "certificate_id": certificate_id });
         if let Some(started) = record.certificate_started_at.as_deref().and_then(parse_iso) {
             payload["duration_ms"] = now.saturating_sub(started).into();
@@ -808,10 +825,13 @@ impl Service {
             let Some(record) = state.record().cloned() else {
                 continue;
             };
+            // Older issuance was abandoned (a client resuming it binds again, which adds the job), so it is
+            // not worth an ACME order each.
             let old = |started: Option<&str>| {
-                started
-                    .and_then(parse_iso)
-                    .is_none_or(|started| now.saturating_sub(started) >= grace_ms)
+                started.and_then(parse_iso).is_some_and(|started| {
+                    let age = now.saturating_sub(started);
+                    age >= grace_ms && age < ORPHAN_MAX_AGE_MS
+                })
             };
             let issuing = record.certificate.as_ref().is_some_and(|certificate| {
                 matches!(
@@ -933,7 +953,8 @@ impl Service {
         for (key, value) in bridge.client.fields() {
             connected_payload[key] = value;
         }
-        self.analytics.publish("bridge.connected", connected_payload);
+        self.analytics
+            .publish("bridge.connected", connected_payload);
         self.analytics.publish(
             "tunnel.active",
             json!({
@@ -952,7 +973,8 @@ impl Service {
         let now = self.now();
         let snapshot = {
             let mut state = bridge.state.lock().expect("bridge lock");
-            if !state.attached || now.saturating_sub(state.active_at) < analytics::ACTIVE_INTERVAL_MS
+            if !state.attached
+                || now.saturating_sub(state.active_at) < analytics::ACTIVE_INTERVAL_MS
             {
                 return;
             }
@@ -1122,10 +1144,13 @@ impl Service {
             let candidate = state.sequence;
             state.sequence = state.sequence.wrapping_add(1);
             if candidate != 0
-                && !state
-                    .bridges
-                    .iter()
-                    .any(|bridge| bridge.channels.lock().expect("channels lock").contains_key(&candidate))
+                && !state.bridges.iter().any(|bridge| {
+                    bridge
+                        .channels
+                        .lock()
+                        .expect("channels lock")
+                        .contains_key(&candidate)
+                })
             {
                 break candidate;
             }
@@ -1168,7 +1193,475 @@ impl Service {
     pub fn bridge_count(&self) -> usize {
         self.entries()
             .iter()
-            .filter_map(|entry| entry.state.try_lock().ok().map(|state| state.attached().count()))
+            .filter_map(|entry| {
+                entry
+                    .state
+                    .try_lock()
+                    .ok()
+                    .map(|state| state.attached().count())
+            })
             .sum()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::analytics::Event;
+    use crate::crypto::hash_token;
+    use std::sync::atomic::AtomicU64;
+
+    const T0: u64 = 1_800_000_000_000;
+
+    struct Harness {
+        service: Service,
+        now: Arc<AtomicU64>,
+        events: mpsc::Receiver<Event>,
+    }
+
+    impl Harness {
+        fn new() -> Self {
+            let (clock, now) = Clock::manual(T0);
+            let (analytics, events) = Analytics::channel(clock.clone());
+            let service = Service::new(
+                "opentunnel.test".into(),
+                Store::memory().unwrap(),
+                clock,
+                analytics,
+            );
+            Self {
+                service,
+                now,
+                events,
+            }
+        }
+
+        fn advance(&self, ms: u64) {
+            self.now.fetch_add(ms, Ordering::SeqCst);
+        }
+
+        fn events(&mut self, kind: &str) -> Vec<serde_json::Value> {
+            let mut found = Vec::new();
+            while let Ok(event) = self.events.try_recv() {
+                if event.kind == kind {
+                    found.push(event.payload);
+                }
+            }
+            found
+        }
+
+        async fn tunnel(&self, expiry: u64, last_connected: Option<u64>) -> StoredTunnel {
+            let record = StoredTunnel {
+                version: 1,
+                id: "abcdefghijkl".into(),
+                hostname: "abcdefghijkl.opentunnel.test".into(),
+                state: TunnelState::Offline,
+                certificate_id: Some("cert_1".into()),
+                token_hash: hash_token("token"),
+                created_at: iso(T0 - DAY_MS),
+                deleted_at: None,
+                certificate: Some(CertificateInfo {
+                    id: "cert_1".into(),
+                    state: CertificateState::Ready {
+                        certificate: "CERT".into(),
+                        chain: "CHAIN".into(),
+                        expiry: iso(expiry),
+                    },
+                }),
+                certificate_csr: Some("CSR".into()),
+                certificate_identifiers: None,
+                certificate_started_at: None,
+                last_connected_at: last_connected.map(iso),
+                renewal: None,
+            };
+            self.service.store.save_tunnel(&record, T0).await.unwrap();
+            record
+        }
+
+        async fn record(&self) -> StoredTunnel {
+            self.service
+                .store
+                .tunnel("abcdefghijkl")
+                .await
+                .unwrap()
+                .unwrap()
+        }
+
+        async fn alarm(&self) -> Option<u64> {
+            self.service.store.alarm("abcdefghijkl").await.unwrap()
+        }
+
+        async fn bridge(&self) -> (Arc<Bridge>, mpsc::Receiver<Outbound>) {
+            let (tx, rx) = mpsc::channel(64);
+            let bridge = self
+                .service
+                .register_bridge("abcdefghijkl", tx, ClientInfo::default())
+                .await
+                .unwrap()
+                .unwrap();
+            (bridge, rx)
+        }
+
+        async fn attach(
+            &self,
+            bridge: &Arc<Bridge>,
+            routes: &[&str],
+        ) -> Result<String, &'static str> {
+            let routes = routes.iter().map(|route| (*route).to_owned()).collect();
+            match self
+                .service
+                .attach("abcdefghijkl", bridge, "token", routes, Some(256))
+                .await
+                .unwrap()
+            {
+                Attach::Attached { session, .. } => Ok(session),
+                Attach::Error(code, _) => Err(code),
+            }
+        }
+    }
+
+    fn closes(rx: &mut mpsc::Receiver<Outbound>) -> Vec<(u16, String)> {
+        let mut closes = Vec::new();
+        while let Ok(message) = rx.try_recv() {
+            if let Outbound::Close(code, reason) = message {
+                closes.push((code, reason));
+            }
+        }
+        closes
+    }
+
+    #[tokio::test]
+    async fn schedules_renewal_thirty_days_before_expiry_and_renews_active_tunnels() {
+        let mut harness = Harness::new();
+        let expiry = T0 + 60 * DAY_MS;
+        harness.tunnel(expiry, Some(T0)).await;
+
+        harness.service.alarm("abcdefghijkl").await.unwrap();
+        assert_eq!(harness.alarm().await, Some(expiry - RENEW_BEFORE_MS));
+
+        harness.advance(30 * DAY_MS);
+        assert_eq!(
+            crate::jobs::fire_due_alarms(&harness.service)
+                .await
+                .unwrap(),
+            1
+        );
+        let renewal = harness.record().await.renewal.expect("a renewal started");
+        assert!(
+            harness
+                .service
+                .store
+                .job_exists(&renewal.certificate_id)
+                .await
+                .unwrap()
+        );
+        // The current certificate keeps serving while the renewal issues.
+        assert!(matches!(
+            harness.service.certificate("abcdefghijkl", "token").await.unwrap(),
+            CertificateLookup::Ok(CertificateInfo { id, .. }) if id == "cert_1"
+        ));
+
+        let renewed_expiry = T0 + 120 * DAY_MS;
+        let ready = CertificateState::Ready {
+            certificate: "NEW".into(),
+            chain: "CHAIN".into(),
+            expiry: iso(renewed_expiry),
+        };
+        assert!(
+            harness
+                .service
+                .update_certificate("abcdefghijkl", &renewal.certificate_id, ready)
+                .await
+                .unwrap()
+        );
+        let record = harness.record().await;
+        assert_eq!(
+            record.certificate_id.as_deref(),
+            Some(renewal.certificate_id.as_str())
+        );
+        assert!(record.renewal.is_none());
+        assert_eq!(
+            harness.alarm().await,
+            Some(renewed_expiry - RENEW_BEFORE_MS)
+        );
+        assert_eq!(harness.events("certificate.renewed").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn lets_idle_tunnels_expire() {
+        let harness = Harness::new();
+        harness
+            .tunnel(T0 + 10 * DAY_MS, Some(T0 - 91 * DAY_MS))
+            .await;
+        harness.service.alarm("abcdefghijkl").await.unwrap();
+        assert!(harness.record().await.renewal.is_none());
+        assert_eq!(harness.alarm().await, None);
+    }
+
+    #[tokio::test]
+    async fn retries_a_failed_renewal_in_an_hour() {
+        let mut harness = Harness::new();
+        harness.tunnel(T0 + 10 * DAY_MS, Some(T0)).await;
+        harness.service.alarm("abcdefghijkl").await.unwrap();
+        let renewal = harness.record().await.renewal.unwrap();
+        let failed = CertificateState::Failed {
+            reason: "urn:ietf:params:acme:error:rateLimited: slow down | HTTP 429".into(),
+        };
+        harness
+            .service
+            .update_certificate("abcdefghijkl", &renewal.certificate_id, failed)
+            .await
+            .unwrap();
+        let record = harness.record().await;
+        assert!(record.renewal.is_none());
+        assert_eq!(record.certificate_id.as_deref(), Some("cert_1"));
+        assert_eq!(harness.alarm().await, Some(T0 + RENEWAL_RETRY_MS));
+        let failures = harness.events("certificate.failed");
+        assert_eq!(failures[0]["renewal"], true);
+        assert_eq!(failures[0]["reason"], "acme_rate_limit");
+    }
+
+    #[tokio::test]
+    async fn renews_on_attach_near_expiry_and_restarts_stale_renewals() {
+        let harness = Harness::new();
+        let mut record = harness.tunnel(T0 + 5 * DAY_MS, None).await;
+        record.renewal = Some(Renewal {
+            certificate_id: "cert_lost".into(),
+            started_at: iso(T0 - 2 * DAY_MS),
+        });
+        harness
+            .service
+            .store
+            .save_tunnel(&record, T0)
+            .await
+            .unwrap();
+        let (bridge, _rx) = harness.bridge().await;
+        harness.attach(&bridge, &["api"]).await.unwrap();
+        let renewal = harness.record().await.renewal.unwrap();
+        assert_ne!(renewal.certificate_id, "cert_lost");
+        assert!(
+            harness
+                .service
+                .store
+                .job_exists(&renewal.certificate_id)
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn schedules_an_alarm_on_attach_when_there_is_none() {
+        let harness = Harness::new();
+        harness.tunnel(T0 + 80 * DAY_MS, None).await;
+        let (bridge, _rx) = harness.bridge().await;
+        harness.attach(&bridge, &["@"]).await.unwrap();
+        assert_eq!(harness.alarm().await, Some(T0 + 50 * DAY_MS));
+        assert!(harness.record().await.last_connected_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn retires_silent_bridges_and_gives_their_routes_away() {
+        let mut harness = Harness::new();
+        harness.tunnel(T0 + 80 * DAY_MS, None).await;
+        let (old, mut old_rx) = harness.bridge().await;
+        harness.attach(&old, &["api"]).await.unwrap();
+
+        harness.advance(STALE_BRIDGE_MS);
+        let (next, _next_rx) = harness.bridge().await;
+        assert_eq!(harness.attach(&next, &["api"]).await, Err("route_conflict"));
+        assert!(closes(&mut old_rx).is_empty());
+
+        harness.advance(1);
+        let (next, _next_rx) = harness.bridge().await;
+        harness.attach(&next, &["api"]).await.unwrap();
+        assert_eq!(closes(&mut old_rx), vec![(1001, "idle timeout".to_owned())]);
+        let disconnected = harness.events("bridge.disconnected");
+        assert_eq!(disconnected.len(), 1);
+        assert_eq!(disconnected[0]["code"], 1001);
+        assert_eq!(disconnected[0]["clean"], false);
+
+        // The socket's close arrives later; it was already accounted for.
+        harness
+            .service
+            .bridge_closed("abcdefghijkl", &old, 1006, false)
+            .await
+            .unwrap();
+        assert!(harness.events("bridge.disconnected").is_empty());
+    }
+
+    #[tokio::test]
+    async fn routes_public_connections_only_to_live_bridges() {
+        let harness = Harness::new();
+        harness.tunnel(T0 + 80 * DAY_MS, None).await;
+        let (bridge, _rx) = harness.bridge().await;
+        harness.attach(&bridge, &["api", "@"]).await.unwrap();
+        let host = "abcdefghijkl.opentunnel.test";
+        assert!(matches!(
+            harness
+                .service
+                .route("abcdefghijkl", &format!("api.{host}"))
+                .await
+                .unwrap(),
+            Route::Bridge {
+                conn: 0..=u32::MAX,
+                ..
+            }
+        ));
+        assert!(matches!(
+            harness.service.route("abcdefghijkl", host).await.unwrap(),
+            Route::Bridge { .. }
+        ));
+        assert!(matches!(
+            harness
+                .service
+                .route("abcdefghijkl", &format!("web.{host}"))
+                .await
+                .unwrap(),
+            Route::Rejected {
+                outcome: "no_bridge",
+                tunnel_exists: true
+            }
+        ));
+        harness.advance(STALE_BRIDGE_MS + 1);
+        assert!(matches!(
+            harness
+                .service
+                .route("abcdefghijkl", &format!("api.{host}"))
+                .await
+                .unwrap(),
+            Route::Rejected {
+                outcome: "no_bridge",
+                ..
+            }
+        ));
+        assert_eq!(harness.record().await.state, TunnelState::Offline);
+    }
+
+    #[tokio::test]
+    async fn rejects_bad_attaches() {
+        let harness = Harness::new();
+        let mut record = harness.tunnel(T0 + 80 * DAY_MS, None).await;
+        let (bridge, _rx) = harness.bridge().await;
+        assert_eq!(harness.attach(&bridge, &[]).await, Err("invalid_route"));
+        assert_eq!(
+            harness.attach(&bridge, &["a.b"]).await,
+            Err("invalid_route")
+        );
+        assert!(matches!(
+            harness
+                .service
+                .attach("abcdefghijkl", &bridge, "wrong", vec!["@".into()], None)
+                .await
+                .unwrap(),
+            Attach::Error("bad_token", _)
+        ));
+        record.certificate = Some(CertificateInfo {
+            id: "cert_1".into(),
+            state: CertificateState::Issuing,
+        });
+        harness
+            .service
+            .store
+            .save_tunnel(&record, T0)
+            .await
+            .unwrap();
+        harness.service.invalidate("abcdefghijkl").await;
+        assert_eq!(harness.attach(&bridge, &["@"]).await, Err("cert_not_ready"));
+    }
+
+    #[tokio::test]
+    async fn deleting_closes_bridges() {
+        let mut harness = Harness::new();
+        harness.tunnel(T0 + 80 * DAY_MS, None).await;
+        let (bridge, mut rx) = harness.bridge().await;
+        harness.attach(&bridge, &["api"]).await.unwrap();
+        assert!(matches!(
+            harness
+                .service
+                .remove("abcdefghijkl", "token")
+                .await
+                .unwrap(),
+            Lookup::Ok(())
+        ));
+        assert_eq!(closes(&mut rx), vec![(1000, "deleted".to_owned())]);
+        assert!(harness.record().await.deleted_at.is_some());
+        assert_eq!(harness.events("tunnel.deleted")[0]["age_ms"], DAY_MS);
+        assert!(matches!(
+            harness.service.info("abcdefghijkl", "token").await.unwrap(),
+            Lookup::NotFound
+        ));
+        // The ID can be created again.
+        assert!(
+            harness
+                .service
+                .create("abcdefghijkl", hash_token("t"))
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[tokio::test]
+    async fn resumes_imported_issuance_after_a_grace_period() {
+        let harness = Harness::new();
+        let mut record = harness.tunnel(T0 + 80 * DAY_MS, None).await;
+        record.certificate = Some(CertificateInfo {
+            id: "cert_1".into(),
+            state: CertificateState::Issuing,
+        });
+        record.certificate_started_at = Some(iso(T0 - 5 * MINUTE_MS));
+        harness
+            .service
+            .store
+            .save_tunnel(&record, T0)
+            .await
+            .unwrap();
+        let grace = crate::jobs::ORPHAN_GRACE_MS;
+        assert_eq!(
+            harness
+                .service
+                .resume_orphaned_issuance(grace)
+                .await
+                .unwrap(),
+            0
+        );
+        harness.advance(10 * MINUTE_MS);
+        assert_eq!(
+            harness
+                .service
+                .resume_orphaned_issuance(grace)
+                .await
+                .unwrap(),
+            1
+        );
+        assert!(harness.service.store.job_exists("cert_1").await.unwrap());
+        assert_eq!(
+            harness
+                .service
+                .resume_orphaned_issuance(grace)
+                .await
+                .unwrap(),
+            0
+        );
+
+        // Abandoned long ago: left for the client to bind again.
+        let mut abandoned = record.clone();
+        abandoned.id = "abandonedtun".into();
+        abandoned.certificate_id = Some("cert_old".into());
+        abandoned.certificate_started_at = Some(iso(T0 - 3 * DAY_MS));
+        harness
+            .service
+            .store
+            .save_tunnel(&abandoned, T0)
+            .await
+            .unwrap();
+        assert_eq!(
+            harness
+                .service
+                .resume_orphaned_issuance(grace)
+                .await
+                .unwrap(),
+            0
+        );
     }
 }

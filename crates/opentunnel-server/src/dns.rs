@@ -97,7 +97,10 @@ impl DnsProvider {
                     .send()
                     .await?;
                 if !response.status().is_success() {
-                    bail!("DNS record creation failed: HTTP {}", response.status().as_u16());
+                    bail!(
+                        "DNS record creation failed: HTTP {}",
+                        response.status().as_u16()
+                    );
                 }
                 Ok(TxtRecord {
                     name: name.into(),
@@ -156,7 +159,11 @@ struct DnsAnswer {
 
 /// Waits until public resolvers (Cloudflare and Google over DNS-over-HTTPS) return every challenge value, or
 /// `timeout` passes, after which issuance proceeds anyway, as the Worker did.
-pub async fn wait_for_propagation(http: &reqwest::Client, records: &[TxtRecord], timeout: Duration) {
+pub async fn wait_for_propagation(
+    http: &reqwest::Client,
+    records: &[TxtRecord],
+    timeout: Duration,
+) {
     if timeout.is_zero() || records.is_empty() {
         return;
     }

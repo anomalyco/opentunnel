@@ -170,7 +170,9 @@ pub fn client(user_agent: Option<&str>) -> ClientInfo {
     let version = agent[name_end..].strip_prefix('/').and_then(|rest| {
         let end = rest
             .char_indices()
-            .find(|(_, char)| !(char.is_ascii_alphanumeric() || matches!(char, '_' | '.' | '+' | '-')))
+            .find(|(_, char)| {
+                !(char.is_ascii_alphanumeric() || matches!(char, '_' | '.' | '+' | '-'))
+            })
             .map_or(rest.len(), |(index, _)| index);
         let version = &rest[..end.min(32)];
         (!version.is_empty()).then(|| version.to_owned())
@@ -195,16 +197,14 @@ pub fn client(user_agent: Option<&str>) -> ClientInfo {
 /// Buckets a certificate failure message; the message itself can carry ACME response bodies.
 pub fn certificate_failure(reason: &str) -> &'static str {
     let lower = reason.to_ascii_lowercase();
-    let http_status = reason
-        .match_indices("HTTP ")
-        .any(|(index, _)| {
-            reason[index + 5..]
-                .chars()
-                .take(3)
-                .filter(char::is_ascii_digit)
-                .count()
-                == 3
-        });
+    let http_status = reason.match_indices("HTTP ").any(|(index, _)| {
+        reason[index + 5..]
+            .chars()
+            .take(3)
+            .filter(char::is_ascii_digit)
+            .count()
+            == 3
+    });
     if reason.contains("required") || reason.contains("not a P-256") {
         "config"
     } else if lower.contains("http 429") || lower.contains("ratelimited") {
@@ -288,14 +288,18 @@ mod tests {
             certificate_failure("ACME authorization ended in invalid"),
             "acme_authorization"
         );
-        assert_eq!(certificate_failure("ACME order ended in invalid"), "acme_order");
+        assert_eq!(
+            certificate_failure("ACME order ended in invalid"),
+            "acme_order"
+        );
         assert_eq!(certificate_failure("bad request | HTTP 400"), "acme_http");
         assert_eq!(certificate_failure("something"), "other");
     }
 
     #[tokio::test]
     async fn builds_the_platform_envelope() {
-        let (clock, _) = Clock::manual(crate::clock::parse_iso("2026-10-07T12:00:00.000Z").unwrap());
+        let (clock, _) =
+            Clock::manual(crate::clock::parse_iso("2026-10-07T12:00:00.000Z").unwrap());
         let (analytics, mut events) = Analytics::channel(clock);
         analytics.publish(
             "connection.closed",

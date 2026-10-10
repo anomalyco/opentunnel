@@ -11,7 +11,11 @@ pub struct StoredTunnel {
     pub id: String,
     pub hostname: String,
     pub state: TunnelState,
-    #[serde(rename = "certificateID", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "certificateID",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub certificate_id: Option<String>,
     pub token_hash: String,
     pub created_at: String,

@@ -1,7 +1,6 @@
 node_modules
 .env.local
 *.tsbuildinfo
-.cloudflare
-.dev.vars
 target
 dist
+.local

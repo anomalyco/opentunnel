@@ -55,7 +55,7 @@ The server renews certificates; clients never need to submit a new CSR.
 
 - A renewal reuses the CSR stored at provisioning, so the key never changes
   and the server never sees it.
-- Each tunnel's Durable Object sets an alarm for 30 days before expiry. When
+- The server keeps a renewal alarm per tunnel for 30 days before expiry. When
   it fires, the tunnel is renewed if a client connected in the last 90 days;
   otherwise the certificate is left to expire.
 - When a client attaches and the certificate is within 30 days of expiry (or
@@ -116,7 +116,8 @@ The server keeps accepting older versions so installed clients keep working.
 
 ### Session
 
-1. The client opens the WebSocket and sends `attach` within 10 seconds.
+1. The client opens the WebSocket and sends `attach` within 10 seconds; the
+   server closes sessions that do not with `1008`.
 2. The server replies `attached` or `attach_error` and closes.
    `bad_token` and `cert_not_ready` are fatal. Other errors, including
    `route_conflict`, may be retried.

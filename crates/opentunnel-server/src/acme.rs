@@ -87,6 +87,7 @@ struct AcmeChallenge {
     #[serde(rename = "type")]
     kind: String,
     url: String,
+    #[serde(default)]
     token: String,
 }
 
@@ -304,10 +305,7 @@ impl Session<'_> {
             self.nonce = header(&headers, "replay-nonce");
             let body = response.bytes().await?;
             if status < 400 {
-                return Ok(Response {
-                    headers,
-                    body,
-                });
+                return Ok(Response { headers, body });
             }
             let problem: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
             let kind = problem["type"].as_str().unwrap_or_default();
@@ -426,7 +424,8 @@ fn external_account_binding(key: &Key, kid: &str, hmac_key: &str, url: &str) -> 
 /// The DER of the first PEM block.
 pub fn pem_der(pem: &str) -> Option<Vec<u8>> {
     use rustls_pki_types::pem::PemObject;
-    if let Ok(csr) = rustls_pki_types::CertificateSigningRequestDer::from_pem_slice(pem.as_bytes()) {
+    if let Ok(csr) = rustls_pki_types::CertificateSigningRequestDer::from_pem_slice(pem.as_bytes())
+    {
         return Some(csr.as_ref().to_vec());
     }
     use base64::Engine;
@@ -451,7 +450,10 @@ pub fn chain_from_pem(pem: &str) -> Result<Issued> {
         bail!("ACME response did not contain a certificate");
     };
     let expiry = expiry(leaf.as_ref())?;
-    let pems: Vec<String> = certificates.iter().map(|der| to_pem(der.as_ref())).collect();
+    let pems: Vec<String> = certificates
+        .iter()
+        .map(|der| to_pem(der.as_ref()))
+        .collect();
     Ok(Issued {
         certificate: pems[0].clone(),
         chain: pems[1..].join("\n"),
@@ -526,7 +528,11 @@ mod tests {
             .unwrap();
         let pem = format!("{}\n{}", certificate.pem(), certificate.pem());
         let issued = chain_from_pem(&pem).unwrap();
-        assert!(issued.certificate.starts_with("-----BEGIN CERTIFICATE-----\n"));
+        assert!(
+            issued
+                .certificate
+                .starts_with("-----BEGIN CERTIFICATE-----\n")
+        );
         assert!(issued.certificate.ends_with("\n-----END CERTIFICATE-----"));
         assert_eq!(issued.chain, issued.certificate);
         assert!(issued.expiry.ends_with(".000Z"));
