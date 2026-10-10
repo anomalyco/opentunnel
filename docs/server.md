@@ -169,8 +169,9 @@ Set secrets with `fly secrets set NAME=value ... -a opentunnel`.
 - `POST /api/admin/stats` (bearer `ADMIN_TOKEN`) returns tunnel, alarm, job,
   attached-bridge and legacy-forward counts. The top-level connection and
   bridge counts are the answering machine's; `machine` has its ID, region and
-  forwarding counters (`forwarded_out`, `forwarded_in`, `forward_failures`),
-  and `cluster` the registry's view: bridges in total, per region, and per
+  forwarding counters (`forwarded_out`, `forwarded_in`, `forward_failures`)
+  and live Tokio tasks (`tasks`, which should follow open connections and
+  bridges, not grow over time), and `cluster` the registry's view: bridges in total, per region, and per
   machine. The request lands on the machine nearest the caller's Cloudflare
   colo.
 - Deploys are rolling, one machine at a time: on SIGTERM the machine removes

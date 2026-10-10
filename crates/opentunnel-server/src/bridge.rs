@@ -15,6 +15,7 @@ use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 use crate::analytics::ClientInfo;
@@ -91,7 +92,8 @@ pub async fn run<S>(
         }
     };
     let (sink, stream) = socket.split();
-    let writer = tokio::spawn(write(sink, rx, bridge.clone()));
+    let cancel = bridge.cancel.clone();
+    let mut writer = tokio::spawn(write(sink, rx, cancel.clone()));
     let (code, clean) = read(&service, &tunnel_id, &bridge, stream).await;
     if let Err(error) = service
         .bridge_closed(&tunnel_id, &bridge, code, clean)
@@ -99,25 +101,28 @@ pub async fn run<S>(
     {
         warn!(%error, tunnel = %tunnel_id, "failed to clean up a bridge");
     }
-    // Let a queued close go out before the socket drops.
-    let _ = tokio::time::timeout(Duration::from_secs(1), async {
-        drop(bridge);
-        writer.await
-    })
-    .await;
+    drop(bridge);
+    // Let a queued close go out before the socket drops. The queue only ends once every holder of the bridge
+    // is gone, so the writer is then told to stop: otherwise it would keep the socket forever.
+    if tokio::time::timeout(Duration::from_secs(1), &mut writer)
+        .await
+        .is_err()
+    {
+        cancel.cancel();
+    }
 }
 
 async fn write<S>(
     mut sink: futures_util::stream::SplitSink<WebSocketStream<S>, Message>,
     mut rx: mpsc::Receiver<Outbound>,
-    bridge: Arc<Bridge>,
+    cancel: CancellationToken,
 ) where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     loop {
         let message = tokio::select! {
             message = rx.recv() => message,
-            _ = bridge.cancel.cancelled() => None,
+            _ = cancel.cancelled() => None,
         };
         let Some(message) = message else {
             let _ = tokio::time::timeout(Duration::from_secs(1), sink.close()).await;
@@ -139,12 +144,12 @@ async fn write<S>(
             Ok(Ok(())) => return,
             Ok(Err(error)) => {
                 debug!(%error, "bridge write failed");
-                bridge.cancel.cancel();
+                cancel.cancel();
                 return;
             }
             Err(_) => {
                 warn!("bridge write timed out");
-                bridge.cancel.cancel();
+                cancel.cancel();
                 return;
             }
         }

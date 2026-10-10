@@ -421,3 +421,60 @@ async fn renews_on_attach_when_the_certificate_is_due() {
     tokio::time::sleep(Duration::from_millis(10)).await;
     server.stop().await;
 }
+
+/// A bridge the client closes, cleanly or by dropping its connection, leaves nothing running on the server.
+#[tokio::test(flavor = "multi_thread")]
+async fn ends_bridge_sessions_the_client_closes() {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::Message;
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+
+    let dir = tempfile::tempdir().unwrap();
+    let Some(server) = TestServer::start(dir.path(), &[]).await else {
+        return;
+    };
+    let client = client(&server, &dir.path().join("client"));
+    let identity = client.create("default", |_| {}).await.unwrap();
+    let tasks = || {
+        tokio::runtime::Handle::current()
+            .metrics()
+            .num_alive_tasks()
+    };
+    let before = tasks();
+    for clean in [true, false, true, false] {
+        let mut request = format!(
+            "{}/api/tunnel/{}/connect",
+            server.api.replace("http", "ws"),
+            identity.id
+        )
+        .into_client_request()
+        .unwrap();
+        request
+            .headers_mut()
+            .insert("sec-websocket-protocol", "opentunnel".parse().unwrap());
+        let (mut socket, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+        let attach =
+            serde_json::json!({ "type": "attach", "token": identity.token, "routes": ["api"] });
+        socket
+            .send(Message::text(attach.to_string()))
+            .await
+            .unwrap();
+        let attached = socket.next().await.unwrap().unwrap();
+        assert!(
+            attached.to_text().unwrap().contains("\"attached\""),
+            "{attached}"
+        );
+        if clean {
+            socket.close(None).await.unwrap();
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while socket.next().await.is_some() {}
+            })
+            .await
+            .expect("the server completes the close");
+        } else {
+            drop(socket);
+        }
+    }
+    eventually("the bridge tasks to end", || async { tasks() <= before }).await;
+    server.stop().await;
+}
