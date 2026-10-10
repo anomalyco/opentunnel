@@ -1,7 +1,7 @@
 # The OpenTunnel server
 
 `crates/opentunnel-server` is the whole hosted service in one async Rust
-binary (Tokio, rustls with `ring`, hyper, SQLite). It replaced the Cloudflare
+binary (Tokio, rustls with `ring`, hyper, MySQL on PlanetScale through sqlx). It replaced the Cloudflare
 Worker, its Durable Objects, its certificate Workflow, and the TCP relay on
 AWS without changing anything clients see: the HTTP API, the bridge protocol
 ([protocol.md](protocol.md)), hostnames, tokens, and certificates are the same.
@@ -38,8 +38,8 @@ visitor ──TLS──▶ :443 ─┬─ SNI <route>.<id>.opentunnel.xyz ─▶
 | `TunnelObject` record, token hash, `info`/`certificate`/`bindCertificate`/`remove` | `service.rs`; records keep the Durable Object's `StoredTunnel` JSON shape (`record.rs`) |
 | Hibernating bridge WebSockets and attachments | `bridge.rs` sessions; per-tunnel state in `service.rs` (`Entry`) |
 | Stale bridge retirement on attach and connect | Same rule (`idle_timeout_ms + heartbeat_ms`), plus a sweep every heartbeat |
-| Durable Object alarm (renewal) | `alarm_at` per tunnel in SQLite, fired by `jobs::run_alarms`; same `alarm`, `scheduleRenewal`, `onAttached` logic |
-| `CertificateWorkflow` (ZeroSSL, EAB, DNS-01, retries, `describeError`) | `acme.rs` + `dns.rs` + durable `jobs` rows: three attempts, 15 s then 30 s apart, resumed after restarts |
+| Durable Object alarm (renewal) | `alarm_at` per tunnel in MySQL, fired by `jobs::run_alarms`; same `alarm`, `scheduleRenewal`, `onAttached` logic |
+| `CertificateWorkflow` (ZeroSSL, EAB, DNS-01, retries, `describeError`) | `acme.rs` + `dns.rs` + durable, leased `jobs` rows: three attempts, 15 s then 30 s apart, resumed after restarts |
 | Workflow instance named after the certificate ID | Job keyed by certificate ID (`ensure_issuance` adds it only if missing) |
 | Cloudflare-managed certificate for `opentunnel.xyz` | `jobs::ServerCertificates`: the same ACME issuance for the domain, renewed 30 days before expiry, hot-swapped |
 | Static assets | `website.rs`: `dist/website` in memory, Cloudflare's HTML handling (`/index.html` → `/`), ETags |
@@ -52,19 +52,64 @@ restart.
 
 ## Storage
 
-One SQLite file (`DATABASE_PATH`, WAL mode) on the Fly volume:
+MySQL 8, in production the PlanetScale database `opentunnel` (org
+`anomalyco`, AWS us-east-1, next to Fly's `iad`), reached through
+`DATABASE_URL` with TLS (`sqlx`, rustls with `ring`, Mozilla's roots). Tables
+(`store.rs`, all `utf8mb4` with binary collation, so IDs stay case-sensitive):
 
-- `tunnels`: `id`, `record` (the `StoredTunnel` JSON: token hash, hostname,
-  certificate state, CSR and identifiers, `lastConnectedAt`, `renewal`,
-  `deletedAt`, ...), `alarm_at`, `region` (reserved), and `local_update`, which
-  is 0 while a row is exactly as imported so a later import may refresh it.
-- `jobs`: issuance jobs (`issue`, `renew`, `server`) with attempts and the
-  next run time.
+- `tunnels`: `id`, `record` (the `StoredTunnel` JSON exactly as serialized:
+  token hash, hostname, certificate state, CSR and identifiers,
+  `lastConnectedAt`, `renewal`, `deletedAt`, ...; `LONGTEXT` because MySQL's
+  `JSON` type would reorder keys), `revision`, `deleted` and `issuing`
+  (derived from the record for queries), `alarm_at`, `region` (reserved), and
+  `local_update`, which is 0 while a row is exactly as imported so a later
+  import may refresh it.
+- `jobs`: issuance jobs (`issue`, `renew`, `server`) with attempts, the next
+  run time, and a lease (`lease_owner`, `lease_until`).
 - `server_certificates`: the domain's key, CSR, certificate and expiry.
-- `meta`: the local test CA when `ISSUER=local`.
+- `meta`: the API certificate's current job, and the local test CA when
+  `ISSUER=local`.
+- `schema_migrations`: the schema version.
+
+The schema keeps to what Vitess allows: a primary key on every table, no
+foreign keys, triggers or stored procedures. On startup the server creates
+missing tables with `CREATE TABLE IF NOT EXISTS` and records the version; once
+the database is at its version it runs no DDL at all (so PlanetScale's safe
+migrations may be turned on afterwards; later schema changes then go through a
+deploy request). A database at a newer version is refused.
+
+Nothing assumes a single writer, so two servers on one database stay correct:
+
+- Every tunnel write names the `revision` it read (`UPDATE ... WHERE revision
+  = ?`). If an import or another server changed the row meanwhile, the write
+  fails, the cached record is dropped and reloaded on next use, and the
+  request answers 503 so the client retries. Within one process, writes to a
+  tunnel are still serialized by its entry lock.
+- Imports insert first and otherwise lock the existing row
+  (`SELECT ... FOR UPDATE`) to compare it, retrying on deadlocks.
+- A due alarm is cleared with `UPDATE ... WHERE alarm_at = <the value read>`,
+  so it fires once.
+- Jobs are claimed with a conditional update that sets a two-minute lease,
+  extended every 40 s while the ACME order runs; results are recorded only by
+  the lease holder. An expired lease (a crashed server) is taken over. The
+  owner is `FLY_MACHINE_ID`, so a restarted machine takes its own jobs back at
+  once; a clean shutdown also releases them.
+- The domain's key is created insert-if-absent and its job is requested with a
+  compare-and-set on `meta`.
+
+When the database is unavailable the server keeps running: the pool (10
+connections, 5 s acquire timeout, connections checked before use and
+recycled after 30 minutes) reconnects on its own, every statement gives up
+after 10 s, and API calls that need storage answer 503
+(`{"_tag":"ServiceUnavailableError","message":"storage unavailable"}`). Tunnels
+with an attached bridge keep their record in memory, so visitor traffic and
+token checks for them never touch the database; a bridge that attaches during
+an outage is accepted from a cached record. At startup the server waits,
+retrying, until the database answers.
 
 Back it up with `opentunnel-server export <file>` (or
-`POST /api/admin/export`); `opentunnel-server import <file>` restores it.
+`POST /api/admin/export`); `opentunnel-server import <file>` writes an export
+into the database at `DATABASE_URL`. PlanetScale's own backups also cover it.
 
 ## Configuration
 
@@ -76,10 +121,11 @@ Every flag also reads an environment variable (`opentunnel-server --help`).
 | `TLS_LISTEN` / `HTTP_LISTEN` | `0.0.0.0:8443` / `0.0.0.0:8080` (`[::]` in the image) | `HTTP_LISTEN=off` disables HTTP |
 | `HTTP_MODE` | `redirect` | `serve` runs the whole app on plain HTTP (development, tests) |
 | `PROXY_PROTOCOL` | `false` | require a PROXY v1/v2 header on :443 (`true` on Fly) |
-| `DATABASE_PATH` | `/data/opentunnel.db` | |
+| `DATABASE_URL` | | secret: `mysql://user:password@host/opentunnel?ssl-mode=VERIFY_IDENTITY` (PlanetScale's "MySQL" connection string). TLS with certificate checks is the default and is required unless the host is loopback |
 | `WEBSITE_DIR` | `/app/website` | |
 | `TLS_CERT_FILE` / `TLS_KEY_FILE` | | serve this certificate for the domain instead of issuing one |
 | `ISSUER` | `acme` | `local` is an insecure built-in CA for development and tests |
+| `LOCAL_CA_FILE` | | with `ISSUER=local`, write the CA certificate here for clients to trust |
 | `ACME_URL` | ZeroSSL DV90 | |
 | `ACME_EMAIL` | `acme@opentunnel.xyz` | |
 | `ACME_EAB_KID`, `ACME_EAB_HMAC_KEY` | | secrets: ZeroSSL external account binding |
@@ -120,21 +166,31 @@ Single region is deliberate for now. What it would take:
 - Bridges must attach in the tunnel's home region: the upgrade can answer from
   any region and replay to the home machine (`fly-replay` works only with
   Fly's HTTP handler, so it would be an internal forward instead).
-- SQLite becomes per-region with the home region authoritative for its
-  tunnels, or moves to a replicated store (LiteFS, or Postgres). Records,
-  alarms and jobs are already keyed by tunnel, and the export format moves
-  them between servers.
-- Issuance must run once per job; a job row lease (owner and expiry) instead
-  of the in-memory running set.
+- Storage is already shared and safe for several servers (revisions, alarm
+  and job leases). Cross-region latency to the primary would matter for
+  writes; PlanetScale read replicas in other regions could serve the reads
+  that load a tunnel.
 
 ## Tests
 
-- `cargo test -p opentunnel-server`: unit tests (SNI, PROXY protocol, CSRs,
+The storage, service, API contract and end-to-end tests need a MySQL 8 server
+whose user may create databases; each test creates its own `ot_test_*`
+database. Without `TEST_DATABASE_URL` they print a note and skip.
+
+```bash
+docker run -d --name ot-mysql -e MYSQL_ROOT_PASSWORD=opentunnel -e MYSQL_DATABASE=opentunnel -p 3306:3306 mysql:8.0
+export TEST_DATABASE_URL=mysql://root:opentunnel@127.0.0.1:3306/opentunnel
+cargo test -p opentunnel-server
+docker rm -f ot-mysql    # when done; it holds the test databases
+```
+
+- `cargo test -p opentunnel-server`: storage (revisions, imports, concurrent
+  alarms, job leases), unit tests (SNI, PROXY protocol, CSRs,
   analytics, renewal scheduling with a manual clock, stale bridges, routing,
   imports), the API contract replay against the Worker's recorded responses,
   the Rust client end to end (provisioning, passthrough, shared tunnels,
-  restarts, migrated tunnels, renewal on attach), and the migration paths
-  against a fake Worker.
+  restarts, migrated tunnels, renewal on attach, a database outage), and the
+  migration paths against a fake Worker.
 - ACME against Pebble with external account binding and DNS-01 through
   pebble-challtestsrv:
 

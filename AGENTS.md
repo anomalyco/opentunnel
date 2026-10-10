@@ -19,11 +19,13 @@
 
 ## Hosted Service
 
-- The hosted service is one Rust binary, `crates/opentunnel-server`, deployed to Fly.io by the root `Dockerfile` and `fly.toml` (app `opentunnel`, region `iad`, SQLite on a volume). `docs/server.md` describes it; `docs/cutover.md` is the runbook for moving off the Cloudflare Worker.
+- The hosted service is one Rust binary, `crates/opentunnel-server`, deployed to Fly.io by the root `Dockerfile` and `fly.toml` (app `opentunnel`, region `iad`, storage in PlanetScale MySQL through `DATABASE_URL`). `docs/server.md` describes it; `docs/cutover.md` is the runbook for moving off the Cloudflare Worker.
 - It is not published and keeps its own version (`publish = false`), outside the release group.
 - Keep runtime-neutral schemas, bridge framing, and HTTP contracts in `packages/protocol`; the server reuses the Rust wire types in `crates/opentunnel/src/protocol`.
 - The HTTP API must answer exactly as `crates/opentunnel-server/tests/fixtures/worker-contract.json` records (paths, status codes, bodies, key order); installed clients depend on it.
 - Never terminate tenant TLS in the server: only the API domain is terminated there, everything else is routed by SNI and passed through.
+- Storage (`crates/opentunnel-server/src/store.rs`) must stay Vitess-compatible: every table has a primary key, no foreign keys, triggers or stored procedures, schema changes are idempotent `CREATE TABLE IF NOT EXISTS` migrations behind `SCHEMA_VERSION`, and nothing assumes a single writer (revisions on tunnel rows, conditional updates for alarms, leases on jobs).
+- Server tests need MySQL 8: set `TEST_DATABASE_URL` (see `docs/server.md`); without it they skip.
 - DNS stays on Cloudflare; DNS-01 challenges go through the provider in `crates/opentunnel-server/src/dns.rs`.
 - `packages/website` is built with plain Vite (`bun run ready`, output `dist/website`) and served by the server.
 - Code marked TEMPORARY (the `migration/` directory, `crates/opentunnel-server/src/migration.rs` apart from the export file format, and the `LEGACY_*` settings) exists only for the cutover and is removed once the Worker is decommissioned.

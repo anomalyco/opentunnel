@@ -46,8 +46,8 @@ The hosted service is one Rust binary, `crates/opentunnel-server`, on Fly.io
   claimed the route.
 - `opentunnel.xyz` itself is terminated with the server's own certificate and
   serves the HTTP API, the bridge WebSocket, and the website.
-- Tunnel records, certificate state, and durable issuance jobs live in SQLite
-  on a Fly volume.
+- Tunnel records, certificate state, and durable issuance jobs live in MySQL
+  (PlanetScale).
 - Certificates come from ZeroSSL over ACME with DNS-01 challenges in the
   Cloudflare-hosted zone, and renew 30 days before expiry.
 - The local client owns the certificate private key, terminates TLS, and
@@ -74,7 +74,7 @@ spec, the vectors, and both clients.
 ## Deployment
 
 `Dockerfile` builds the server and the website into one image; `fly.toml`
-runs it as the `opentunnel` Fly app in `iad` with a volume for SQLite, raw TCP
+runs it as the `opentunnel` Fly app in `iad` with PlanetScale MySQL, raw TCP
 on 443 (with a dedicated IPv4) and 80. Deploy with `fly deploy`, or run the
 manual "Deploy to Fly" GitHub workflow. Configuration and secrets are listed
 in [docs/server.md](docs/server.md).
@@ -87,14 +87,20 @@ bun run ready     # TypeScript builds and the website (dist/website)
 bun run test      # Rust and TypeScript tests
 ```
 
-Run the server locally with its insecure built-in test CA, serving the whole
-app on plain HTTP:
+Run the server locally against MySQL 8 in Docker, with its insecure built-in
+test CA, serving the whole app on plain HTTP:
 
 ```bash
-ISSUER=local OPENTUNNEL_DOMAIN=localhost DATABASE_PATH=.local/opentunnel.db \
+docker run -d --name ot-mysql -e MYSQL_ROOT_PASSWORD=opentunnel -e MYSQL_DATABASE=opentunnel -p 3306:3306 mysql:8.0
+mkdir -p .local
+DATABASE_URL=mysql://root:opentunnel@127.0.0.1:3306/opentunnel \
+  ISSUER=local LOCAL_CA_FILE=.local/local-ca.pem OPENTUNNEL_DOMAIN=localhost \
   WEBSITE_DIR=dist/website TLS_LISTEN='[::]:8443' HTTP_LISTEN='[::]:8080' HTTP_MODE=serve \
   cargo run -p opentunnel-server
 ```
+
+The server tests use the same container: `TEST_DATABASE_URL=mysql://root:opentunnel@127.0.0.1:3306/opentunnel cargo test -p opentunnel-server`
+(without it they skip).
 
 `*.localhost` resolves to the loopback address on most systems, so tunnels are
 reachable at `https://<route>.<id>.localhost:8443` (trust

@@ -9,7 +9,8 @@ certificates; they reconnect on their own.
 
 - **Records move with their IDs, token hashes and certificate state.** The
   Worker gets a temporary, authenticated, read-only export endpoint; every
-  Durable Object's record is exported and imported into the server's SQLite.
+  Durable Object's record is exported and imported into the server's MySQL
+  database on PlanetScale.
 - **Visitors move before clients.** `*.opentunnel.xyz` points at Fly first.
   Fly serves tunnels whose client is attached to it, and hands every other
   connection, still encrypted, to the Worker's `/api/relay`, exactly as the
@@ -33,7 +34,9 @@ certificates; they reconnect on their own.
 
 ## Before you start
 
-- `flyctl` logged in to the Anomaly org; `bun`; access to the Cloudflare
+- `flyctl` logged in to the Anomaly org; `pscale` logged in
+  (`pscale auth login`) with access to the PlanetScale org `anomalyco`; `bun`;
+  access to the Cloudflare
   account `15d29c8639fd3733b1b5486a2acfd968` and the opentunnel.xyz zone
   (`43d8e5cf1c0ccc8c3868125be74a5e68`).
 - The Worker's secret values (Worker secrets cannot be read back, so take them
@@ -67,17 +70,33 @@ fly_admin() {                   # POST to the Fly server's admin API, before or 
 }
 ```
 
-## 1. Create the Fly app
+## 1. Create the database and the Fly app
 
-From this branch's checkout:
+The database: PlanetScale (Vitess, MySQL 8) database `opentunnel` in the org
+`anomalyco`, region AWS us-east-1 (`us-east`), the closest to Fly's `iad`.
+The smallest cluster size is plenty (a few hundred rows); keep foreign keys
+disallowed (the default). The server creates its tables on first start, so the
+password needs the `admin` role (the default for `pscale password create`).
+Leave safe migrations off until the first deploy has created the tables (with
+them on, PlanetScale refuses direct DDL; later schema changes would then go
+through a deploy request).
+
+```bash
+pscale database create opentunnel --org anomalyco --engine mysql --region us-east --wait
+pscale password create opentunnel main fly-opentunnel --org anomalyco --role admin
+# Shown once: username, password, and host (e.g. aws.connect.psdb.cloud). Build the URL:
+export DATABASE_URL='mysql://<username>:<password>@<host>/opentunnel?ssl-mode=VERIFY_IDENTITY'
+```
+
+The Fly app, from this branch's checkout:
 
 ```bash
 fly apps create opentunnel --org <org>
-fly volumes create opentunnel_data --app opentunnel --region iad --size 1
 fly ips allocate-v4 --app opentunnel     # dedicated IPv4: raw TCP on 443 needs one (billed monthly)
 fly ips allocate-v6 --app opentunnel
 fly ips list --app opentunnel            # note the v4 as FLY_IPV4 and the v6 as FLY_IPV6
 fly secrets set --app opentunnel --stage \
+  DATABASE_URL="$DATABASE_URL" \
   ACME_EAB_KID=... ACME_EAB_HMAC_KEY=... ACME_ACCOUNT_KEY_JWK='{"kty":"EC",...}' \
   CLOUDFLARE_API_TOKEN=... ADMIN_TOKEN=$ADMIN_TOKEN \
   ANALYTICS_URL=... ANALYTICS_TOKEN=... \
@@ -123,6 +142,11 @@ curl -sf -X POST $WORKER_URL/api/admin/export -H "authorization: Bearer $ADMIN_E
 fly deploy --app opentunnel     # or run the "Deploy to Fly" workflow
 fly logs --app opentunnel       # wait for "installed a new certificate for the API domain"
 ```
+
+"the database is not ready" repeating in the logs means `DATABASE_URL` is
+wrong or PlanetScale is unreachable; the server keeps retrying. Once it starts,
+`pscale shell opentunnel main --org anomalyco` should show the tables
+(`SHOW TABLES`).
 
 The domain certificate is issued with DNS-01, which does not depend on where
 opentunnel.xyz points. Then:

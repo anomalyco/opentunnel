@@ -21,7 +21,6 @@ FROM gcr.io/distroless/cc-debian12
 COPY --from=server /usr/local/bin/opentunnel-server /usr/local/bin/opentunnel-server
 COPY --from=website /src/dist/website /app/website
 ENV WEBSITE_DIR=/app/website \
-    DATABASE_PATH=/data/opentunnel.db \
     TLS_LISTEN=[::]:8443 \
     HTTP_LISTEN=[::]:8080
 EXPOSE 8443 8080

@@ -1,6 +1,7 @@
-# The hosted service on Fly.io: one machine in iad with a volume for SQLite. Both services are raw TCP (no Fly
-# TLS or HTTP handlers), so tenant TLS passes through to the tunnel clients untouched. Raw TCP on 443 needs a
-# dedicated IPv4: `fly ips allocate-v4` (see docs/cutover.md). Secrets: `fly secrets set` (docs/server.md).
+# The hosted service on Fly.io: one machine in iad, storing everything in PlanetScale MySQL (the DATABASE_URL
+# secret; the database is in AWS us-east-1, next to iad). Both services are raw TCP (no Fly TLS or HTTP handlers),
+# so tenant TLS passes through to the tunnel clients untouched. Raw TCP on 443 needs a dedicated IPv4:
+# `fly ips allocate-v4` (see docs/cutover.md). Secrets: `fly secrets set` (docs/server.md).
 
 app = "opentunnel"
 primary_region = "iad"
@@ -14,12 +15,7 @@ kill_timeout = "15s"
   OPENTUNNEL_DOMAIN = "opentunnel.xyz"
   # Fly's proxy_proto handler below prepends a PROXY v2 header with the visitor's address.
   PROXY_PROTOCOL = "true"
-  DATABASE_PATH = "/data/opentunnel.db"
   RUST_LOG = "info"
-
-[mounts]
-  source = "opentunnel_data"
-  destination = "/data"
 
 # Public TLS: tunnel hostnames by SNI (passthrough), and the API and website for opentunnel.xyz.
 [[services]]
