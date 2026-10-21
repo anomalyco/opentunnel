@@ -1127,7 +1127,7 @@ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
 name = "opentunnel"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "futures-util",
  "hex",
@@ -1151,7 +1151,7 @@ dependencies = [
 
 [[package]]
 name = "opentunnel-cli"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "anyhow",
  "clap",

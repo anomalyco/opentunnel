@@ -1,6 +1,6 @@
 {
   "name": "@opentunnel/protocol",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "OpenTunnel wire protocol: schemas, bridge framing, and the HTTP API contract",
   "license": "MIT",
   "repository": {
