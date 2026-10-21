@@ -46,3 +46,6 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - run: cargo test --workspace --locked
+
+      - name: No compromised eMudhra CA roots
+        run: cargo build --workspace --locked && scripts/check-ca-roots.sh target/debug/opentunnel target/debug/opentunnel-server
