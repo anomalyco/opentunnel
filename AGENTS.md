@@ -1,3 +1,4 @@
+<!-- tallow -->
 - This codebase uses Effect v4 which is not yet documented yet
 - Do not rely on your own knowledge of Effect (e.g. don't use `Effect.gen` if the codebase uses a different pattern found in effect-smol)
 - When working on Effect-related code, use the explore agent to scan ~/dev/external/effect-smol
