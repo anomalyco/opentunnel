@@ -1,5 +1,12 @@
 # @opentunnel/client
 
+## 0.6.2
+
+### Patch Changes
+
+- d99f79d: The SDK reads the API URL from `OPENTUNNEL_API` when no `api` option is passed, like the CLI, so apps built on it can be pointed at a self-hosted server (#63).
+- @opentunnel/protocol@0.6.2
+
 ## 0.6.1
 
 ### Patch Changes
