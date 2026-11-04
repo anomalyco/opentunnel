@@ -101,6 +101,10 @@ pub struct Config {
     #[arg(long, env = "DNS_PROVIDER", value_enum, default_value = "cloudflare")]
     pub dns_provider: DnsKind,
 
+    /// The executable run with `--dns-provider exec`: `<hook> create|delete <name> <value>`.
+    #[arg(long, env = "DNS_HOOK")]
+    pub dns_hook: Option<PathBuf>,
+
     #[arg(
         long,
         env = "CLOUDFLARE_ZONE_ID",
@@ -281,6 +285,8 @@ pub enum IssuerKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum DnsKind {
     Cloudflare,
+    /// An executable (`DNS_HOOK`) that creates and deletes the records, for self-hosted servers.
+    Exec,
     Challtestsrv,
 }
 

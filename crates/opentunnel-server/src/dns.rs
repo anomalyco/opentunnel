@@ -1,7 +1,9 @@
-//! DNS-01 challenge records. DNS for the domain stays on Cloudflare; the provider is an enum so another can be
-//! added without touching issuance.
+//! DNS-01 challenge records. The hosted service uses Cloudflare; self-hosted servers can run a hook executable
+//! for any other DNS host. The provider is an enum so another can be added without touching issuance.
 
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::time::Duration;
 
 use anyhow::{Result, anyhow, bail};
@@ -20,6 +22,43 @@ pub enum DnsProvider {
     },
     /// pebble-challtestsrv's management API, for testing against Pebble.
     ChallTestSrv { http: reqwest::Client, url: String },
+    /// An executable run as `<hook> create|delete <name> <value>`, which exits 0 on success. Both must be
+    /// idempotent: `create` succeeds if the record exists, `delete` if it is gone.
+    Exec { hook: PathBuf },
+}
+
+/// How long a hook may run before it is killed.
+const HOOK_TIMEOUT: Duration = Duration::from_secs(60);
+/// The end of a failed hook's stderr kept in the error.
+const HOOK_STDERR_LIMIT: usize = 500;
+
+/// Runs `hook action name value`, failing on a non-zero exit with the end of its stderr.
+async fn run_hook(hook: &Path, action: &str, name: &str, value: &str) -> Result<()> {
+    let child = tokio::process::Command::new(hook)
+        .args([action, name, value])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|error| anyhow!("running DNS hook {}: {error}", hook.display()))?;
+    let output = tokio::time::timeout(HOOK_TIMEOUT, child.wait_with_output())
+        .await
+        .map_err(|_| anyhow!("DNS hook {action} timed out after {HOOK_TIMEOUT:?}"))??;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stderr = stderr.trim();
+    let mut start = stderr.len().saturating_sub(HOOK_STDERR_LIMIT);
+    while !stderr.is_char_boundary(start) {
+        start += 1;
+    }
+    let stderr = &stderr[start..];
+    if stderr.is_empty() {
+        bail!("DNS hook {action} failed: {}", output.status)
+    }
+    bail!("DNS hook {action} failed: {}: {stderr}", output.status)
 }
 
 /// A created TXT record, to delete afterwards.
@@ -165,6 +204,15 @@ impl DnsProvider {
                     id: None,
                 })
             }
+            Self::Exec { hook } => {
+                run_hook(hook, "create", name, value).await?;
+                crate::metrics::dns_record("created");
+                Ok(TxtRecord {
+                    name: name.into(),
+                    value: value.into(),
+                    id: None,
+                })
+            }
         }
     }
 
@@ -231,6 +279,7 @@ impl DnsProvider {
                 .and_then(reqwest::Response::error_for_status)
                 .map(drop)
                 .map_err(anyhow::Error::from),
+            Self::Exec { hook } => run_hook(hook, "delete", &record.name, &record.value).await,
         };
         match deleted {
             Ok(()) => {
@@ -462,4 +511,54 @@ async fn resolvers_see(http: &reqwest::Client, record: &TxtRecord) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::*;
+
+    fn hook(dir: &Path, script: &str) -> DnsProvider {
+        let path = dir.join("hook");
+        std::fs::write(&path, format!("#!/bin/sh\n{script}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        DnsProvider::Exec { hook: path }
+    }
+
+    #[tokio::test]
+    async fn exec_hook_gets_action_name_and_value() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("log");
+        let dns = hook(dir.path(), &format!("echo \"$@\" >> '{}'", log.display()));
+        let record = dns
+            .create_txt("_acme-challenge.abc.example.com", "a value")
+            .await
+            .unwrap();
+        assert!(dns.delete_txt(&record).await);
+        assert_eq!(
+            std::fs::read_to_string(&log).unwrap(),
+            "create _acme-challenge.abc.example.com a value\n\
+             delete _acme-challenge.abc.example.com a value\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn exec_hook_failure_has_status_and_stderr() {
+        let dir = tempfile::tempdir().unwrap();
+        let dns = hook(dir.path(), "echo starting\necho 'no such zone' >&2\nexit 3");
+        let error = dns
+            .create_txt("_acme-challenge.abc.example.com", "value")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("exit status: 3"), "{error}");
+        assert!(error.ends_with("no such zone"), "{error}");
+        let record = TxtRecord {
+            name: "_acme-challenge.abc.example.com".into(),
+            value: "value".into(),
+            id: None,
+        };
+        assert!(!dns.delete_txt(&record).await);
+    }
 }

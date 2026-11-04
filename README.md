@@ -58,6 +58,7 @@ and the bridge. See
 
 Set `OPENTUNNEL_API` to your server's URL to point the CLI and every app
 built on the SDK at it (an explicit `api` option in the SDK still wins).
+To run the server yourself, see [docs/server.md](docs/server.md#self-hosting).
 
 ## Architecture
 

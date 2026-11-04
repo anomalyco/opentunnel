@@ -136,6 +136,13 @@ impl Server {
                             zone_id: config.cloudflare_zone_id.clone(),
                             token,
                         }),
+                    DnsKind::Exec => Some(DnsProvider::Exec {
+                        hook: config
+                            .dns_hook
+                            .clone()
+                            .filter(|hook| !hook.as_os_str().is_empty())
+                            .context("DNS_HOOK is required with DNS_PROVIDER=exec")?,
+                    }),
                     DnsKind::Challtestsrv => Some(DnsProvider::ChallTestSrv {
                         http: http.clone(),
                         url: config.challtestsrv_url.trim_end_matches('/').to_owned(),

@@ -301,7 +301,8 @@ Every flag also reads an environment variable (`opentunnel-server --help`).
 | `ACME_ACCOUNT_KEY_JWK` | | secret: the account's P-256 private JWK (`opentunnel-server account-key` makes one) |
 | `ACME_CA_BUNDLE` | | extra roots for the ACME server (Pebble) |
 | `ACME_DNS_PROPAGATION_TIMEOUT_MS` | `10000` | wait for public resolvers to see the TXT records; 0 skips |
-| `DNS_PROVIDER` | `cloudflare` | or `challtestsrv` (Pebble's test DNS) |
+| `DNS_PROVIDER` | `cloudflare` | `cloudflare`, `exec` (a hook executable, [Self-hosting](#self-hosting)) or `challtestsrv` (Pebble's test DNS) |
+| `DNS_HOOK` | | with `DNS_PROVIDER=exec`, the executable that creates and deletes challenge records (required) |
 | `CLOUDFLARE_ZONE_ID` | the opentunnel.xyz zone | |
 | `CLOUDFLARE_API_TOKEN` | | secret: DNS edit on the zone, only for DNS-01 |
 | `ISSUANCE_CONCURRENCY` | `4` | ACME orders at once per machine; one of them is kept for renewals |
@@ -330,6 +331,49 @@ Every flag also reads an environment variable (`opentunnel-server --help`).
 | `MESH_VERIFY_ADDRESS` | `true` | a peer's mesh address must be where its connection comes from and, on Fly, what `<machine>.vm.<app>.internal` resolves to ([Multiple regions](#multiple-regions)) |
 
 Set secrets with `fly secrets set NAME=value ... -a opentunnel`.
+
+## Self-hosting
+
+Tunnels get wildcard certificates, which ACME only issues through DNS-01 challenges, so the server needs to
+create TXT records in your domain's zone. With DNS on Cloudflare, set `CLOUDFLARE_ZONE_ID` and
+`CLOUDFLARE_API_TOKEN`. For any other DNS host, set `DNS_PROVIDER=exec` and `DNS_HOOK` to an executable the
+server runs (directly, no shell) as:
+
+```
+<hook> create <name> <value>
+<hook> delete <name> <value>
+```
+
+`name` is the full record name, `_acme-challenge.<host>` without a trailing dot, and `value` the TXT content.
+A hostname and its wildcard share one name, so a name can hold two values at once: `create` adds its value
+next to any others and `delete` removes only its own. Exit 0 on success; on a non-zero exit the error includes
+the status and the end of stderr. Both must be idempotent, like certbot and lego hooks: `create` succeeds if
+the value is already there, `delete` if it is already gone. A hook is killed after 60 seconds. A failed `delete` is logged and not retried, and records are
+not swept as on Cloudflare. After creating the records the server waits up to
+`ACME_DNS_PROPAGATION_TIMEOUT_MS` for public resolvers to see them; raise it for slow DNS hosts.
+
+For example, Route 53 (with the AWS CLI and `jq`, and `ZONE_ID` set to the hosted zone), which keeps all of a
+name's values in one record set:
+
+```sh
+#!/bin/sh
+set -eu
+action=$1 name=$2 value="\"$3\""
+current=$(aws route53 list-resource-record-sets --hosted-zone-id "$ZONE_ID" \
+  --start-record-name "$name" --start-record-type TXT --max-items 1 --output json |
+  jq -c --arg name "$name." '[.ResourceRecordSets[] | select(.Name == $name and .Type == "TXT") | .ResourceRecords[].Value]')
+case "$action" in
+  create) next=$(echo "$current" | jq -c --arg v "$value" '. + [$v] | unique') ;;
+  delete) next=$(echo "$current" | jq -c --arg v "$value" '. - [$v]') ;;
+  *) exit 2 ;;
+esac
+[ "$next" = "$current" ] && exit 0
+if [ "$next" = "[]" ]; then change=DELETE values=$current; else change=UPSERT values=$next; fi
+aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch "$(jq -cn \
+  --arg change "$change" --arg name "$name" --argjson values "$values" \
+  '{Changes: [{Action: $change, ResourceRecordSet: {Name: $name, Type: "TXT", TTL: 60,
+    ResourceRecords: [$values[] | {Value: .}]}}]}')" >/dev/null
+```
 
 ## Operations
 
