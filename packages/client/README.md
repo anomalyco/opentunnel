@@ -112,7 +112,7 @@ See `docs/trust-boundary.md` in the repository for what a target can trust.
 
 ```ts
 function create(options?: {
-  api?: string | URL // defaults to https://opentunnel.xyz
+  api?: string | URL // defaults to $OPENTUNNEL_API, then https://opentunnel.xyz
   store?: Storage
   proxy?: string // see "HTTP proxies"
 }): Client

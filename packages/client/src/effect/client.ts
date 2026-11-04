@@ -67,6 +67,7 @@ const privateKeyPem = (buffer: ArrayBuffer): string => {
 };
 
 export interface OpenTunnelClientOptions {
+  /** The API to use; defaults to `OPENTUNNEL_API`, then `https://opentunnel.xyz`. */
   readonly api?: URL | string;
   readonly storage?: Storage;
   /**
@@ -93,11 +94,12 @@ export class OpenTunnelClient extends Context.Service<
   static layer(options: OpenTunnelClientOptions = {}) {
     const storage = options.storage ?? OpenTunnelStorage.xdg();
     const transport = transportFor(options.proxy);
+    const apiOption = options.api ?? (process.env.OPENTUNNEL_API || "https://opentunnel.xyz");
     return Layer.effect(
       OpenTunnelClient,
       Effect.gen(function* () {
         const api = yield* OpenTunnelApiClient;
-        const apiUrl = new URL(options.api ?? "https://opentunnel.xyz");
+        const apiUrl = new URL(apiOption);
 
         const get = Effect.fn("OpenTunnelClient.tunnel.get")(function* (
           input?: OpenTunnelProfileOptions,
@@ -375,7 +377,7 @@ export class OpenTunnelClient extends Context.Service<
     ).pipe(
       Layer.provide(
         OpenTunnelApiClient.layer({
-          api: options.api ?? "https://opentunnel.xyz",
+          api: apiOption,
           ...(transport.fetch ? { fetch: transport.fetch } : {}),
         }),
       ),

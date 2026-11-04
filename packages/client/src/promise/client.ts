@@ -19,6 +19,7 @@ import type {
 import { toEffectStorage, type OpenTunnelStorage } from "./storage.js";
 
 export interface OpenTunnelClientOptions {
+  /** The API to use; defaults to `OPENTUNNEL_API`, then `https://opentunnel.xyz`. */
   readonly api?: URL | string;
   readonly store?: OpenTunnelStorage;
   /**

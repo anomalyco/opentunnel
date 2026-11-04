@@ -92,4 +92,18 @@ describe("API requests", () => {
     );
     expect(api.seen).toEqual(["POST /api/tunnel", "POST /api/tunnel"]);
   });
+
+  test("go to OPENTUNNEL_API when no api option is passed", async () => {
+    api = flakyApi([], () => identity.certificate);
+    const previous = process.env.OPENTUNNEL_API;
+    process.env.OPENTUNNEL_API = api.url;
+    try {
+      client = create({ store });
+    } finally {
+      if (previous === undefined) delete process.env.OPENTUNNEL_API;
+      else process.env.OPENTUNNEL_API = previous;
+    }
+    await client.tunnel.ensure();
+    expect(api.seen).toHaveLength(1);
+  });
 });

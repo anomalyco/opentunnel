@@ -54,6 +54,11 @@ and the bridge. See
 [packages/cli](packages/cli#corporate-proxies--custom-cas) and, for the SDK,
 [packages/client](packages/client#corporate-proxies--custom-cas).
 
+## Self-hosted servers
+
+Set `OPENTUNNEL_API` to your server's URL to point the CLI and every app
+built on the SDK at it (an explicit `api` option in the SDK still wins).
+
 ## Architecture
 
 The hosted service is one Rust binary, `crates/opentunnel-server`, on Fly.io
