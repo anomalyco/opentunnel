@@ -1,8 +1,9 @@
 name: Deploy to Fly
 
 # Deploys crates/opentunnel-server and the website (Dockerfile, fly.toml) to the `opentunnel` Fly app on every
-# push to master that changes them, blue-green (fly.toml). Uses the FLY_API_TOKEN repository secret
-# (`fly tokens create deploy -a opentunnel`). Runtime secrets persist on the app and are not set here.
+# push to master that changes them, blue-green (fly.toml). Reads FLY_API_TOKEN from AWS Secrets Manager
+# (`opentunnel/release/FLY_API_TOKEN`, `fly tokens create deploy -a opentunnel`). Runtime secrets persist on the
+# app and are not set here.
 
 on:
   push:
@@ -31,10 +32,27 @@ jobs:
   deploy:
     name: Deploy opentunnel on Fly
     runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opentunnel-release
+          role-session-name: opentunnel-${{ github.run_id }}
+          aws-region: us-east-1
+      - name: Fetch the release secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2297f9a879480a9e3af9b293ed15c70caf8e1c88 # v3.0.2
+        with:
+          secret-ids: |
+            FLY_API_TOKEN,opentunnel/release/FLY_API_TOKEN
+          parse-json-secrets: false
 
       # A pinned flyctl release, verified against its published checksum, since this job holds the deploy token.
       - name: Install flyctl
@@ -54,7 +72,7 @@ jobs:
       # one at a time, which needs no extra capacity; the server drains connections on SIGTERM either way.
       - name: Deploy
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_API_TOKEN: ${{ env.FLY_API_TOKEN }}
         run: |
           flyctl deploy --remote-only --config fly.toml --build-only --push --image-label "$GITHUB_SHA"
           image="registry.fly.io/opentunnel:$GITHUB_SHA"
