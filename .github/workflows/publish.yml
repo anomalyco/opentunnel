@@ -69,10 +69,10 @@ jobs:
             runner: ubuntu-24.04-arm
           - platform: darwin-x64
             target: x86_64-apple-darwin
-            runner: macos-latest
+            runner: blacksmith-6vcpu-macos-latest
           - platform: darwin-arm64
             target: aarch64-apple-darwin
-            runner: macos-latest
+            runner: blacksmith-6vcpu-macos-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
