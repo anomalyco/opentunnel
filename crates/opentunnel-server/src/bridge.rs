@@ -1,18 +1,20 @@
 //! One bridge WebSocket session: attach, heartbeats, and connection data, per `docs/protocol.md`.
 
 use std::collections::HashSet;
+use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
+use futures_util::FutureExt;
 use opentunnel::protocol::bridge::{CONN_ID_SIZE, HEARTBEAT_MS, IDLE_TIMEOUT_MS, MAX_PAYLOAD_SIZE};
 use serde::Serialize;
 use serde_json::Value;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use crate::analytics::ClientInfo;
 use crate::service::{Attach, Bridge, ChannelHandle, Inbound, Outbound, Outcome, Service};
@@ -181,7 +183,17 @@ pub async fn run<R, W>(
     let cancel = bridge.cancel.clone();
     let mut writer = tokio::spawn(write(writer, rx, cancel.clone(), bridge.sent_at.clone()));
     let mut followup = None;
-    let (code, clean) = read(&service, &tunnel_id, &bridge, reader, &mut followup).await;
+    // A panic while reading must still clean up below: otherwise the bridge stays registered and its writer
+    // keeps the socket open forever.
+    let (code, clean) =
+        AssertUnwindSafe(read(&service, &tunnel_id, &bridge, reader, &mut followup))
+            .catch_unwind()
+            .await
+            .unwrap_or_else(|_| {
+                error!(tunnel = %tunnel_id, "bridge reader panicked");
+                bridge.close(1011, "internal error");
+                (1011, false)
+            });
     // Cleaned up at once, even while the attach's bookkeeping still waits for the database (it skips a bridge
     // that is gone): a reconnecting client's new bridge would otherwise conflict with this one for its routes.
     if let Err(error) = Box::pin(service.bridge_closed(&tunnel_id, &bridge, code, clean)).await {

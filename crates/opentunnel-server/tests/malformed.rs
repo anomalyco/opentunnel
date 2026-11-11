@@ -108,6 +108,19 @@ async fn malformed_control_messages_close_cleanly() {
         assert_eq!(answer, expected, "payload {payload}");
     }
 
+    // Bridges dropped right after a malformed first message, without a close, are all reclaimed.
+    for payload in ["{}", r#"{"type": "attach"}"#, r#"{"type": "ping"}"#] {
+        for _ in 0..5 {
+            let mut socket = open(&server, &identity.id).await;
+            socket.send(Message::text(payload)).await.unwrap();
+            drop(socket);
+        }
+    }
+    common::eventually("abandoned bridges to be reclaimed", || async {
+        server.service().registered_bridges().await == 0
+    })
+    .await;
+
     // After attaching, control messages missing their fields are ignored, and the bridge keeps working.
     let mut socket = attached(&server, &identity.id, &identity.token).await;
     for payload in [

@@ -1940,6 +1940,15 @@ impl Service {
             })
             .sum()
     }
+
+    /// Every registered bridge, attached or not.
+    pub async fn registered_bridges(&self) -> usize {
+        let mut count = 0;
+        for entry in self.entries() {
+            count += entry.state.lock().await.bridges.len();
+        }
+        count
+    }
 }
 
 /// Why bridges are drained: the only reason there is.
