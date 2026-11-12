@@ -1,0 +1,80 @@
+name: Deploy to Fly
+
+on:
+  push:
+    branches: [production]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.manifest.outputs.digest }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Build the server and website
+        run: docker buildx build --platform linux/amd64 --output type=docker,dest="$RUNNER_TEMP/image.tar" -t opentunnel:build .
+      - id: manifest
+        working-directory: ${{ runner.temp }}
+        run: |
+          sha256sum image.tar > SHA256SUMS
+          echo "digest=$(sha256sum SHA256SUMS | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: image
+          path: |
+            ${{ runner.temp }}/image.tar
+            ${{ runner.temp }}/SHA256SUMS
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: image
+          path: ${{ runner.temp }}/image
+      - name: Verify image
+        working-directory: ${{ runner.temp }}/image
+        env:
+          DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          [[ $DIGEST =~ ^[a-f0-9]{64}$ ]]
+          printf '%s  SHA256SUMS\n' "$DIGEST" | sha256sum -c --strict
+          [[ $(wc -l < SHA256SUMS) -eq 1 ]]
+          grep -Ex '[a-f0-9]{64}  image\.tar' SHA256SUMS
+          sha256sum -c --strict SHA256SUMS
+      - run: bash .github/release/install-fly-tools.sh
+      - id: aws
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opentunnel-production
+          aws-region: us-east-1
+          output-env-credentials: false
+          output-credentials: true
+      - run: bash .github/release/deploy-fly.sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ steps.aws.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.aws.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.aws.outputs.aws-session-token }}

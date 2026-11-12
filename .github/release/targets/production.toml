@@ -12,9 +12,6 @@ kill_signal = "SIGTERM"
 # The server keeps serving for SHUTDOWN_DRAIN_MS (10 s) after the signal, then gives requests up to 10 s to finish.
 kill_timeout = "30s"
 
-[build]
-  dockerfile = "Dockerfile"
-
 # Blue-green: a new machine starts next to each old one, and only once all are healthy does Fly cordon the old ones
 # (the proxy stops sending them new connections), wait 10 s, and stop them. Their bridges then get `drain` and close
 # 1012 and reconnect to the new machines. A rolling deploy stopped machines the proxy was still routing to, which

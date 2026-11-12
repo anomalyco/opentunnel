@@ -101,11 +101,12 @@ spec, the vectors, and both clients.
 
 ## Deployment
 
-`Dockerfile` builds the server and the website into one image; `fly.toml`
-runs it as the `opentunnel` Fly app in `iad` with PlanetScale MySQL, raw TCP
-on 443 (with a dedicated IPv4) and 80. Deploy with `fly deploy`, or run the
-manual "Deploy to Fly" GitHub workflow. Configuration and secrets are listed
-in [docs/server.md](docs/server.md).
+`Dockerfile` builds the server and website into one image. The reviewed
+[Fly configuration](.github/release/targets/production.toml) runs it on the
+`opentunnel` app with PlanetScale MySQL and raw TCP on ports 443 and 80.
+After CI passes on `dev`, the owner promotes that commit with
+`git push origin dev:production`. To redeploy, dispatch **Deploy to Fly** on
+`production`. See [docs/server.md](docs/server.md) for runtime configuration.
 
 ## Development
 
