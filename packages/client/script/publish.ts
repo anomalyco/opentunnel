@@ -13,10 +13,6 @@ const root = fileURLToPath(new URL("../../..", import.meta.url))
 for (const dir of ["packages/protocol", "packages/client"]) {
   const cwd = `${root}/${dir}`
   const pkg = await Bun.file(`${cwd}/package.json`).json()
-  if ((await $`npm view ${pkg.name}@${pkg.version} version`.nothrow().quiet()).exitCode === 0) {
-    console.log(`already published ${pkg.name}@${pkg.version}`)
-    continue
-  }
   const tarball = `${tmpdir()}/${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`
   await $`bun pm pack --filename ${tarball}`.cwd(cwd)
   try {
@@ -40,7 +36,7 @@ for (const dir of ["packages/protocol", "packages/client"]) {
       const local = await Bun.file(`${root}/packages/${name.slice("@opentunnel/".length)}/package.json`).json()
       if (range !== local.version) throw new Error(`${pkg.name} would publish depending on ${name}@${range}, not ${local.version}`)
     }
-    await $`npm publish ${tarball} --access public`.cwd(cwd)
+    await $`cp ${tarball} ${process.env.RUNNER_TEMP}/release/${pkg.name.replace("@opentunnel/", "")}.tgz`
   } finally {
     await rm(tarball, { force: true })
   }

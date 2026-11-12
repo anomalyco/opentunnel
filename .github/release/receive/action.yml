@@ -1,0 +1,28 @@
+name: Verify release files
+description: Download the release artifact and check every expected file against the build digest.
+inputs:
+  digest:
+    description: SHA-256 of the build manifest
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      with:
+        name: release
+        path: ${{ runner.temp }}/release
+    - shell: bash
+      env:
+        DIGEST: ${{ inputs.digest }}
+      working-directory: ${{ runner.temp }}/release
+      run: |
+        set -euo pipefail
+        [[ $DIGEST =~ ^[a-f0-9]{64}$ ]]
+        printf '%s  MANIFEST\n' "$DIGEST" | sha256sum --strict -c
+        files=(notes.md SHA256SUMS {opentunnel,opentunnel-cli}.upload {client,protocol,opentunnel}.tgz)
+        for platform in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+          files+=("cli-$platform.tgz" "opentunnel-$platform.tar.gz")
+        done
+        diff <(printf '%s\n' "${files[@]}" | sort) <(sed -nE 's/^[0-9a-f]{64}  ([a-zA-Z0-9.-]+)$/\1/p' MANIFEST | sort)
+        [[ $(wc -l < MANIFEST) == ${#files[@]} ]]
+        sha256sum --strict -c MANIFEST

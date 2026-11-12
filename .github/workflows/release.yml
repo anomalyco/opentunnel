@@ -1,0 +1,197 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Verify a build or publish a stable release
+        type: choice
+        options: [check, stable]
+        default: check
+      bump:
+        description: Version bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+permissions:
+  contents: read
+concurrency:
+  group: opentunnel-release
+  cancel-in-progress: false
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: plan
+        run: bash .github/release/plan.sh
+        env:
+          MODE: ${{ inputs.mode }}
+          BUMP: ${{ inputs.bump }}
+
+  binaries:
+    needs: plan
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - { platform: linux-x64, target: x86_64-unknown-linux-musl, runner: ubuntu-latest }
+          - { platform: linux-arm64, target: aarch64-unknown-linux-musl, runner: ubuntu-24.04-arm }
+          - { platform: darwin-x64, target: x86_64-apple-darwin, runner: blacksmith-6vcpu-macos-latest }
+          - { platform: darwin-arm64, target: aarch64-apple-darwin, runner: blacksmith-6vcpu-macos-latest }
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - if: runner.os == 'Linux'
+        run: sudo apt-get install -y musl-tools
+      - run: |
+          bash .github/release/stamp.sh
+          cargo build --release --locked -p opentunnel-cli --target "$TARGET"
+          mkdir -p out/bin
+          cp "target/$TARGET/release/opentunnel" out/bin/
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.plan.outputs.version }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cli-${{ matrix.platform }}
+          path: out
+          if-no-files-found: error
+
+  pack:
+    needs: [plan, binaries]
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.pack.outputs.digest }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: stable
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: cli-*
+          path: packages/cli/dist
+      - id: pack
+        run: bash .github/release/pack.sh
+        env:
+          MODE: ${{ inputs.mode }}
+          VERSION: ${{ needs.plan.outputs.version }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
+
+  verify:
+    needs: pack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: &reviewed
+          ref: ${{ github.sha }}
+          sparse-checkout: /.github/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: ./.github/release/receive
+        with:
+          digest: ${{ needs.pack.outputs.digest }}
+
+  publish:
+    if: inputs.mode == 'stable' && github.actor == 'thdxr' && github.triggering_actor == 'thdxr'
+    needs: [plan, pack, verify]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: *reviewed
+      - uses: ./.github/release/receive
+        with:
+          digest: ${{ needs.pack.outputs.digest }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.14.0
+          package-manager-cache: false
+      - run: bash .github/release/publish-npm.sh
+      - id: crates
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18
+      - run: python3 .github/release/publish-crates.py
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates.outputs.token }}
+
+  release:
+    if: github.triggering_actor == 'thdxr'
+    needs: [plan, pack, publish]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: *reviewed
+      - uses: ./.github/release/receive
+        with:
+          digest: ${{ needs.pack.outputs.digest }}
+      - name: Tag the published commit and serve release assets
+        working-directory: ${{ runner.temp }}/release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: gh release create "v$VERSION" opentunnel-*.tar.gz SHA256SUMS --repo anomalyco/opentunnel --target "$GITHUB_SHA" --title "v$VERSION" --notes-file notes.md
+
+  distribute:
+    if: github.triggering_actor == 'thdxr'
+    needs: [plan, pack, release]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: *reviewed
+      - uses: ./.github/release/receive
+        with:
+          digest: ${{ needs.pack.outputs.digest }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+          no-cache: true
+      - id: aws
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::604439173067:role/github/opentunnel-release
+          output-env-credentials: false
+          output-credentials: true
+      - run: bash .github/release/distribute.sh homebrew
+        env: &distribution
+          VERSION: ${{ needs.plan.outputs.version }}
+          AWS_ACCESS_KEY_ID: ${{ steps.aws.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.aws.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.aws.outputs.aws-session-token }}
+      - run: bash .github/release/distribute.sh aur
+        env: *distribution
