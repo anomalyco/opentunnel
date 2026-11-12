@@ -7,13 +7,9 @@
 // Needs no dependencies, so the job does not run `bun install`.
 
 import { $ } from "bun"
-import { fileURLToPath } from "url"
-import pkg from "../package.json"
-
-const dir = fileURLToPath(new URL("..", import.meta.url))
-process.chdir(dir)
-
-const version = pkg.version
+process.chdir(process.env.RUNNER_TEMP!)
+const version = process.env.VERSION!
+if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error("invalid release version")
 const tag = `v${version}`
 const repo = "anomalyco/opentunnel"
 const description = "Public URLs for local services, end-to-end encrypted"
@@ -22,9 +18,8 @@ const download = (platform: string) =>
 
 const platforms = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"]
 await $`mkdir -p ./dist`
-await $`gh release download ${tag} --repo ${repo} --pattern SHA256SUMS --dir ./dist --clobber`
 const sha: Record<string, string> = {}
-for (const line of (await Bun.file("./dist/SHA256SUMS").text()).split("\n")) {
+for (const line of (await Bun.file("./release/SHA256SUMS").text()).split("\n")) {
   const match = /^([0-9a-f]{64})  opentunnel-([a-z0-9-]+)\.tar\.gz$/.exec(line)
   if (match) sha[match[2]] = match[1]
 }
@@ -72,7 +67,7 @@ end
 `
 // CI writes the tap's deploy key (HOMEBREW_TAP_KEY) to an SSH host alias, homebrew-tap.github.com.
 if (process.env.HOMEBREW_TAP === "1") {
-  const tap = "git@homebrew-tap.github.com:anomalyco/homebrew-tap.git"
+  const tap = "git@github.com:anomalyco/homebrew-tap.git"
   await $`rm -rf ./dist/homebrew-tap`
   await $`git clone --depth 1 ${tap} ./dist/homebrew-tap`
   await Bun.write("./dist/homebrew-tap/opentunnel.rb", formula)

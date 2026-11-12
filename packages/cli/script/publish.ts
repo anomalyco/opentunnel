@@ -11,13 +11,9 @@ process.chdir(dir)
 
 const repository = { type: "git", url: "git+https://github.com/anomalyco/opentunnel.git" }
 
-async function published(name: string, version: string) {
-  return (await $`npm view ${name}@${version} version`.nothrow().quiet()).exitCode === 0
-}
-
-async function publish(dir: string, name: string) {
-  if (await published(name, pkg.version)) return console.log(`already published ${name}@${pkg.version}`)
-  await $`npm publish --access public`.cwd(dir)
+async function pack(dir: string, name: string) {
+  const destination = `${process.env.RUNNER_TEMP}/release/${name.replace("@opentunnel/", "")}.tgz`
+  await $`bun pm pack --ignore-scripts --filename ${destination}`.cwd(dir)
 }
 
 const binaries: Record<string, string> = {}
@@ -55,5 +51,5 @@ await Bun.write(
   ),
 )
 
-for (const name of Object.keys(binaries)) await publish(`./dist/${name.replace("@opentunnel/", "")}`, name)
-await publish(`./dist/${pkg.name}`, pkg.name)
+for (const name of Object.keys(binaries)) await pack(`./dist/${name.replace("@opentunnel/", "")}`, name)
+await pack(`./dist/${pkg.name}`, pkg.name)

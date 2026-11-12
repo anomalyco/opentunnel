@@ -110,6 +110,13 @@ After CI passes on `dev`, the owner promotes that commit with
 
 ## Development
 
+For a release check, run `bun run release`. For stable, commit handwritten notes
+to `docs/releases/X.Y.Z.md`, then dispatch **Release** from `dev` with `mode=stable`
+and the matching bump. The workflow computes the version from the latest stable
+tag. Only `thdxr` can start or rerun a stable publish. Configure trusted
+publishers on npm and crates.io for `anomalyco/opentunnel`, workflow
+`release.yml`, and environment `release`.
+
 ```bash
 bun install
 bun run ready     # TypeScript builds and the website (dist/website)
