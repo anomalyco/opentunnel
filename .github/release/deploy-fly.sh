@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
-DOCKER_CONFIG=$(mktemp -d)
-export DOCKER_CONFIG
-trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+private_home=$(mktemp -d)
+trap 'rm -rf "$private_home"' EXIT
+export HOME="$private_home" DOCKER_CONFIG="$private_home/.docker"
+mkdir -p "$DOCKER_CONFIG"
 FLY_API_TOKEN=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id opentunnel/production/FLY_API_TOKEN --query SecretString --output text)
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 export FLY_API_TOKEN
