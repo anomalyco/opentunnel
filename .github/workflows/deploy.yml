@@ -23,7 +23,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Build the server and website
-        run: docker buildx build --platform linux/amd64 --output type=docker,dest="$RUNNER_TEMP/image.tar" -t opentunnel:build .
+        run: |
+          docker build --platform linux/amd64 -t opentunnel:build .
+          docker save -o "$RUNNER_TEMP/image.tar" opentunnel:build
       - id: manifest
         working-directory: ${{ runner.temp }}
         run: |
