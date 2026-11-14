@@ -803,10 +803,9 @@ one-way trip (well under 1 ms between machines on one host in the tests;
 ```bash
 fly secrets set --app opentunnel --stage INTERNAL_TOKEN=$(openssl rand -hex 32)
 fly deploy --app opentunnel                  # blue-green: new machines next to the old ones, then the old ones stop
-fly scale vm shared-cpu-1x --memory 1024 --app opentunnel   # if existing machines kept the old size
-for region in ord sjc gru lhr fra cdg jnb sin nrt syd; do
-  fly scale count 1 --region $region --app opentunnel --yes
-done                                         # or: fly machine clone <iad machine> --region <region>
+for region in iad ord sjc gru lhr fra cdg jnb sin nrt syd; do
+  fly scale count 2 --region $region --app opentunnel --yes
+done                                         # then size each region's machines (see "Capacity")
 fly status --app opentunnel                  # every machine passing checks
 curl -s -X POST https://opentunnel.xyz/api/admin/stats -H "authorization: Bearer $ADMIN_TOKEN" | jq .cluster
 ```
@@ -895,13 +894,28 @@ production, a machine's own CPU work is roughly 0.7-1% of a core per 100 bridges
 ~6% at ~680, with heavier traffic per bridge). A `shared-cpu-1x` is only guaranteed 1/16 of a core (6.25%)
 and runs on burst credit above that, so the CPU baseline, not memory, binds first: at **~700-1,000 bridges**
 a machine sits at its baseline and slowly drains its credit, and at 0 credit Fly throttles it (the time shows
-up as `steal` in `fly_instance_cpu`). Scale out a region when a machine's `fly_instance_cpu_balance` trends
-down or its bridges pass ~800.
+up as `steal` in `fly_instance_cpu`).
 
-| Machine | Bridges at ~60% memory | Bridges at CPU baseline (production) | `soft_limit` / `hard_limit` (connections on :443) |
+**Sizing (2026-11-14).** Every region runs two machines, so one restarting or failing never sends the region's
+clients to another region, and grows by machine size rather than count: a `shared-cpu-Nx` is guaranteed N/16 of
+a core, so it reaches its baseline at roughly N x 700-1,000 bridges. Give a region the next size when a machine
+stays above ~80% of its baseline over hours (`opentunnel-health-check` alerts then), and rebalance a region whose
+two machines are uneven by restarting the busier one. `fly.toml` has no `[[vm]]` section, so deploys keep each
+machine's size; set it with `fly machine update <id> --vm-size shared-cpu-Nx --vm-memory 1024 --yes`.
+
+| Regions (Nov 2026) | Size | Bridges per machine | Baseline |
 | --- | --- | --- | --- |
-| `shared-cpu-1x`, 1 GB (`fly.toml` today) | ~12,000 | ~700-1,000 | 1,000 / 10,000 |
-| `performance-1x`, 2 GB | ~24,000 | ~10,000+ (dedicated core) | 15,000 / 25,000 |
+| cdg, fra, lhr | `shared-cpu-4x` | ~1,300-2,000 | 1/4 core |
+| nrt, sin, sjc, gru, iad, ord | `shared-cpu-2x` | ~500-1,000 | 1/8 core |
+| syd, jnb | `shared-cpu-1x` | ~35-320 | 1/16 core |
+
+| Machine | Bridges at ~60% memory | Bridges at CPU baseline (production) |
+| --- | --- | --- |
+| `shared-cpu-1x`, 1 GB | ~12,000 | ~700-1,000 |
+| `shared-cpu-4x`, 1 GB | ~12,000 | ~2,800-4,000 |
+| `performance-1x`, 2 GB | ~24,000 | ~10,000+ (dedicated core) |
+
+`fly.toml`'s `soft_limit` is 3,000 and `hard_limit` 10,000 connections on :443.
 
 The limits count every connection on :443 (bridges, visitors, API calls).
 Fly's proxy sends a new connection to the closest machine in the region that
