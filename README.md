@@ -1,5 +1,7 @@
 # OpenTunnel
 
+<a href="https://opencode.ai"><picture><source media="(prefers-color-scheme: dark)" srcset="https://opencode.ai/brand/badges/opencode-built-with-g-dark-20.svg"><img alt="Built with OpenCode" src="https://opencode.ai/brand/badges/opencode-built-with-g-light-20.svg" height="20" /></picture></a>
+
 OpenTunnel is a blind TLS tunnel. Each client receives a unique
 `<id>.opentunnel.xyz` hostname and terminates TLS locally, so the server never
 holds the certificate private key or sees HTTP plaintext.
