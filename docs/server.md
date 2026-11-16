@@ -902,10 +902,16 @@ a core, so it reaches its baseline at roughly N x 700-1,000 bridges. Give a regi
 stays above ~80% of its baseline over hours (`opentunnel-health-check` alerts then), and rebalance a region whose
 two machines are uneven by restarting the busier one. `fly.toml` has no `[[vm]]` section, so deploys keep each
 machine's size; set it with `fly machine update <id> --vm-size shared-cpu-Nx --vm-memory 1024 --yes`.
+After `shared-cpu-4x` the next size is `performance-1x` (a dedicated core with no burst credit, cheaper than
+`shared-cpu-8x`), which needs 2 GB: `--vm-size performance-1x --vm-memory 2048`. Fly's Prometheus reports each
+machine's baseline in cores as `fly_instance_cpu_baseline`. Fly caps open files at 10,240 per machine
+(`opentunnel_process_max_fds`; `raise_fd_limit` only lifts the soft limit to that hard limit), so a machine holding
+all of a region's bridges after its pair restarts must stay below that.
 
 | Regions (Nov 2026) | Size | Bridges per machine | Baseline |
 | --- | --- | --- | --- |
-| cdg, fra, lhr, nrt | `shared-cpu-4x` | ~1,200-2,300 | 1/4 core |
+| cdg (2026-11-16) | `performance-1x`, 2 GB | ~3,300-3,500 | 1 core |
+| fra, lhr, nrt | `shared-cpu-4x` | ~1,200-2,300 | 1/4 core |
 | sin, sjc, gru, iad, ord, syd | `shared-cpu-2x` | ~450-1,000 | 1/8 core |
 | jnb | `shared-cpu-1x` | ~35 | 1/16 core |
 
