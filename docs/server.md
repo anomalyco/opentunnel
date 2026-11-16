@@ -906,8 +906,8 @@ machine's size; set it with `fly machine update <id> --vm-size shared-cpu-Nx --v
 | Regions (Nov 2026) | Size | Bridges per machine | Baseline |
 | --- | --- | --- | --- |
 | cdg, fra, lhr, nrt | `shared-cpu-4x` | ~1,200-2,300 | 1/4 core |
-| sin, sjc, gru, iad, ord | `shared-cpu-2x` | ~500-1,000 | 1/8 core |
-| syd, jnb | `shared-cpu-1x` | ~35-320 | 1/16 core |
+| sin, sjc, gru, iad, ord, syd | `shared-cpu-2x` | ~450-1,000 | 1/8 core |
+| jnb | `shared-cpu-1x` | ~35 | 1/16 core |
 
 | Machine | Bridges at ~60% memory | Bridges at CPU baseline (production) |
 | --- | --- | --- |
