@@ -910,8 +910,8 @@ all of a region's bridges after its pair restarts must stay below that.
 
 | Regions (Nov 2026) | Size | Bridges per machine | Baseline |
 | --- | --- | --- | --- |
-| cdg (2026-11-16) | `performance-1x`, 2 GB | ~3,300-3,500 | 1 core |
-| fra, lhr, nrt, sjc (2026-11-16), sin (2026-11-17) | `shared-cpu-4x` | ~1,100-2,300 | 1/4 core |
+| cdg (2026-11-16), fra (2026-11-18) | `performance-1x`, 2 GB | ~2,000-3,500 | 1 core |
+| lhr, nrt, sjc (2026-11-16), sin (2026-11-17) | `shared-cpu-4x` | ~1,100-2,300 | 1/4 core |
 | gru, iad, ord, syd | `shared-cpu-2x` | ~450-1,000 | 1/8 core |
 | jnb | `shared-cpu-1x` | ~35 | 1/16 core |
 
