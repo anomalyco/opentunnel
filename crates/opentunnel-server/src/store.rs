@@ -97,6 +97,9 @@ const RATE_LIMITS: &str = r#"CREATE TABLE IF NOT EXISTS rate_limits (
 
 /// Every statement gives up after this long, so a stalled database cannot hang a request.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(10);
+/// The admin stats' counts, one of which scans the whole `tunnels` table; well inside Cloudflare's 100 s wait for a
+/// response.
+const COUNTS_TIMEOUT: Duration = Duration::from_secs(60);
 /// How long opening a connection may take: TCP, TLS to PlanetScale's nearest edge and the MySQL handshake, which
 /// the edge relays to the database (us-east-1), several round trips from far regions. sqlx bounds a new
 /// connection by the pool's acquire timeout, so this is also that timeout; a statement on the request path is
@@ -1074,10 +1077,12 @@ impl Store {
         .await
     }
 
+    /// The admin stats' counts. `imported_unchanged` has no index to count from, so it scans the whole table
+    /// (15-35 s at 110,000 tunnels): the counts run side by side, within `COUNTS_TIMEOUT` rather than the usual
+    /// statement timeout. Nothing but `/api/admin/stats` and tests asks for them.
     pub async fn counts(&self) -> Result<serde_json::Value> {
-        timed("counts", async {
-            let mut counts = serde_json::Map::new();
-            for (name, sql) in [
+        timed_within("counts", COUNTS_TIMEOUT, async {
+            let queries = [
                 ("tunnels", "SELECT COUNT(*) FROM tunnels WHERE deleted = 0"),
                 ("deleted", "SELECT COUNT(*) FROM tunnels WHERE deleted = 1"),
                 (
@@ -1096,11 +1101,19 @@ impl Store {
                     "jobs_failed",
                     "SELECT COUNT(*) FROM jobs WHERE status = 'failed'",
                 ),
-            ] {
-                let count: i64 = sqlx::query_scalar(sql)
-                    .fetch_one(&self.pool)
-                    .await
-                    .map_err(db)?;
+            ];
+            let results = futures_util::future::try_join_all(queries.into_iter().map(
+                |(name, sql)| async move {
+                    let count: i64 = sqlx::query_scalar(sql)
+                        .fetch_one(&self.pool)
+                        .await
+                        .map_err(db)?;
+                    Ok::<_, anyhow::Error>((name, count))
+                },
+            ))
+            .await?;
+            let mut counts = serde_json::Map::new();
+            for (name, count) in results {
                 counts.insert(name.into(), count.into());
             }
             Ok(serde_json::Value::Object(counts))
