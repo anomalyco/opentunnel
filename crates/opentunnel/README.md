@@ -18,6 +18,7 @@ let routes = [
 .into();
 let mut tunnel = client.connect("default", routes)?;
 let mut events = tunnel.subscribe();
+tunnel.ready().await?; // the bridge attached: the public URLs work
 tunnel.wait().await?;
 ```
 

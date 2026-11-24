@@ -114,7 +114,15 @@ pub struct Tunnel {
     shutdown: watch::Sender<bool>,
     events: broadcast::Sender<Event>,
     status: watch::Receiver<Status>,
+    outcome: watch::Receiver<Outcome>,
     task: Option<JoinHandle<Result<()>>>,
+}
+
+/// How the first attach went.
+enum Outcome {
+    Pending,
+    Attached,
+    Failed(Error),
 }
 
 impl Tunnel {
@@ -131,6 +139,7 @@ impl Tunnel {
         let (routes_tx, routes_rx) = watch::channel(routes.clone());
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         let (events, _) = broadcast::channel(1024);
+        let (outcome_tx, outcome_rx) = watch::channel(Outcome::Pending);
         let (status_tx, status_rx) = watch::channel(Status {
             state: State::Connecting,
             hostname: identity.hostname.clone(),
@@ -156,12 +165,14 @@ impl Tunnel {
             shutdown: shutdown_rx,
             events: events.clone(),
             status: status_tx,
+            outcome: outcome_tx,
         };
         Ok(Self {
             routes: routes_tx,
             shutdown: shutdown_tx,
             events,
             status: status_rx,
+            outcome: outcome_rx,
             task: Some(tokio::spawn(supervisor.run())),
         })
     }
@@ -186,6 +197,26 @@ impl Tunnel {
         self.status.clone()
     }
 
+    /// Resolves once the bridge first attaches, so the public URLs work, or with
+    /// the fatal error (such as `Error::Attach("bad_token")`) that stopped the
+    /// tunnel before it did. Later disconnects do not affect it. Dropping the
+    /// future leaves the tunnel running.
+    pub fn ready(&self) -> impl Future<Output = Result<()>> + Send + 'static {
+        let mut outcome = self.outcome.clone();
+        async move {
+            let outcome = outcome
+                .wait_for(|outcome| !matches!(outcome, Outcome::Pending))
+                .await;
+            match outcome.as_deref() {
+                Ok(Outcome::Attached) => Ok(()),
+                Ok(Outcome::Failed(error)) => Err(copy_fatal(error)),
+                Ok(Outcome::Pending) | Err(_) => {
+                    Err(Error::Bridge("tunnel stopped before attaching".into()))
+                }
+            }
+        }
+    }
+
     /// Waits until the tunnel stops on its own after a fatal error.
     pub async fn wait(&mut self) -> Result<()> {
         match self.task.take() {
@@ -205,6 +236,15 @@ impl Tunnel {
 impl Drop for Tunnel {
     fn drop(&mut self) {
         self.shutdown.send_replace(true);
+    }
+}
+
+/// A copy of the error that stopped a tunnel; only string-backed errors are fatal there.
+fn copy_fatal(error: &Error) -> Error {
+    match error {
+        Error::Attach(code) => Error::Attach(code.clone()),
+        Error::Invalid(message) => Error::Invalid(message.clone()),
+        error => Error::Bridge(error.to_string()),
     }
 }
 
@@ -368,6 +408,7 @@ struct Supervisor {
     shutdown: watch::Receiver<bool>,
     events: broadcast::Sender<Event>,
     status: watch::Sender<Status>,
+    outcome: watch::Sender<Outcome>,
 }
 
 enum SessionEnd {
@@ -442,6 +483,15 @@ impl Supervisor {
                 }
             }
         };
+        if let Err(error) = &result {
+            self.outcome.send_if_modified(|outcome| {
+                let first = matches!(outcome, Outcome::Pending);
+                if first {
+                    *outcome = Outcome::Failed(copy_fatal(error));
+                }
+                first
+            });
+        }
         let error = result.as_ref().err().map(ToString::to_string);
         self.status.send_modify(|status| {
             status.state = State::Stopped;
@@ -486,6 +536,13 @@ impl Supervisor {
             status.routes = routes.clone();
             status.last_error = None;
             status.connected_at = Some(now_ms());
+        });
+        self.outcome.send_if_modified(|outcome| {
+            let first = matches!(outcome, Outcome::Pending);
+            if first {
+                *outcome = Outcome::Attached;
+            }
+            first
         });
         self.emit(Event::Connected {
             session,
