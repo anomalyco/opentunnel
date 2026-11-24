@@ -66,6 +66,12 @@ const DRAIN_STEP: std::time::Duration = std::time::Duration::from_millis(100);
 /// reconnect storm nearly every attach writes (bridges stay up for hours, so their `lastConnectedAt` is old), and
 /// unbounded those writes took the whole pool from the reads attaches wait on. Bookkeeping may finish late.
 const BOOKKEEPING_WRITES: usize = 10;
+/// How long a bookkeeping slot stays taken at least, so each machine does at most `BOOKKEEPING_WRITES` per this
+/// long. When every bridge in the cluster reconnected at once (Fly's edge dropped them all on 2026-11-23), each of
+/// the 22 machines wrote with its 10 slots as fast as the database answered: 26,000 record writes in two minutes
+/// slowed the database's reads until attaches on far machines timed out by the thousand. Paced, a machine catches
+/// up on its writes over minutes and the attach reads stay fast.
+const BOOKKEEPING_PACE: std::time::Duration = std::time::Duration::from_secs(2);
 
 #[derive(Clone)]
 pub struct Service(Arc<Inner>);
@@ -94,7 +100,7 @@ pub struct Inner {
     /// Set once the server is shutting down: bridges that arrive are told to reconnect elsewhere.
     draining: AtomicBool,
     /// Attach bookkeeping writing to the database at once.
-    bookkeeping: tokio::sync::Semaphore,
+    bookkeeping: Arc<Semaphore>,
     bridge_limits: std::sync::OnceLock<BridgeLimits>,
     /// Bytes of connection data held in memory on this machine, as permits taken from `Limits::buffered_bytes`.
     buffer: std::sync::OnceLock<Arc<Semaphore>>,
@@ -444,7 +450,7 @@ impl Service {
             generation: AtomicU64::new(0),
             timeouts: std::sync::OnceLock::new(),
             draining: AtomicBool::new(false),
-            bookkeeping: tokio::sync::Semaphore::new(BOOKKEEPING_WRITES),
+            bookkeeping: Arc::new(Semaphore::new(BOOKKEEPING_WRITES)),
             bridge_limits: std::sync::OnceLock::new(),
             buffer: std::sync::OnceLock::new(),
         }))
@@ -1574,26 +1580,28 @@ impl Service {
                     .and_then(parse_iso)
                     .is_some_and(|at| now.saturating_sub(at) < LAST_CONNECTED_INTERVAL_MS)
         };
+        let entry = self.entry(id);
+        let writes = followup.alarm.is_none() || {
+            let state = entry.state.lock().await;
+            state
+                .record()
+                .is_some_and(|record| !recent(record, self.now()))
+        };
+        // Taken before the entry's lock, so routing never waits for a slot.
+        let slot = if writes {
+            self.bookkeeping.clone().acquire_owned().await.ok()
+        } else {
+            None
+        };
+        let started = tokio::time::Instant::now();
+        // Whether the bookkeeping went to the database, which keeps the slot for `BOOKKEEPING_PACE`.
         let record = async {
-            let entry = self.entry(id);
-            let writes = followup.alarm.is_none() || {
-                let state = entry.state.lock().await;
-                state
-                    .record()
-                    .is_some_and(|record| !recent(record, self.now()))
-            };
-            // Taken before the entry's lock, so routing never waits for a slot.
-            let _slot = if writes {
-                Some(self.bookkeeping.acquire().await)
-            } else {
-                None
-            };
             let mut state = entry.state.lock().await;
             let Some(record) = state.record().cloned() else {
-                return;
+                return false;
             };
             if !bridge.is_attached() {
-                return;
+                return false;
             }
             let now = self.now();
             let recent = recent(&record, now);
@@ -1607,15 +1615,24 @@ impl Service {
                 };
                 if let Err(error) = self.save(&mut state, connected.clone()).await {
                     warn!(tunnel = %id, error = %format!("{error:#}"), "could not record the connection");
-                    return;
+                    return true;
                 }
                 connected
             };
             if let Err(error) = self.on_attached(&mut state, record, followup.alarm).await {
                 warn!(tunnel = %id, error = %format!("{error:#}"), "renewal check on attach failed");
             }
+            true
         };
-        record.await;
+        if record.await
+            && let Some(slot) = slot
+        {
+            // Released in the background, so the bookkeeping itself is done now.
+            tokio::spawn(async move {
+                tokio::time::sleep_until(started + BOOKKEEPING_PACE).await;
+                drop(slot);
+            });
+        }
     }
 
     /// Reports `tunnel.active` at most once per interval per bridge, piggybacking on the client's pings.
@@ -2903,5 +2920,44 @@ mod tests {
             assert_eq!(mesh.table_sizes()[0].1, 0);
         }
         assert!(harness.record().await.last_connected_at.is_some());
+    }
+
+    /// A machine does at most `BOOKKEEPING_WRITES` bookkeeping runs per `BOOKKEEPING_PACE`, however fast the
+    /// database answers, so a reconnect storm cannot flood it with writes; each run still finishes at once.
+    #[tokio::test]
+    async fn paces_attach_bookkeeping() {
+        let Some(harness) = Harness::clustered().await else {
+            return;
+        };
+        harness.tunnel(T0 + 80 * DAY_MS, Some(T0)).await;
+        let (bridge, _rx) = harness.bridge().await;
+        harness.attach(&bridge, &["@"]).await.unwrap();
+        // Let the slot of the attach's own bookkeeping go.
+        tokio::time::sleep(BOOKKEEPING_PACE).await;
+        let started = std::time::Instant::now();
+        for _ in 0..BOOKKEEPING_WRITES {
+            // An unread alarm sends each run to the database.
+            harness
+                .service
+                .after_attach("abcdefghijkl", &bridge, AttachFollowup { alarm: None })
+                .await;
+        }
+        assert!(started.elapsed() < BOOKKEEPING_PACE / 2);
+        harness
+            .service
+            .after_attach("abcdefghijkl", &bridge, AttachFollowup { alarm: None })
+            .await;
+        assert!(started.elapsed() >= BOOKKEEPING_PACE);
+        // Bookkeeping that needs no database takes no slot.
+        let started = std::time::Instant::now();
+        harness
+            .service
+            .after_attach(
+                "abcdefghijkl",
+                &bridge,
+                AttachFollowup { alarm: Some(None) },
+            )
+            .await;
+        assert!(started.elapsed() < BOOKKEEPING_PACE / 2);
     }
 }
