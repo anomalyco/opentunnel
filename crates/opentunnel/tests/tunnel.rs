@@ -434,6 +434,64 @@ async fn stops_on_fatal_attach_error() {
 }
 
 #[tokio::test]
+async fn ready_resolves_on_first_attach() {
+    let (base, mut sessions, _) = fake_relay(attached).await;
+    let (tunnel, _) = connect(
+        &base,
+        &identity(),
+        [("api".into(), "127.0.0.1:1".into())].into(),
+    );
+    let ready = tunnel.ready();
+    let (mut bridge, _) = sessions.recv().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), ready)
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Later disconnects do not undo it.
+    bridge.close(None).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), tunnel.ready())
+        .await
+        .unwrap()
+        .unwrap();
+    tunnel.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn ready_returns_fatal_attach_error() {
+    let (base, _sessions, _) = fake_relay(|| ServerMessage::AttachError {
+        code: "bad_token".into(),
+    })
+    .await;
+    let (mut tunnel, _) = connect(
+        &base,
+        &identity(),
+        [("api".into(), "127.0.0.1:1".into())].into(),
+    );
+    let result = tokio::time::timeout(Duration::from_secs(5), tunnel.ready())
+        .await
+        .unwrap();
+    assert!(matches!(result, Err(opentunnel::Error::Attach(code)) if code == "bad_token"));
+    // It keeps answering after the tunnel stopped.
+    assert!(tunnel.wait().await.is_err());
+    assert!(
+        matches!(tunnel.ready().await, Err(opentunnel::Error::Attach(code)) if code == "bad_token")
+    );
+}
+
+#[tokio::test]
+async fn ready_fails_when_the_tunnel_closes_first() {
+    let (base, _sessions, _) = fake_relay(attached).await;
+    let (tunnel, _) = connect(&base, &identity(), Routes::new());
+    let ready = tunnel.ready();
+    tunnel.close().await.unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(5), ready)
+        .await
+        .unwrap();
+    assert!(matches!(result, Err(opentunnel::Error::Bridge(_))));
+}
+
+#[tokio::test]
 async fn picks_up_renewed_certificates() {
     let target = echo_server().await;
     let (base, mut sessions, served) = fake_relay(attached).await;
