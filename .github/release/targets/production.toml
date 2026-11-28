@@ -72,12 +72,15 @@ kill_timeout = "30s"
   # the region's other machine (soft limits never leave the region; only when every machine there is at
   # hard_limit do new connections go to another region). A shared-cpu-Nx reaches its CPU baseline (N/16 of a
   # core) at roughly N x 700-1000 bridges; each region's two machines are sized to stay well under that, so the
-  # soft limit only evens out the two and the hard limit stays high so nothing is refused.
+  # soft limit only evens out the two and the hard limit stays high so nothing is refused. The hard limit sits above
+  # the server's own (three quarters of memory at 64 KB a connection: ~12,000 on 1 GB, ~24,500 on 2 GB) and below
+  # its open file limit (65,536). With 10,000 and Fly's own 10,240 descriptors, a visitor flood filled the descriptors
+  # and new connections failed with EMFILE (November 2026).
   # See docs/server.md, "Capacity".
   [services.concurrency]
     type = "connections"
     soft_limit = 3000
-    hard_limit = 10000
+    hard_limit = 40000
 
   [[services.tcp_checks]]
     interval = "15s"

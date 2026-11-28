@@ -243,7 +243,18 @@ pub fn memory_limit() -> Option<u64> {
     Some(cgroup.map_or(total, |cgroup| cgroup.min(total)))
 }
 
-/// Raises the open file soft limit to the hard limit: every connection holds at least one descriptor.
+/// The open file limit asked for when the process may raise its hard limit (root, as on Fly). Fly's machines
+/// start with a hard limit of 10,240, which a connection flood reached (November 2026).
+pub const FD_LIMIT: u64 = 65_536;
+
+/// The hard limit to ask for: `FD_LIMIT`, or the kernel's ceiling (`fs.nr_open`) when lower, and never below the
+/// current hard limit.
+pub fn fd_hard_target(hard: u64, nr_open: Option<u64>) -> u64 {
+    FD_LIMIT.min(nr_open.unwrap_or(FD_LIMIT)).max(hard)
+}
+
+/// Raises the open file limit: every connection holds at least one descriptor. The hard limit goes up to
+/// `fd_hard_target` when the process may (root), and the soft limit to the hard limit.
 pub fn raise_fd_limit() {
     #[cfg(unix)]
     {
@@ -256,17 +267,34 @@ pub fn raise_fd_limit() {
             warn!(error = %io::Error::last_os_error(), "could not read the open file limit");
             return;
         }
-        let soft = limit.rlim_cur;
-        if soft < limit.rlim_max {
+        let (soft, hard) = (limit.rlim_cur, limit.rlim_max);
+        let nr_open = std::fs::read_to_string("/proc/sys/fs/nr_open")
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok());
+        let target = fd_hard_target(hard, nr_open);
+        let raised = target > hard && {
+            let wanted = libc::rlimit {
+                rlim_cur: target,
+                rlim_max: target,
+            };
+            // SAFETY: as above.
+            unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &wanted) == 0 }
+        };
+        if !raised && soft < hard {
             limit.rlim_cur = limit.rlim_max;
             // SAFETY: as above.
             if unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &limit) } != 0 {
-                warn!(soft, hard = limit.rlim_max, error = %io::Error::last_os_error(), "could not raise the open file limit");
+                warn!(soft, hard, error = %io::Error::last_os_error(), "could not raise the open file limit");
                 return;
             }
         }
+        // SAFETY: as above.
+        if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } != 0 {
+            return;
+        }
         info!(
-            previous = soft,
+            previous_soft = soft,
+            previous_hard = hard,
             soft = limit.rlim_cur,
             hard = limit.rlim_max,
             "open file limit"
@@ -324,6 +352,15 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let (client, accepted) = tokio::join!(TcpStream::connect(address), listener.accept());
         (client.unwrap(), accepted.unwrap().0)
+    }
+
+    #[test]
+    fn fd_hard_target_is_bounded_by_nr_open_and_never_lowers() {
+        assert_eq!(fd_hard_target(10_240, Some(1_048_576)), FD_LIMIT);
+        assert_eq!(fd_hard_target(10_240, None), FD_LIMIT);
+        assert_eq!(fd_hard_target(10_240, Some(32_768)), 32_768);
+        assert_eq!(fd_hard_target(1_048_576, Some(1_048_576)), 1_048_576);
+        assert_eq!(fd_hard_target(10_240, Some(4_096)), 10_240);
     }
 
     const SHORT: Timeouts = Timeouts {
