@@ -392,8 +392,10 @@ aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-bat
   `complete` (every peer linked). The request lands on the machine nearest the
   caller's Cloudflare colo; every machine should show the same machines and
   bridge counts.
-- At startup the open file soft limit is raised to the hard limit (logged as
-  `open file limit`); when it is reached anyway, accept loops pause 500 ms
+- At startup the open file limit is raised (logged as `open file limit`): as
+  root (as on Fly) both the hard and soft limits go to 65,536, or
+  `fs.nr_open` when lower; otherwise the soft limit goes to the hard limit.
+  When it is reached anyway, accept loops pause 500 ms
   between attempts and log at most every 10 s.
 - Deploys are blue-green (`fly.toml`): a new machine starts next to each old
   one; once all are healthy, Fly cordons the old machines (the proxy stops
@@ -904,9 +906,11 @@ two machines are uneven by restarting the busier one. `fly.toml` has no `[[vm]]`
 machine's size; set it with `fly machine update <id> --vm-size shared-cpu-Nx --vm-memory 1024 --yes`.
 After `shared-cpu-4x` the next size is `performance-1x` (a dedicated core with no burst credit, cheaper than
 `shared-cpu-8x`), which needs 2 GB: `--vm-size performance-1x --vm-memory 2048`. Fly's Prometheus reports each
-machine's baseline in cores as `fly_instance_cpu_baseline`. Fly caps open files at 10,240 per machine
-(`opentunnel_process_max_fds`; `raise_fd_limit` only lifts the soft limit to that hard limit), so a machine holding
-all of a region's bridges after its pair restarts must stay below that.
+machine's baseline in cores as `fly_instance_cpu_baseline`. Fly starts machines with an open file limit of 10,240;
+the server runs as root and raises its hard and soft limits to 65,536 (`raise_fd_limit`, shown as
+`opentunnel_process_max_fds`), above its own connection limit, so descriptors no longer cap a machine. Until
+November 28, 2026 they did: visitor floods to a tunnel with no bridge (~27,000 connections a second across the
+cluster) filled the 10,240 on most machines for a minute or two, and new connections failed with `EMFILE`.
 
 | Regions (Nov 2026) | Size | Bridges per machine | Baseline |
 | --- | --- | --- | --- |
@@ -921,7 +925,7 @@ all of a region's bridges after its pair restarts must stay below that.
 | `shared-cpu-4x`, 1 GB | ~12,000 | ~2,800-4,000 |
 | `performance-1x`, 2 GB | ~24,000 | ~10,000+ (dedicated core) |
 
-`fly.toml`'s `soft_limit` is 3,000 and `hard_limit` 10,000 connections on :443.
+`fly.toml`'s `soft_limit` is 3,000 and `hard_limit` 40,000 connections on :443.
 
 The limits count every connection on :443 (bridges, visitors, API calls).
 Fly's proxy sends a new connection to the closest machine in the region that
@@ -933,8 +937,9 @@ proxy use another region (bridges then attach there, and the mesh forwards
 their visitors). Add a machine to a region before its machines average the
 soft limit in `opentunnel_bridges_attached`, or when `fly_instance_memory`
 passes 60% or CPU stays above 50%. The server's own limit (as many
-connections as three quarters of the memory hold, at most 60,000) closes new
-connections at once beyond it.
+connections as three quarters of the memory hold at 64 KB each, at most 60,000:
+~12,000 on 1 GB, ~24,500 on 2 GB) closes new connections at once beyond it; it
+is below `hard_limit` and the open file limit, so it is the one that applies.
 
 **The load test.** `crates/opentunnel-server/examples/loadtest.rs`: `seed`
 writes tunnels with ready certificates straight into a database, `run`

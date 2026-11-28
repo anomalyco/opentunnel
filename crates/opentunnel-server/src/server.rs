@@ -540,7 +540,7 @@ impl Server {
 }
 
 /// Public connections handled at once: as many as three quarters of the memory hold, at most `MAX_CONNECTIONS`.
-/// Beyond it new ones are closed at once, before memory runs out; Fly's `hard_limit` (fly.toml) stops sooner.
+/// Beyond it new ones are closed at once, before memory runs out; Fly's `hard_limit` (fly.toml) is set above it.
 fn max_connections() -> usize {
     let memory = net::memory_limit().unwrap_or(2 << 30);
     usize::try_from(memory / 4 * 3 / CONNECTION_MEMORY)
